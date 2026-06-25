@@ -1,0 +1,78 @@
+{
+  "id": "active_target_apogee",
+  "description": "Active pneumatic airbrakes deploy during ascent to reduce overshoot above a low target apogee.",
+  "rocketData": {
+    "weight": 232,
+    "cg": 320,
+    "totalHeight": 680,
+    "components": [
+      {"id": 1, "type": "Nose Cone", "name": "Active Nose", "length": 120, "diameter": 40, "weight": 35},
+      {"id": 2, "type": "Body Tube", "name": "Active Body", "length": 560, "diameter": 40, "weight": 135},
+      {"id": 3, "type": "Fins", "name": "Active Fins", "finCount": 3, "finHeight": 55, "finWidth": 90, "weight": 45},
+      {"id": 4, "type": "Motor", "name": "Estes C6-5", "length": 70, "diameter": 18, "motorThrust": 6.0, "motorBurnTime": 1.6, "motorTotalImpulse": 10.0, "weight": 17}
+    ]
+  },
+  "simulationConfig": {
+    "timeStep": 0.02,
+    "maxTime": 20,
+    "windSpeed": 1.5,
+    "windDirection": 25,
+    "temperature": 15,
+    "pressure": 101325,
+    "activeSystem": {
+      "enabled": true,
+      "tankPressure": 650000,
+      "tankVolume": 0.18,
+      "regulatorPressure": 450000,
+      "minOperatingPressure": 180000,
+      "valveFlowRate": 14,
+      "ventRate": 2.5,
+      "lineVolume": 0.035,
+      "cylinderBore": 0.012,
+      "cylinderStroke": 0.035,
+      "cylinderFriction": 5,
+      "returnSpring": 18,
+      "linkageRatio": 1,
+      "surfaceMaxAngle": 65,
+      "surfaceArea": 0.0024,
+      "surfaceCount": 3,
+      "surfaceCd": 1.35,
+      "locationFromNose": 0.42,
+      "maxDynamicPressure": 85000
+    },
+    "controller": {
+      "mode": "target_apogee",
+      "targetApogee": 35,
+      "deployAltitude": 8,
+      "descentDeployAltitude": 70,
+      "kp": 0.02,
+      "kd": 0.01,
+      "minimumCommand": 0.03
+    },
+    "noise": {
+      "seed": 20260625,
+      "altitudeStd": 0.15,
+      "velocityStd": 0.05,
+      "accelStd": 0.12,
+      "ambientPressureStd": 8,
+      "pneumaticPressureStd": 120,
+      "temperatureStd": 0.05,
+      "initialAttitudeStd": 0.35
+    }
+  },
+  "expectations": {
+    "success": true,
+    "ranges": {
+      "max_altitude": [43, 48],
+      "max_velocity": [27, 30],
+      "active_system.max_surface_deployment": [0.35, 0.5],
+      "active_system.tank_pressure_final": [620000, 635000],
+      "max_drag_force": [1.5, 2.1]
+    },
+    "lessThanScenario": {
+      "scenario": "passive_baseline",
+      "values": ["max_altitude", "max_velocity"]
+    }
+  }
+}
+

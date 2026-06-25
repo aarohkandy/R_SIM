@@ -1,0 +1,74 @@
+{
+  "id": "low_pressure_warning",
+  "description": "Active system starts below the configured minimum operating pressure and must report pressure warnings.",
+  "rocketData": {
+    "weight": 232,
+    "cg": 320,
+    "totalHeight": 680,
+    "components": [
+      {"id": 1, "type": "Nose Cone", "name": "Low Pressure Nose", "length": 120, "diameter": 40, "weight": 35},
+      {"id": 2, "type": "Body Tube", "name": "Low Pressure Body", "length": 560, "diameter": 40, "weight": 135},
+      {"id": 3, "type": "Fins", "name": "Low Pressure Fins", "finCount": 3, "finHeight": 55, "finWidth": 90, "weight": 45},
+      {"id": 4, "type": "Motor", "name": "Estes C6-5", "length": 70, "diameter": 18, "motorThrust": 6.0, "motorBurnTime": 1.6, "motorTotalImpulse": 10.0, "weight": 17}
+    ]
+  },
+  "simulationConfig": {
+    "timeStep": 0.02,
+    "maxTime": 20,
+    "windSpeed": 1.5,
+    "windDirection": 25,
+    "temperature": 15,
+    "pressure": 101325,
+    "activeSystem": {
+      "enabled": true,
+      "tankPressure": 175000,
+      "tankVolume": 0.03,
+      "regulatorPressure": 450000,
+      "minOperatingPressure": 180000,
+      "valveFlowRate": 14,
+      "ventRate": 2.5,
+      "lineVolume": 0.035,
+      "cylinderBore": 0.012,
+      "cylinderStroke": 0.035,
+      "cylinderFriction": 5,
+      "returnSpring": 18,
+      "linkageRatio": 1,
+      "surfaceMaxAngle": 65,
+      "surfaceArea": 0.0024,
+      "surfaceCount": 3,
+      "surfaceCd": 1.35,
+      "locationFromNose": 0.42,
+      "maxDynamicPressure": 85000
+    },
+    "controller": {
+      "mode": "target_apogee",
+      "targetApogee": 35,
+      "deployAltitude": 8,
+      "descentDeployAltitude": 70,
+      "kp": 0.02,
+      "kd": 0.01,
+      "minimumCommand": 0.03
+    },
+    "noise": {
+      "seed": 20260625,
+      "altitudeStd": 0.15,
+      "velocityStd": 0.05,
+      "accelStd": 0.12,
+      "ambientPressureStd": 8,
+      "pneumaticPressureStd": 120,
+      "temperatureStd": 0.05,
+      "initialAttitudeStd": 0.35
+    }
+  },
+  "expectations": {
+    "success": true,
+    "ranges": {
+      "max_altitude": [45, 50],
+      "max_velocity": [28, 31],
+      "active_system.max_surface_deployment": [0.35, 0.5],
+      "active_system.tank_pressure_final": [155000, 170000]
+    },
+    "warningsContain": ["minimum operating pressure"]
+  }
+}
+

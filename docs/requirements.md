@@ -16,3 +16,4 @@
 - Fake/random placeholder output must not be accepted as a passing main workflow result.
 - C++ controller code must compile before it is used by an active simulation.
 - Pneumatic outputs must show pressure use, actuator movement, and surface deployment when active control commands it.
+- Importable scenario files in `examples/scenarios/` must keep passive, active, warning, and invalid-input behavior reproducible.

@@ -1,0 +1,28 @@
+{
+  "id": "invalid_no_motor",
+  "description": "Invalid scenario used to prove the backend refuses rocket definitions without motors.",
+  "rocketData": {
+    "weight": 215,
+    "cg": 300,
+    "totalHeight": 680,
+    "components": [
+      {"id": 1, "type": "Nose Cone", "name": "Invalid Nose", "length": 120, "diameter": 40, "weight": 35},
+      {"id": 2, "type": "Body Tube", "name": "Invalid Body", "length": 560, "diameter": 40, "weight": 135},
+      {"id": 3, "type": "Fins", "name": "Invalid Fins", "finCount": 3, "finHeight": 55, "finWidth": 90, "weight": 45}
+    ]
+  },
+  "simulationConfig": {
+    "timeStep": 0.02,
+    "maxTime": 20,
+    "temperature": 15,
+    "pressure": 101325,
+    "activeSystem": {"enabled": false},
+    "controller": {"mode": "disabled"},
+    "noise": {"seed": 20260625}
+  },
+  "expectations": {
+    "success": false,
+    "errorsContain": ["Rocket must include a motor."]
+  }
+}
+

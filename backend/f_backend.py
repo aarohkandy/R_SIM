@@ -1743,7 +1743,12 @@ def start_simulation():
         )
     
     if "error" in result:
-        return jsonify({"success": False, "message": result["error"]}), 400
+        return jsonify({
+            "success": False,
+            "message": result["error"],
+            "validation_errors": result.get("validation_errors", []),
+            "validation_warnings": result.get("validation_warnings", []),
+        }), 400
     return jsonify({
         "success": result.get("success", True),
         "simulation_id": result.get("simulation_id"),

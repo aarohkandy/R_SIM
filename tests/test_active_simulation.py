@@ -120,6 +120,24 @@ class ActiveSimulationTests(unittest.TestCase):
 
         self.assertTrue(any("minimum operating pressure" in warning for warning in result["warnings"]))
 
+    def test_missing_motor_is_rejected(self):
+        rocket = sample_rocket()
+        rocket["components"] = [component for component in rocket["components"] if component["type"] != "Motor"]
+        manager = ActiveSimulationManager()
+        result = manager.submit_cfd_simulation(rocket, base_config())
+
+        self.assertFalse(result["success"])
+        self.assertIn("Rocket must include a motor.", result["validation_errors"])
+
+    def test_invalid_active_pressure_is_rejected(self):
+        config = base_config()
+        config["activeSystem"]["tankPressure"] = 90000
+        manager = ActiveSimulationManager()
+        result = manager.submit_cfd_simulation(sample_rocket(), config)
+
+        self.assertFalse(result["success"])
+        self.assertIn("Active tank pressure must be above ambient pressure.", result["validation_errors"])
+
 
 if __name__ == "__main__":
     unittest.main()

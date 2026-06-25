@@ -8,10 +8,19 @@ Run these before starting the later `/goal`:
 bash scripts/run_pre_goal_checks.sh
 ```
 
+The active scenario matrix uses importable files in `examples/scenarios/`:
+
+- `passive_baseline.json`
+- `active_target_apogee.json`
+- `descent_airbrake.json`
+- `low_pressure_warning.json`
+- `invalid_no_motor.json`
+
 ## Required Passing Gates
 
 - Python syntax compile succeeds over the repo.
 - Active simulation unit tests pass.
+- Active scenario matrix passes for passive, target-apogee, descent-brake, low-pressure, and invalid-input cases.
 - Backend dependencies install in a clean Python 3.9 environment.
 - Backend smoke tests pass:
   - `/api/health`

@@ -94,6 +94,7 @@ centered-scion-471523-a4-b8125d43fa7a.json
 *.json
 !package.json
 !pnpm-lock.yaml
+!examples/scenarios/*.json
 
 # Supabase
 .supabase/

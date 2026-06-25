@@ -68,7 +68,17 @@ class ActiveSimulationManager:
         simulation_id = f"active_{uuid.uuid4().hex[:12]}"
         started_at = time.time()
         config = self._normalize_config(simulation_config)
+        validation = self.validate_inputs(rocket_data, config)
+        if validation["errors"]:
+            return {
+                "success": False,
+                "error": "Input validation failed.",
+                "validation_errors": validation["errors"],
+                "validation_warnings": validation["warnings"],
+            }
         results = self._run_local_active_physics(rocket_data, config, controller_callback)
+        results["input_validation"] = validation
+        results["warnings"] = validation["warnings"] + results.get("warnings", [])
         entry = {
             "success": True,
             "simulation_id": simulation_id,
@@ -90,6 +100,82 @@ class ActiveSimulationManager:
         if is_dataclass(simulation_config):
             return asdict(simulation_config)
         return simulation_config or {}
+
+    def validate_inputs(self, rocket_data: Dict, config: Dict) -> Dict[str, List[str]]:
+        errors: List[str] = []
+        warnings: List[str] = []
+        components = rocket_data.get("components", [])
+        if not isinstance(components, list) or not components:
+            errors.append("Rocket must include at least one component.")
+
+        mass_input = self._as_float(rocket_data.get("weight"), 0.0)
+        if mass_input <= 0:
+            errors.append("Rocket weight must be positive.")
+
+        motor = next((c for c in components if str(c.get("type", "")).lower() == "motor"), None)
+        if motor is None:
+            errors.append("Rocket must include a motor.")
+        else:
+            burn_time = self._as_float(self._first_value(motor, ["motorBurnTime", "burn_time", "burnTime"], 0.0), 0.0)
+            thrust = self._as_float(self._first_value(motor, ["motorThrust", "average_thrust", "averageThrust"], 0.0), 0.0)
+            impulse = self._as_float(self._first_value(motor, ["motorTotalImpulse", "total_impulse", "totalImpulse"], 0.0), 0.0)
+            if burn_time <= 0:
+                errors.append("Motor burn time must be positive.")
+            if thrust <= 0 and impulse <= 0:
+                errors.append("Motor thrust or total impulse must be positive.")
+
+        if self._rocket_diameter_m(components) <= 0.01 and components:
+            warnings.append("Rocket diameter is very small; check units.")
+
+        dt_raw = self._as_float(config.get("timeStep") or config.get("time_step"), 0.02)
+        max_time_raw = self._as_float(config.get("maxTime") or config.get("max_time"), 45.0)
+        if dt_raw <= 0:
+            errors.append("Simulation time step must be positive.")
+        if max_time_raw <= 0:
+            errors.append("Simulation max time must be positive.")
+        if dt_raw > 0.1:
+            warnings.append("Time step is large and will be clamped to 0.1 s.")
+
+        pressure_pa = self._as_float(config.get("pressure"), 101325.0)
+        active = config.get("activeSystem") or {}
+        active_enabled = self._as_bool(active.get("enabled"), self._as_bool(config.get("activePneumaticEnabled"), False))
+        if active_enabled:
+            tank_pressure = self._as_float(active.get("tankPressure"), 650000.0)
+            tank_volume = self._as_float(active.get("tankVolume"), 0.18)
+            regulator_pressure = self._as_float(active.get("regulatorPressure"), 450000.0)
+            min_operating_pressure = self._as_float(active.get("minOperatingPressure"), 180000.0)
+            cylinder_bore = self._as_float(active.get("cylinderBore"), 0.012)
+            cylinder_stroke = self._as_float(active.get("cylinderStroke"), 0.035)
+            surface_area = self._as_float(active.get("surfaceArea"), 0.0024)
+            surface_count = self._as_float(active.get("surfaceCount"), 3.0)
+            valve_flow = self._as_float(active.get("valveFlowRate"), 14.0)
+
+            if tank_pressure <= pressure_pa:
+                errors.append("Active tank pressure must be above ambient pressure.")
+            if tank_pressure < min_operating_pressure:
+                warnings.append("Tank pressure starts below minimum operating pressure.")
+            if tank_volume <= 0:
+                errors.append("Active tank volume must be positive.")
+            if regulator_pressure <= pressure_pa:
+                errors.append("Regulator pressure must be above ambient pressure.")
+            if cylinder_bore <= 0:
+                errors.append("Cylinder bore must be positive.")
+            if cylinder_stroke <= 0:
+                errors.append("Cylinder stroke must be positive.")
+            if surface_area <= 0:
+                errors.append("Active surface area must be positive.")
+            if surface_count < 1:
+                errors.append("Active surface count must be at least 1.")
+            if valve_flow <= 0:
+                errors.append("Valve flow rate must be positive.")
+
+        controller = config.get("controller") or {}
+        if controller.get("mode", "target_apogee") == "target_apogee":
+            target_apogee = self._as_float(controller.get("targetApogee"), 240.0)
+            if target_apogee <= 0:
+                errors.append("Target apogee must be positive.")
+
+        return {"errors": errors, "warnings": warnings}
 
     def _run_local_active_physics(
         self,
@@ -561,4 +647,3 @@ class ActiveSimulationManager:
             self.simulations[target_id]["message"] = "Active local simulation stopped."
             return {"success": True, "status": "stopped", "simulation_id": target_id}
         return {"success": False, "error": "Simulation not found"}
-

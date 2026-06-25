@@ -2,6 +2,82 @@ import React, { useState, useRef, useEffect } from 'react';
 import ReactDOM from 'react-dom/client';
 import './App.css';
 
+const activeDemoRocket = {
+  weight: 232,
+  cg: 320,
+  totalHeight: 680,
+  components: [
+    { id: 1, type: 'Nose Cone', name: 'Demo Nose', length: 120, diameter: 40, weight: 35 },
+    { id: 2, type: 'Body Tube', name: 'Demo Body', length: 560, diameter: 40, weight: 135 },
+    { id: 3, type: 'Fins', name: 'Demo Fins', finCount: 3, finHeight: 55, finWidth: 90, weight: 45, attachedToComponent: 2 },
+    {
+      id: 4,
+      type: 'Motor',
+      name: 'Estes C6-5',
+      length: 70,
+      diameter: 18,
+      motorThrust: 6.0,
+      motorBurnTime: 1.6,
+      motorTotalImpulse: 10.0,
+      motorWeight: 17,
+      weight: 17,
+      attachedToComponent: 2
+    }
+  ]
+};
+
+const activeDemoConfig = {
+  timeStep: 0.02,
+  maxTime: 20,
+  windSpeed: 1.5,
+  windDirection: 25,
+  temperature: 15,
+  pressure: 101325,
+  activeFinControl: 'enabled',
+  activePneumaticEnabled: true,
+  controllerLanguage: 'builtin',
+  activeSystem: {
+    enabled: true,
+    tankPressure: 650000,
+    tankVolume: 0.18,
+    regulatorPressure: 450000,
+    minOperatingPressure: 180000,
+    valveFlowRate: 14,
+    ventRate: 2.5,
+    lineVolume: 0.035,
+    cylinderBore: 0.012,
+    cylinderStroke: 0.035,
+    cylinderFriction: 5,
+    returnSpring: 18,
+    linkageRatio: 1,
+    surfaceMaxAngle: 65,
+    surfaceArea: 0.0024,
+    surfaceCount: 3,
+    surfaceCd: 1.35,
+    locationFromNose: 0.42,
+    maxDynamicPressure: 85000
+  },
+  controller: {
+    mode: 'target_apogee',
+    targetApogee: 35,
+    deployAltitude: 8,
+    descentDeployAltitude: 70,
+    kp: 0.02,
+    kd: 0.01,
+    minimumCommand: 0.03
+  },
+  noise: {
+    seed: 20260625,
+    altitudeStd: 0.15,
+    velocityStd: 0.05,
+    accelStd: 0.12,
+    ambientPressureStd: 8,
+    pneumaticPressureStd: 120,
+    temperatureStd: 0.05,
+    initialAttitudeStd: 0.35
+  }
+};
+
 function App() {
   // API Configuration - works for both local development and Netlify production
   const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://127.0.0.1:5011';
@@ -1196,6 +1272,66 @@ function App() {
     configFileInputRef.current.click();
   };
 
+  const mergeSimulationConfig = (incomingConfig, defaultControllerLanguage = null) => {
+    setSimulationConfig(prev => {
+      const nextConfig = incomingConfig || {};
+      const activeEnabled = nextConfig.activeSystem?.enabled;
+
+      return {
+        ...prev,
+        ...nextConfig,
+        activeSystem: {
+          ...(prev.activeSystem || {}),
+          ...(nextConfig.activeSystem || {})
+        },
+        controller: {
+          ...(prev.controller || {}),
+          ...(nextConfig.controller || {})
+        },
+        noise: {
+          ...(prev.noise || {}),
+          ...(nextConfig.noise || {})
+        },
+        activeFinControl:
+          activeEnabled === undefined
+            ? (nextConfig.activeFinControl ?? prev.activeFinControl)
+            : (activeEnabled ? 'enabled' : 'disabled'),
+        activePneumaticEnabled:
+          activeEnabled === undefined
+            ? (nextConfig.activePneumaticEnabled ?? prev.activePneumaticEnabled)
+            : activeEnabled,
+        controllerLanguage:
+          nextConfig.controllerLanguage || defaultControllerLanguage || prev.controllerLanguage || 'builtin'
+      };
+    });
+  };
+
+  const loadRocketScenario = (scenario, label = 'Scenario') => {
+    const rocketData = scenario?.rocketData || {};
+
+    if (!Array.isArray(rocketData.components) || !scenario?.simulationConfig) {
+      throw new Error('Scenario files need rocketData.components and simulationConfig.');
+    }
+
+    setRocketComponents(JSON.parse(JSON.stringify(rocketData.components)));
+    setRocketWeight(Number(rocketData.weight) || 0);
+    setRocketCG(Number(rocketData.cg) || 0);
+    setSelectedComponent(null);
+    setSimulationResults(null);
+    setCurrentSimulationId(null);
+    setSimulationStatus(null);
+    mergeSimulationConfig(scenario.simulationConfig, 'builtin');
+    showNotification(`${label} loaded successfully!`, 'success');
+  };
+
+  const loadBuiltInActiveScenario = () => {
+    loadRocketScenario({
+      id: 'built_in_active_demo',
+      rocketData: activeDemoRocket,
+      simulationConfig: activeDemoConfig
+    }, 'Active demo rocket');
+  };
+
   const handleConfigFileLoad = (event) => {
     const file = event.target.files[0];
     if (file && file.name.toLowerCase().endsWith('.json')) {
@@ -1203,8 +1339,15 @@ function App() {
       reader.onload = (e) => {
         try {
           const config = JSON.parse(e.target.result);
-          setSimulationConfig(config);
-          showNotification('Configuration loaded successfully!', 'success');
+          if (config.rocketData && config.simulationConfig) {
+            loadRocketScenario(config, config.id || 'Rocket scenario');
+          } else if (config.configuration) {
+            mergeSimulationConfig(config.configuration);
+            showNotification('Configuration loaded successfully!', 'success');
+          } else {
+            mergeSimulationConfig(config);
+            showNotification('Configuration loaded successfully!', 'success');
+          }
         } catch (error) {
           showNotification('Error loading configuration file. Please check the file format.', 'error');
         }
@@ -4122,6 +4265,9 @@ function App() {
                 <button className="config-btn save" onClick={saveSimulationConfig}>
                   Save Config
                 </button>
+                <button className="config-btn load" onClick={loadBuiltInActiveScenario}>
+                  Load Active Demo
+                </button>
                 <button className="config-btn load" onClick={loadSimulationConfig}>
                   Load Config
                 </button>
@@ -4292,6 +4438,17 @@ function App() {
                     <option value="target_apogee">Target Apogee</option>
                     <option value="descent_brake">Descent Brake</option>
                     <option value="disabled">Disabled</option>
+                  </select>
+                </div>
+
+                <div className="variable-group">
+                  <label>Controller Source:</label>
+                  <select
+                    value={simulationConfig.controllerLanguage ?? 'builtin'}
+                    onChange={(e) => updateSimulationConfig('controllerLanguage', e.target.value)}
+                  >
+                    <option value="builtin">Built-In Model</option>
+                    <option value="cpp">C++ Code Editor</option>
                   </select>
                 </div>
 
@@ -4918,5 +5075,7 @@ function App() {
   );
 }
 
-const root = ReactDOM.createRoot(document.getElementById('root'));
+const rootElement = document.getElementById('root');
+const root = window.__rsimRoot || ReactDOM.createRoot(rootElement);
+window.__rsimRoot = root;
 root.render(<App />);
