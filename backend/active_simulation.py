@@ -175,6 +175,22 @@ class ActiveSimulationManager:
             if target_apogee <= 0:
                 errors.append("Target apogee must be positive.")
 
+        landing = config.get("landingSystem") or config.get("recoverySystem") or {}
+        landing_enabled = self._as_bool(landing.get("enabled"), True)
+        if landing_enabled:
+            deploy_altitude = self._as_float(landing.get("deployAltitude"), 120.0)
+            drag_area = self._as_float(landing.get("dragArea"), 0.18)
+            drag_coefficient = self._as_float(landing.get("dragCoefficient"), 1.55)
+            max_safe_velocity = self._as_float(landing.get("maxSafeVelocity"), 7.5)
+            if deploy_altitude <= 0:
+                errors.append("Landing deploy altitude must be positive.")
+            if drag_area <= 0:
+                errors.append("Landing drag area must be positive.")
+            if drag_coefficient <= 0:
+                errors.append("Landing drag coefficient must be positive.")
+            if max_safe_velocity <= 0:
+                errors.append("Landing safe touchdown velocity must be positive.")
+
         return {"errors": errors, "warnings": warnings}
 
     def _run_local_active_physics(
@@ -186,6 +202,7 @@ class ActiveSimulationManager:
         components = rocket_data.get("components", [])
         active = self._build_active_config(config)
         controller = self._build_controller_config(config, active)
+        landing = self._build_landing_config(config)
         noise = self._build_noise_config(config)
         rng = np.random.default_rng(noise["seed"])
         warnings: List[str] = []
@@ -259,6 +276,9 @@ class ActiveSimulationManager:
         last_valve = 0.0
         valve_cycles = 0
         controller_failures = 0
+        landing_deployed = False
+        landing_deploy_time = None
+        landing_deploy_altitude = None
 
         max_altitude = altitude
         max_velocity = 0.0
@@ -266,6 +286,7 @@ class ActiveSimulationManager:
         max_net_force = 0.0
         max_dynamic_pressure = 0.0
         max_deployment = 0.0
+        max_deployment_time = 0.0
         max_surface_angle = 0.0
         max_drag_coefficient = base_cd
         max_attitude_deg = 0.0
@@ -273,8 +294,10 @@ class ActiveSimulationManager:
         min_tank_pressure = tank_pressure
         apogee_time = 0.0
         landing_velocity = 0.0
+        touchdown_time = None
         trajectory = []
         active_history = []
+        landing_history = []
         controller_history = []
         force_history = []
         moment_history = []
@@ -288,6 +311,15 @@ class ActiveSimulationManager:
             speed_air = math.sqrt(speed_air_x**2 + speed_air_y**2 + speed_air_z**2)
             dynamic_pressure = 0.5 * density * speed_air**2
             deployment_fraction = self._clamp((stroke / active["cylinder_stroke_m"]) * active["linkage_ratio"], 0.0, 1.0)
+            if (
+                landing["enabled"]
+                and not landing_deployed
+                and velocity_z < -0.5
+                and altitude <= landing["deploy_altitude_m"]
+            ):
+                landing_deployed = True
+                landing_deploy_time = t
+                landing_deploy_altitude = altitude
 
             sensor = {
                 "timestamp": t,
@@ -348,6 +380,9 @@ class ActiveSimulationManager:
                 aero,
                 frontal_area_m2,
             )
+            landing_deployment = 1.0 if landing_deployed else 0.0
+            landing_cd = self._landing_drag_coefficient(landing, landing_deployment, frontal_area_m2)
+            cd += landing_cd
             drag_force = dynamic_pressure * cd * frontal_area_m2
             drag_z = drag_force * (velocity_z / max(speed_air, 0.1))
             drag_x = drag_force * (speed_air_x / max(speed_air, 0.1))
@@ -389,7 +424,9 @@ class ActiveSimulationManager:
             max_drag_force = max(max_drag_force, abs(drag_force))
             max_net_force = max(max_net_force, math.sqrt(net_force_x**2 + net_force_y**2 + net_force_z**2))
             max_dynamic_pressure = max(max_dynamic_pressure, dynamic_pressure)
-            max_deployment = max(max_deployment, deployment_fraction)
+            if deployment_fraction >= max_deployment:
+                max_deployment = deployment_fraction
+                max_deployment_time = t
             max_surface_angle = max(max_surface_angle, surface_angle_deg)
             max_drag_coefficient = max(max_drag_coefficient, cd)
             max_attitude_deg = max(max_attitude_deg, abs(math.degrees(pitch)), abs(math.degrees(yaw)), abs(math.degrees(roll)))
@@ -417,6 +454,7 @@ class ActiveSimulationManager:
                     "angular_velocity_z_deg_s": round(math.degrees(yaw_rate), 4),
                     "dynamic_pressure": round(dynamic_pressure, 4),
                     "drag_coefficient": round(cd, 5),
+                    "landing_deployment": round(landing_deployment, 4),
                     "drag_force": round(drag_force, 4),
                     "drag_force_x": round(-drag_x, 4),
                     "drag_force_y": round(-drag_y, 4),
@@ -444,6 +482,13 @@ class ActiveSimulationManager:
                     "surface_deployment": sample["surface_deployment"],
                     "surface_angle_deg": sample["surface_angle_deg"],
                     "valve_command": sample["valve_command"],
+                })
+                landing_history.append({
+                    "time": sample["time"],
+                    "deployed": landing_deployed,
+                    "deployment": sample["landing_deployment"],
+                    "altitude": sample["altitude"],
+                    "velocity_z": sample["velocity_z"],
                 })
                 controller_history.append({
                     "time": sample["time"],
@@ -476,6 +521,7 @@ class ActiveSimulationManager:
             t += dt
             if t > burn_time_s and altitude <= 0.0 and velocity_z < 0.0:
                 landing_velocity = abs(velocity_z)
+                touchdown_time = t
                 break
 
         if active["enabled"] and max_deployment < 0.01:
@@ -484,13 +530,30 @@ class ActiveSimulationManager:
             warnings.append("Tank pressure fell below minimum operating pressure during flight.")
         if max_dynamic_pressure > active["max_dynamic_pressure_pa"]:
             warnings.append("Dynamic pressure exceeded configured active-system structural limit.")
+        if landing["enabled"] and not landing_deployed:
+            warnings.append("Landing system did not deploy before touchdown; raise max time or deploy altitude.")
 
         total_time = max(t, burn_time_s)
+        if touchdown_time is None and altitude <= 0.0:
+            touchdown_time = total_time
         downrange = math.sqrt(x**2 + y**2)
         cg_m = self._as_float(rocket_data.get("cg"), total_length_m * 470.0)
         cg_m = cg_m / 1000.0 if cg_m > 5 else cg_m
         cp_m = total_length_m * (0.61 + min(0.08, 0.01 * fin_count))
         stability_margin = max(0.05, (cp_m - cg_m) / diameter_m)
+        flight_events = self._build_flight_events(
+            burn_time_s=burn_time_s,
+            max_altitude=max_altitude,
+            apogee_time=apogee_time,
+            max_deployment=max_deployment,
+            max_deployment_time=max_deployment_time,
+            landing=landing,
+            landing_deployed=landing_deployed,
+            landing_deploy_time=landing_deploy_time,
+            landing_deploy_altitude=landing_deploy_altitude,
+            touchdown_time=touchdown_time,
+            landing_velocity=landing_velocity,
+        )
 
         return {
             "source": "active_pneumatic_local_dynamics",
@@ -518,6 +581,7 @@ class ActiveSimulationManager:
             "velocity_field": "local_trajectory_air_relative_profile",
             "trajectory_data": "time_history_included",
             "trajectory": trajectory,
+            "flight_events": flight_events,
             "force_history": force_history,
             "moment_history": moment_history,
             "active_system": {
@@ -532,6 +596,21 @@ class ActiveSimulationManager:
                 "max_surface_area_m2": active["surface_area_m2"] * active["surface_count"],
                 "valve_cycles": valve_cycles,
                 "history": active_history,
+            },
+            "landing_system": {
+                "enabled": landing["enabled"],
+                "type": landing["system_type"],
+                "deployed": landing_deployed,
+                "deploy_altitude_m": landing["deploy_altitude_m"],
+                "deploy_time": landing_deploy_time,
+                "deploy_actual_altitude_m": landing_deploy_altitude,
+                "drag_area_m2": landing["drag_area_m2"],
+                "drag_coefficient": landing["drag_coefficient"],
+                "max_safe_velocity_mps": landing["max_safe_velocity_mps"],
+                "touchdown_velocity_mps": landing_velocity,
+                "touchdown_time": touchdown_time,
+                "touchdown_status": "safe" if landing_velocity <= landing["max_safe_velocity_mps"] else "hard",
+                "history": landing_history,
             },
             "controller": {
                 "mode": controller["mode"],
@@ -686,6 +765,77 @@ class ActiveSimulationManager:
         return aero["base_cd"] + airbrake_cd
 
     @staticmethod
+    def _landing_drag_coefficient(landing: Dict, deployment_fraction: float, frontal_area_m2: float) -> float:
+        if not landing["enabled"] or deployment_fraction <= 0:
+            return 0.0
+        landing_area = landing["drag_area_m2"] * deployment_fraction
+        return landing["drag_coefficient"] * landing_area / max(frontal_area_m2, 1e-6)
+
+    def _build_flight_events(
+        self,
+        *,
+        burn_time_s: float,
+        max_altitude: float,
+        apogee_time: float,
+        max_deployment: float,
+        max_deployment_time: float,
+        landing: Dict,
+        landing_deployed: bool,
+        landing_deploy_time: Optional[float],
+        landing_deploy_altitude: Optional[float],
+        touchdown_time: Optional[float],
+        landing_velocity: float,
+    ) -> List[Dict[str, float]]:
+        events = [
+            {
+                "name": "Launch",
+                "time": 0.0,
+                "type": "liftoff",
+                "value": 0.0,
+                "unit": "m",
+            },
+            {
+                "name": "Motor burnout",
+                "time": round(burn_time_s, 3),
+                "type": "propulsion",
+                "value": round(burn_time_s, 3),
+                "unit": "s",
+            },
+            {
+                "name": "Apogee",
+                "time": round(apogee_time, 3),
+                "type": "trajectory",
+                "value": round(max_altitude, 3),
+                "unit": "m",
+            },
+        ]
+        if max_deployment > 0.001:
+            events.append({
+                "name": "Max airbrake",
+                "time": round(max_deployment_time, 3),
+                "type": "active_control",
+                "value": round(max_deployment * 100.0, 2),
+                "unit": "%",
+            })
+        if landing["enabled"] and landing_deployed:
+            events.append({
+                "name": "Landing deploy",
+                "time": round(landing_deploy_time or 0.0, 3),
+                "type": "landing",
+                "value": round(landing_deploy_altitude or 0.0, 3),
+                "unit": "m",
+            })
+        if touchdown_time is not None:
+            events.append({
+                "name": "Touchdown",
+                "time": round(touchdown_time, 3),
+                "type": "landing",
+                "value": round(landing_velocity, 3),
+                "unit": "m/s",
+            })
+        return sorted(events, key=lambda item: item["time"])
+
+    @staticmethod
     def _interpolate_drag_increment(deployment_fraction: float, table: List[Dict[str, float]]) -> float:
         if deployment_fraction <= table[0]["deployment"]:
             return table[0]["cd_increment"]
@@ -724,6 +874,17 @@ class ActiveSimulationManager:
             "surface_cd": self._as_float(active.get("surfaceCd"), 1.35),
             "location_from_nose_m": self._as_float(active.get("locationFromNose"), 0.42),
             "max_dynamic_pressure_pa": self._as_float(active.get("maxDynamicPressure"), 85000.0),
+        }
+
+    def _build_landing_config(self, config: Dict) -> Dict:
+        landing = config.get("landingSystem") or config.get("recoverySystem") or {}
+        return {
+            "enabled": self._as_bool(landing.get("enabled"), True),
+            "system_type": landing.get("type") or landing.get("systemType") or "main_parachute",
+            "deploy_altitude_m": self._as_float(landing.get("deployAltitude"), 120.0),
+            "drag_area_m2": self._as_float(landing.get("dragArea"), 0.18),
+            "drag_coefficient": self._as_float(landing.get("dragCoefficient"), 1.55),
+            "max_safe_velocity_mps": self._as_float(landing.get("maxSafeVelocity"), 7.5),
         }
 
     def _build_controller_config(self, config: Dict, active: Dict) -> Dict:

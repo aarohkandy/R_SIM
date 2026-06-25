@@ -74,6 +74,14 @@ def base_config(enabled=True, target_apogee=60):
             "temperatureStd": 0.05,
             "initialAttitudeStd": 0.35,
         },
+        "landingSystem": {
+            "enabled": True,
+            "type": "main_parachute",
+            "deployAltitude": 80,
+            "dragArea": 0.18,
+            "dragCoefficient": 1.55,
+            "maxSafeVelocity": 7.5,
+        },
     }
 
 
@@ -103,8 +111,12 @@ class ActiveSimulationTests(unittest.TestCase):
 
     def test_active_drag_changes_flight_profile(self):
         manager = ActiveSimulationManager()
-        passive = manager.submit_cfd_simulation(sample_rocket(), base_config(enabled=False))["results"]
-        active = manager.submit_cfd_simulation(sample_rocket(), base_config(enabled=True, target_apogee=35))["results"]
+        passive_config = base_config(enabled=False)
+        active_config = base_config(enabled=True, target_apogee=35)
+        passive_config["landingSystem"]["enabled"] = False
+        active_config["landingSystem"]["enabled"] = False
+        passive = manager.submit_cfd_simulation(sample_rocket(), passive_config)["results"]
+        active = manager.submit_cfd_simulation(sample_rocket(), active_config)["results"]
 
         self.assertEqual(passive["active_system"]["max_surface_deployment"], 0)
         self.assertGreater(active["active_system"]["max_surface_deployment"], 0.1)
@@ -170,8 +182,11 @@ class ActiveSimulationTests(unittest.TestCase):
 
     def test_aero_drag_table_changes_effective_drag(self):
         manager = ActiveSimulationManager()
-        baseline = manager.submit_cfd_simulation(sample_rocket(), base_config(target_apogee=35))["results"]
+        baseline_config = base_config(target_apogee=35)
+        baseline_config["landingSystem"]["enabled"] = False
+        baseline = manager.submit_cfd_simulation(sample_rocket(), baseline_config)["results"]
         config = base_config(target_apogee=35)
+        config["landingSystem"]["enabled"] = False
         config["aerodynamics"] = {
             "baseDragCoefficient": 0.5,
             "activeDragCoefficientTable": [
@@ -185,6 +200,43 @@ class ActiveSimulationTests(unittest.TestCase):
         self.assertEqual(calibrated["aerodynamics"]["active_drag_model"], "table")
         self.assertGreater(calibrated["max_drag_coefficient"], baseline["max_drag_coefficient"])
         self.assertGreater(calibrated["max_drag_force"], baseline["max_drag_force"])
+
+    def test_landing_system_reduces_touchdown_velocity(self):
+        manager = ActiveSimulationManager()
+        with_landing = manager.submit_cfd_simulation(sample_rocket(), base_config())["results"]
+        without_landing_config = base_config()
+        without_landing_config["landingSystem"]["enabled"] = False
+        without_landing = manager.submit_cfd_simulation(sample_rocket(), without_landing_config)["results"]
+
+        self.assertTrue(with_landing["landing_system"]["enabled"])
+        self.assertTrue(with_landing["landing_system"]["deployed"])
+        self.assertEqual(with_landing["landing_system"]["touchdown_status"], "safe")
+        self.assertLess(with_landing["landing_velocity"], without_landing["landing_velocity"])
+        self.assertGreater(len(with_landing["landing_system"]["history"]), 5)
+
+    def test_invalid_landing_system_is_rejected(self):
+        config = base_config()
+        config["landingSystem"]["dragArea"] = 0
+        manager = ActiveSimulationManager()
+        result = manager.submit_cfd_simulation(sample_rocket(), config)
+
+        self.assertFalse(result["success"])
+        self.assertIn("Landing drag area must be positive.", result["validation_errors"])
+
+    def test_flight_events_include_active_and_landing_milestones(self):
+        manager = ActiveSimulationManager()
+        result = manager.submit_cfd_simulation(sample_rocket(), base_config(target_apogee=35))["results"]
+        events = result["flight_events"]
+        event_names = [event["name"] for event in events]
+        event_times = [event["time"] for event in events]
+
+        self.assertIn("Launch", event_names)
+        self.assertIn("Motor burnout", event_names)
+        self.assertIn("Apogee", event_names)
+        self.assertIn("Max airbrake", event_names)
+        self.assertIn("Landing deploy", event_names)
+        self.assertIn("Touchdown", event_names)
+        self.assertEqual(event_times, sorted(event_times))
 
 
 if __name__ == "__main__":
