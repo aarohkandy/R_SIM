@@ -18,7 +18,8 @@ const numberValue = (value, fallback = 0) => {
 };
 
 const formatNumber = (value, digits = 1) => {
-  const parsed = numberValue(value, 0);
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed)) return '--';
   if (Math.abs(parsed) >= 1000) return Math.round(parsed).toLocaleString();
   return parsed.toFixed(digits);
 };
@@ -399,6 +400,52 @@ const getMassBreakdown = (components) => {
       ...row,
       percent: total > 0 ? (row.mass / total) * 100 : 0
     }));
+};
+
+const getAirDensity = (config) => {
+  const pressure = numberValue(config.pressure, 101325);
+  const temperatureK = numberValue(config.temperature, 15) + 273.15;
+  return pressure / (287.05 * Math.max(temperatureK, 1));
+};
+
+const getLandingSizing = (metrics, config, overrides = {}) => {
+  const landing = { ...config.landingSystem, ...overrides };
+  const massKg = Math.max(metrics.mass / 1000, 0.001);
+  const density = Math.max(getAirDensity(config), 0.2);
+  const dragCoefficient = Math.max(numberValue(landing.dragCoefficient, 1.55), 0.1);
+  const dragArea = Math.max(numberValue(landing.dragArea, 0), 0);
+  const safeVelocity = Math.max(numberValue(landing.maxSafeVelocity, 7.5), 0.1);
+  const requiredArea = (2 * massKg * 9.80665) / (density * dragCoefficient * safeVelocity * safeVelocity);
+  const estimatedTerminalVelocity = dragArea > 0
+    ? Math.sqrt((2 * massKg * 9.80665) / (density * dragCoefficient * dragArea))
+    : Infinity;
+  return {
+    density,
+    requiredArea,
+    estimatedTerminalVelocity,
+    areaMargin: dragArea - requiredArea,
+    safeVelocity,
+    dragArea,
+    dragCoefficient
+  };
+};
+
+const getActiveEnvelope = (metrics, config) => {
+  const diameterM = Math.max(metrics.maxDiameter / 1000, 0.001);
+  const frontalArea = Math.PI * (diameterM / 2) ** 2;
+  const active = config.activeSystem;
+  const surfaceArea = Math.max(numberValue(active.surfaceArea, 0), 0);
+  const surfaceCount = Math.max(numberValue(active.surfaceCount, 0), 0);
+  const deployedArea = surfaceArea * surfaceCount;
+  const cdIncrement = frontalArea > 0
+    ? (numberValue(active.surfaceCd, 1.35) * deployedArea) / frontalArea
+    : 0;
+  return {
+    frontalArea,
+    deployedArea,
+    cdIncrement,
+    maxDynamicPressure: numberValue(active.maxDynamicPressure, 0)
+  };
 };
 
 const summarizeRun = ({ label, active, passive = null }) => {
@@ -796,6 +843,8 @@ function ComponentTable({ components, selectedId, setSelectedId }) {
 
 function DesignAnalysis({ metrics, massBreakdown, config }) {
   const cgCpSeparation = metrics.cp - metrics.cg;
+  const landingSizing = getLandingSizing(metrics, config);
+  const activeEnvelope = getActiveEnvelope(metrics, config);
   const stabilityState = metrics.stability < 1
     ? { label: 'Low', tone: 'bad' }
     : metrics.stability > 3.5
@@ -806,9 +855,14 @@ function DesignAnalysis({ metrics, massBreakdown, config }) {
     : metrics.thrustToWeight >= 3
       ? { label: 'Usable', tone: 'warn' }
       : { label: 'Low', tone: 'bad' };
-  const landingAreaLoading = config.landingSystem.enabled && numberValue(config.landingSystem.dragArea) > 0
-    ? (metrics.mass / 1000) / numberValue(config.landingSystem.dragArea)
+  const landingAreaLoading = config.landingSystem.enabled && landingSizing.dragArea > 0
+    ? (metrics.mass / 1000) / landingSizing.dragArea
     : null;
+  const landingTone = landingSizing.estimatedTerminalVelocity <= landingSizing.safeVelocity
+    ? 'good'
+    : landingSizing.estimatedTerminalVelocity <= landingSizing.safeVelocity * 1.15
+      ? 'warn'
+      : 'bad';
 
   return (
     <div className="analysis-panel">
@@ -827,10 +881,28 @@ function DesignAnalysis({ metrics, massBreakdown, config }) {
           <strong>{thrustState.label}</strong>
           <em>{formatNumber(metrics.thrustToWeight, 2)} T/W</em>
         </div>
-        <div className={`analysis-stat ${landingAreaLoading !== null && landingAreaLoading <= 7 ? 'good' : 'warn'}`}>
+        <div className={`analysis-stat ${landingTone}`}>
           <span>Landing load</span>
           <strong>{landingAreaLoading === null ? 'Off' : `${formatNumber(landingAreaLoading, 1)} kg/m2`}</strong>
-          <em>{formatNumber(config.landingSystem.dragArea, 2)} m2 area</em>
+          <em>{formatNumber(landingSizing.estimatedTerminalVelocity, 2)} m/s terminal</em>
+        </div>
+      </div>
+      <div className="envelope-list">
+        <div>
+          <span>Recovery area margin</span>
+          <strong>{landingSizing.areaMargin >= 0 ? '+' : ''}{formatNumber(landingSizing.areaMargin, 3)} m2</strong>
+        </div>
+        <div>
+          <span>Required landing drag</span>
+          <strong>{formatNumber(landingSizing.requiredArea, 3)} m2</strong>
+        </div>
+        <div>
+          <span>Airbrake Cd authority</span>
+          <strong>+{formatNumber(activeEnvelope.cdIncrement, 2)}</strong>
+        </div>
+        <div>
+          <span>Active deployed area</span>
+          <strong>{formatNumber(activeEnvelope.deployedArea, 4)} m2</strong>
         </div>
       </div>
       <div className="mass-breakdown" aria-label="Mass breakdown">
@@ -1063,14 +1135,21 @@ function ActiveSetup({ config, setConfig, syncAirbrake }) {
   );
 }
 
-function LandingSetup({ config, setConfig, syncLanding }) {
+function LandingSetup({ config, setConfig, syncLanding, metrics }) {
   const landing = config.landingSystem;
+  const sizing = getLandingSizing(metrics, config);
   const setLanding = (key, value) => {
     setConfig((current) => ({
       ...current,
       landingSystem: { ...current.landingSystem, [key]: value }
     }));
     syncLanding(key, value);
+  };
+  const applyLandingSizing = (targetVelocity = landing.maxSafeVelocity) => {
+    const nextSizing = getLandingSizing(metrics, config, { maxSafeVelocity: targetVelocity });
+    const nextArea = Math.ceil(nextSizing.requiredArea * 1000) / 1000;
+    setLanding('maxSafeVelocity', targetVelocity);
+    setLanding('dragArea', Number(nextArea.toFixed(3)));
   };
 
   return (
@@ -1095,6 +1174,23 @@ function LandingSetup({ config, setConfig, syncLanding }) {
         <Field label="Drag area" value={landing.dragArea} unit="m2" step="0.01" onChange={(value) => setLanding('dragArea', value)} />
         <Field label="Drag coefficient" value={landing.dragCoefficient} step="0.01" onChange={(value) => setLanding('dragCoefficient', value)} />
         <Field label="Safe touchdown" value={landing.maxSafeVelocity} unit="m/s" step="0.1" onChange={(value) => setLanding('maxSafeVelocity', value)} />
+      </div>
+      <div className="sizing-card">
+        <div className="comparison-title">Recovery sizing</div>
+        <div className="sizing-grid">
+          <div><span>Required area</span><strong>{formatNumber(sizing.requiredArea, 3)} m2</strong></div>
+          <div><span>Current terminal</span><strong>{formatNumber(sizing.estimatedTerminalVelocity, 2)} m/s</strong></div>
+          <div><span>Area margin</span><strong>{sizing.areaMargin >= 0 ? '+' : ''}{formatNumber(sizing.areaMargin, 3)} m2</strong></div>
+          <div><span>Air density</span><strong>{formatNumber(sizing.density, 2)} kg/m3</strong></div>
+        </div>
+        <div className="sizing-actions">
+          <button type="button" onClick={() => applyLandingSizing(numberValue(landing.maxSafeVelocity, 7.5))}>
+            Size to limit
+          </button>
+          <button type="button" onClick={() => applyLandingSizing(6)}>
+            Target 6 m/s
+          </button>
+        </div>
       </div>
       <div className="landing-presets">
         <button type="button" onClick={() => {
@@ -1326,6 +1422,8 @@ function App() {
   const fileInputRef = useRef(null);
   const metrics = useMemo(() => getMetrics(components), [components]);
   const massBreakdown = useMemo(() => getMassBreakdown(components), [components]);
+  const landingSizing = useMemo(() => getLandingSizing(metrics, config), [metrics, config]);
+  const activeEnvelope = useMemo(() => getActiveEnvelope(metrics, config), [metrics, config]);
   const selectedComponent = components.find((component) => component.id === selectedId);
 
   const staleResults = () => {
@@ -1762,9 +1860,14 @@ function App() {
       detail: `${formatNumber(config.landingSystem.deployAltitude, 0)} m deploy`
     },
     {
+      label: 'Recovery sized',
+      ok: !config.landingSystem.enabled || landingSizing.estimatedTerminalVelocity <= landingSizing.safeVelocity,
+      detail: `${formatNumber(landingSizing.estimatedTerminalVelocity, 2)} / ${formatNumber(landingSizing.safeVelocity, 1)} m/s`
+    },
+    {
       label: 'Active control',
-      ok: config.activeSystem.enabled,
-      detail: `${formatNumber(config.controller.targetApogee, 0)} m target`
+      ok: config.activeSystem.enabled && activeEnvelope.cdIncrement > 0.5,
+      detail: `+${formatNumber(activeEnvelope.cdIncrement, 2)} Cd authority`
     }
   ];
 
@@ -1782,7 +1885,7 @@ function App() {
     ),
     flight: <FlightSetup config={config} setConfig={setConfigAndInvalidate} launchSites={launchSites} applyLaunchSite={applyLaunchSite} />,
     active: <ActiveSetup config={config} setConfig={setConfigAndInvalidate} syncAirbrake={syncAirbrake} />,
-    landing: <LandingSetup config={config} setConfig={setConfigAndInvalidate} syncLanding={syncLanding} />,
+    landing: <LandingSetup config={config} setConfig={setConfigAndInvalidate} syncLanding={syncLanding} metrics={metrics} />,
     results: (
       <ResultsPanel
         result={result}

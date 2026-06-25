@@ -691,6 +691,39 @@ button:focus-visible {
   border-color: rgba(186, 45, 45, 0.35);
 }
 
+.envelope-list {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+  padding: 0 8px 8px;
+}
+
+.envelope-list div {
+  min-width: 0;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  padding: 6px 7px;
+  background: #fafbfc;
+}
+
+.envelope-list span,
+.sizing-grid span {
+  display: block;
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 800;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.envelope-list strong,
+.sizing-grid strong {
+  display: block;
+  margin-top: 2px;
+  font-size: 12px;
+  white-space: nowrap;
+}
+
 .mass-breakdown {
   display: grid;
   gap: 6px;
@@ -960,6 +993,36 @@ button:focus-visible {
 
 .result-actions {
   grid-template-columns: 1fr 1fr;
+}
+
+.sizing-card {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fff;
+  overflow: hidden;
+  margin-top: 12px;
+}
+
+.sizing-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  padding: 9px;
+}
+
+.sizing-grid div {
+  min-width: 0;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  padding: 7px;
+  background: #fafbfc;
+}
+
+.sizing-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  padding: 0 9px 9px;
 }
 
 .metric-grid {
