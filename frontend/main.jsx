@@ -657,6 +657,86 @@ const mergeRowsByTime = (...collections) => {
   return [...merged.values()].sort((a, b) => numberValue(a.time) - numberValue(b.time));
 };
 
+const mergeConfig = (base, incoming = {}) => ({
+  ...base,
+  ...incoming,
+  activeSystem: {
+    ...base.activeSystem,
+    ...(incoming.activeSystem || {})
+  },
+  controller: {
+    ...base.controller,
+    ...(incoming.controller || {})
+  },
+  landingSystem: {
+    ...base.landingSystem,
+    ...(incoming.landingSystem || incoming.recoverySystem || {})
+  },
+  aerodynamics: {
+    ...base.aerodynamics,
+    ...(incoming.aerodynamics || {})
+  },
+  noise: {
+    ...base.noise,
+    ...(incoming.noise || {})
+  }
+});
+
+const normalizeRocketOverrides = (rocketData = {}, data = {}) => {
+  const weight = numberValue(rocketData.weight ?? data.rocketWeight, 0);
+  const cg = numberValue(rocketData.cg ?? data.rocketCG, 0);
+  const totalHeight = numberValue(rocketData.totalHeight ?? data.totalHeight, 0);
+  return {
+    ...(weight > 0 ? { weight } : {}),
+    ...(cg > 0 ? { cg } : {}),
+    ...(totalHeight > 0 ? { totalHeight } : {})
+  };
+};
+
+const normalizeImportedComponents = (rawComponents) => rawComponents.map((component) => ({
+  ...component,
+  id: String(component.id || makeId(component.type || 'component'))
+}));
+
+const normalizeImportedDesign = (data) => {
+  const rocketData = data.rocketData || data.rocket || {};
+  const rawComponents = data.components || rocketData.components || data.rocketComponents;
+  if (!Array.isArray(rawComponents) || !rawComponents.length) {
+    throw new Error('JSON file does not include rocket components.');
+  }
+
+  const incomingConfig = data.config || data.simulationConfig || {};
+  return {
+    id: data.id || data.name || 'imported-design',
+    description: data.description || '',
+    components: normalizeImportedComponents(rawComponents),
+    config: mergeConfig(defaultConfig, incomingConfig),
+    rocketOverrides: data.rocketOverrides || normalizeRocketOverrides(rocketData, data)
+  };
+};
+
+const applyRocketOverrides = (metrics, overrides = {}) => {
+  const mass = numberValue(overrides.weight, metrics.mass) > 0
+    ? numberValue(overrides.weight, metrics.mass)
+    : metrics.mass;
+  const cg = numberValue(overrides.cg, metrics.cg) > 0
+    ? numberValue(overrides.cg, metrics.cg)
+    : metrics.cg;
+  const totalLength = numberValue(overrides.totalHeight, metrics.totalLength) > 0
+    ? numberValue(overrides.totalHeight, metrics.totalLength)
+    : metrics.totalLength;
+  const thrust = numberValue(metrics.motor?.motorThrust, 0);
+  return {
+    ...metrics,
+    mass,
+    cg,
+    totalLength,
+    stability: metrics.maxDiameter > 0 ? (metrics.cp - cg) / metrics.maxDiameter : metrics.stability,
+    thrustToWeight: mass > 0 ? thrust / ((mass / 1000) * 9.80665) : 0,
+    overridesApplied: Boolean(overrides.weight || overrides.cg || overrides.totalHeight)
+  };
+};
+
 function Field({ label, value, unit, type = 'number', step = 'any', min, max, onChange, options }) {
   const id = `${label.replace(/[^a-z0-9]+/gi, '-')}-${Math.random().toString(36).slice(2)}`;
   return (
@@ -1263,9 +1343,21 @@ function MotorBrowser({ motors, loading, error, query, setQuery, addMotor }) {
   );
 }
 
-function FlightSetup({ config, setConfig, launchSites, applyLaunchSite, metrics }) {
+function FlightSetup({
+  config,
+  setConfig,
+  launchSites,
+  applyLaunchSite,
+  metrics,
+  componentMetrics,
+  setRocketOverrides
+}) {
   const set = (key, value) => setConfig((current) => ({ ...current, [key]: value }));
   const guide = getLaunchGuideAnalysis(metrics, config);
+  const setOverride = (key, value) => setRocketOverrides((current) => ({
+    ...current,
+    [key]: value
+  }));
   return (
     <div className="inspector-scroll">
       <div className="panel-copy">
@@ -1311,6 +1403,25 @@ function FlightSetup({ config, setConfig, launchSites, applyLaunchSite, metrics 
           unit="m"
           onChange={(value) => setConfig((current) => ({ ...current, controller: { ...current.controller, targetApogee: value } }))}
         />
+      </div>
+      <div className="sizing-card">
+        <div className="comparison-title">Flight mass properties</div>
+        <div className="field-grid single mass-property-fields">
+          <Field label="Flight mass" value={metrics.mass} unit="g" onChange={(value) => setOverride('weight', value)} />
+          <Field label="Flight CG" value={metrics.cg} unit="mm" onChange={(value) => setOverride('cg', value)} />
+          <Field label="Flight length" value={metrics.totalLength} unit="mm" onChange={(value) => setOverride('totalHeight', value)} />
+        </div>
+        <div className="sizing-grid">
+          <div><span>Component mass</span><strong>{formatNumber(componentMetrics.mass, 0)} g</strong></div>
+          <div><span>Component CG</span><strong>{formatNumber(componentMetrics.cg, 0)} mm</strong></div>
+          <div><span>Override</span><strong>{metrics.overridesApplied ? 'Active' : 'Off'}</strong></div>
+          <div><span>Static margin</span><strong>{formatNumber(metrics.stability, 2)} cal</strong></div>
+        </div>
+        <div className="sizing-actions mass-property-actions">
+          <button type="button" onClick={() => setRocketOverrides({})}>
+            Use component totals
+          </button>
+        </div>
       </div>
       <div className="sizing-card">
         <div className="comparison-title">Launch guide</div>
@@ -1776,8 +1887,10 @@ function App() {
   const [comparisonResult, setComparisonResult] = useState(null);
   const [simulationCases, setSimulationCases] = useState([]);
   const [selectedCaseId, setSelectedCaseId] = useState(null);
+  const [rocketOverrides, setRocketOverrides] = useState({});
   const fileInputRef = useRef(null);
-  const metrics = useMemo(() => getMetrics(components), [components]);
+  const componentMetrics = useMemo(() => getMetrics(components), [components]);
+  const metrics = useMemo(() => applyRocketOverrides(componentMetrics, rocketOverrides), [componentMetrics, rocketOverrides]);
   const massBreakdown = useMemo(() => getMassBreakdown(components), [components]);
   const landingSizing = useMemo(() => getLandingSizing(metrics, config), [metrics, config]);
   const activeEnvelope = useMemo(() => getActiveEnvelope(metrics, config), [metrics, config]);
@@ -1792,6 +1905,11 @@ function App() {
 
   const setConfigAndInvalidate = (updater) => {
     setConfig(updater);
+    staleResults();
+  };
+
+  const setRocketOverridesAndInvalidate = (updater) => {
+    setRocketOverrides(updater);
     staleResults();
   };
 
@@ -1847,6 +1965,9 @@ function App() {
       } : current.activeSystem,
       landingSystem: landing ? {
         ...current.landingSystem,
+        mainDeployEvent: landing.mainDeployEvent || current.landingSystem.mainDeployEvent,
+        drogueDeployEvent: landing.drogueDeployEvent || current.landingSystem.drogueDeployEvent,
+        drogueDeployAltitude: numberValue(landing.drogueDeployAltitude, current.landingSystem.drogueDeployAltitude),
         deployAltitude: numberValue(landing.deployAltitude, current.landingSystem.deployAltitude),
         dragArea: numberValue(landing.dragArea, current.landingSystem.dragArea),
         dragCoefficient: numberValue(landing.dragCoefficient, current.landingSystem.dragCoefficient),
@@ -2084,7 +2205,20 @@ function App() {
   };
 
   const saveDesign = () => {
-    const data = { components, config, savedAt: new Date().toISOString() };
+    const data = {
+      id: 'browser-saved-active-rocket',
+      components,
+      config,
+      rocketOverrides,
+      rocketData: {
+        weight: metrics.mass,
+        cg: metrics.cg,
+        totalHeight: metrics.totalLength,
+        components
+      },
+      simulationConfig: config,
+      savedAt: new Date().toISOString()
+    };
     localStorage.setItem('activeRocket.design', JSON.stringify(data));
     setMessage('Design saved in this browser.');
   };
@@ -2097,9 +2231,11 @@ function App() {
     }
     try {
       const data = JSON.parse(raw);
-      if (Array.isArray(data.components)) setComponents(data.components);
-      if (data.config) setConfig({ ...defaultConfig, ...data.config });
-      setSelectedId(data.components?.[0]?.id || null);
+      const imported = normalizeImportedDesign(data);
+      setComponents(imported.components);
+      setConfig(imported.config);
+      setRocketOverrides(imported.rocketOverrides);
+      setSelectedId(imported.components[0]?.id || null);
       staleResults();
       setSimulationCases([]);
       setMessage('Saved design loaded.');
@@ -2109,11 +2245,26 @@ function App() {
   };
 
   const exportDesign = () => {
-    const blob = new Blob([JSON.stringify({ components, config }, null, 2)], { type: 'application/json' });
+    const scenario = {
+      id: 'active_rocket_design',
+      description: 'Active rocket design with simulation-ready configuration.',
+      rocketData: {
+        weight: metrics.mass,
+        cg: metrics.cg,
+        totalHeight: metrics.totalLength,
+        components
+      },
+      simulationConfig: config,
+      components,
+      config,
+      rocketOverrides,
+      exportedAt: new Date().toISOString()
+    };
+    const blob = new Blob([JSON.stringify(scenario, null, 2)], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
-    link.download = 'active-rocket-design.json';
+    link.download = 'active-rocket-scenario.json';
     link.click();
     URL.revokeObjectURL(url);
   };
@@ -2218,13 +2369,14 @@ function App() {
     try {
       if (file.name.toLowerCase().endsWith('.json')) {
         const data = JSON.parse(await file.text());
-        if (!Array.isArray(data.components)) throw new Error('JSON file does not include components.');
-        setComponents(data.components);
-        setConfig({ ...defaultConfig, ...(data.config || {}) });
-        setSelectedId(data.components[0]?.id || null);
+        const imported = normalizeImportedDesign(data);
+        setComponents(imported.components);
+        setConfig(imported.config);
+        setRocketOverrides(imported.rocketOverrides);
+        setSelectedId(imported.components[0]?.id || null);
         staleResults();
         setSimulationCases([]);
-        setMessage('Design JSON imported.');
+        setMessage(`${imported.id || file.name} imported.`);
       } else if (file.name.toLowerCase().endsWith('.ork') || file.name.toLowerCase().endsWith('.xml')) {
         const formData = new FormData();
         formData.append('file', file);
@@ -2236,6 +2388,7 @@ function App() {
           id: String(component.id || makeId(component.type || 'component'))
         }));
         setComponents(imported.length ? imported : defaultComponents);
+        setRocketOverrides({});
         setSelectedId(imported[0]?.id || null);
         staleResults();
         setSimulationCases([]);
@@ -2253,6 +2406,7 @@ function App() {
   const newDesign = () => {
     setComponents(defaultComponents.map((component) => ({ ...component, id: makeId(component.type.toLowerCase().replace(/[^a-z0-9]+/g, '-')) })));
     setConfig(defaultConfig);
+    setRocketOverrides({});
     staleResults();
     setSimulationCases([]);
     setInspectorTab('component');
@@ -2317,7 +2471,17 @@ function App() {
         addMotor={addMotor}
       />
     ),
-    flight: <FlightSetup config={config} setConfig={setConfigAndInvalidate} launchSites={launchSites} applyLaunchSite={applyLaunchSite} metrics={metrics} />,
+    flight: (
+      <FlightSetup
+        config={config}
+        setConfig={setConfigAndInvalidate}
+        launchSites={launchSites}
+        applyLaunchSite={applyLaunchSite}
+        metrics={metrics}
+        componentMetrics={componentMetrics}
+        setRocketOverrides={setRocketOverridesAndInvalidate}
+      />
+    ),
     active: <ActiveSetup config={config} setConfig={setConfigAndInvalidate} syncAirbrake={syncAirbrake} />,
     landing: <LandingSetup config={config} setConfig={setConfigAndInvalidate} syncLanding={syncLanding} metrics={metrics} />,
     results: (
