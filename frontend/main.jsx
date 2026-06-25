@@ -41,7 +41,8 @@ const componentColor = {
   Fins: '#2a9d8f',
   Motor: '#343a40',
   'Landing System': '#7b61ff',
-  'Rail Button': '#6c757d'
+  'Rail Button': '#6c757d',
+  'Mass Component': '#b56576'
 };
 
 const componentDefaults = {
@@ -149,6 +150,15 @@ const componentDefaults = {
     diameter: 8,
     weight: 8,
     railOffset: 4
+  },
+  'Mass Component': {
+    type: 'Mass Component',
+    name: 'Payload mass',
+    length: 0,
+    diameter: 0,
+    weight: 75,
+    massRole: 'payload',
+    material: 'internal'
   }
 };
 
@@ -173,6 +183,7 @@ const defaultComponents = [
   { ...componentDefaults['Landing System'], id: 'landing-1' },
   { ...componentDefaults['Body Tube'], id: 'tube-1', name: 'Forward airframe', length: 360, weight: 110 },
   { ...componentDefaults['Electronics Bay'], id: 'avbay-1' },
+  { ...componentDefaults['Mass Component'], id: 'mass-1', name: 'Avionics battery pack', weight: 65, massRole: 'battery', axialPosition: 720, attachedToComponent: 'avbay-1' },
   { ...componentDefaults['Active Airbrake'], id: 'airbrake-1' },
   { ...componentDefaults['Body Tube'], id: 'tube-2', name: 'Aft airframe', length: 320, weight: 125 },
   { ...componentDefaults.Fins, id: 'fins-1', attachedToComponent: 'tube-2' },
@@ -334,12 +345,14 @@ const componentMass = (component) => {
 
 const getDiameter = (component) => numberValue(component.diameter ?? component.bottomDiameter ?? component.topDiameter, 0);
 
+const internalMassTypes = new Set(['Mass Component']);
+
 const getStructuralLength = (components) => components
   .filter((component) => structuralTypes.has(component.type) && component.type !== 'Rail Button')
   .reduce((sum, component) => sum + Math.max(0, numberValue(component.length)), 0);
 
-const positionalTypes = new Set(['Fins', 'Motor', 'Rail Button']);
-const attachmentChildTypes = new Set(['Fins', 'Motor', 'Rail Button']);
+const positionalTypes = new Set(['Fins', 'Motor', 'Rail Button', 'Mass Component']);
+const attachmentChildTypes = new Set(['Fins', 'Motor', 'Rail Button', 'Mass Component']);
 const attachmentHostTypes = new Set(['Body Tube', 'Transition', 'Electronics Bay', 'Recovery Bay', 'Active Airbrake']);
 
 const normalizeAttachmentId = (value) => (value === null || value === undefined ? '' : String(value));
@@ -353,6 +366,11 @@ const getAttachmentHost = (component, components) => {
 };
 
 const getDefaultAttachmentHost = (components) => [...getAttachmentHosts(components)].reverse()[0] || null;
+
+const getAttachmentHostCenter = (host, components, fallback) => {
+  const segment = layoutComponents(components).find((component) => String(component.id) === String(host?.id));
+  return segment ? segment.start + segment.length / 2 : fallback;
+};
 
 const getComponentAxialPosition = (component, totalLength) => {
   const rawPosition = numberValue(
@@ -371,12 +389,18 @@ const getComponentAxialPosition = (component, totalLength) => {
   if (component.type === 'Rail Button') {
     return clamp(totalLength * 0.38 + numberValue(component.railOffset, 0), 0, totalLength);
   }
+  if (component.type === 'Mass Component') {
+    return clamp(totalLength * 0.45, 0, totalLength);
+  }
   return 0;
 };
 
 const getMaxDiameter = (components) => Math.max(
   1,
-  ...components.map((component) => getDiameter(component)).filter((value) => value > 0)
+  ...components
+    .filter((component) => !internalMassTypes.has(component.type))
+    .map((component) => getDiameter(component))
+    .filter((value) => value > 0)
 );
 
 const layoutComponents = (components) => {
@@ -551,6 +575,8 @@ const getMetrics = (components) => {
       position = getComponentAxialPosition(component, totalLength) + numberValue(component.length, 80) / 2;
     } else if (component.type === 'Rail Button') {
       position = getComponentAxialPosition(component, totalLength);
+    } else if (component.type === 'Mass Component') {
+      position = getComponentAxialPosition(component, totalLength);
     } else {
       const segment = structural.find((item) => item.id === component.id);
       if (segment) position = segment.start + segment.length / 2;
@@ -589,6 +615,7 @@ const massGroups = [
   },
   { key: 'fins', label: 'Fins', color: '#2a9d8f', types: ['Fins'] },
   { key: 'motor', label: 'Motor', color: '#343a40', types: ['Motor'] },
+  { key: 'payload', label: 'Payload and ballast', color: '#b56576', types: ['Mass Component'] },
   { key: 'active', label: 'Active control', color: '#f2a541', types: ['Active Airbrake'] },
   { key: 'landing', label: 'Landing', color: '#7b61ff', types: ['Landing System'] }
 ];
@@ -1833,6 +1860,21 @@ function RocketDrawing({ components, splitPoints, selectedId, setSelectedId, met
             </g>
           );
         })}
+        {components.filter((component) => component.type === 'Mass Component').map((massComponent, index) => {
+          const x = xFor(getComponentAxialPosition(massComponent, length));
+          const selected = selectedId === massComponent.id;
+          const yOffset = index % 2 === 0 ? -18 : 18;
+          return (
+            <g key={massComponent.id} onClick={() => setSelectedId(massComponent.id)}>
+              <path
+                className={`mass-marker ${selected ? 'selected' : ''}`}
+                d={`M ${x} ${centerY + yOffset - 9} L ${x + 9} ${centerY + yOffset} L ${x} ${centerY + yOffset + 9} L ${x - 9} ${centerY + yOffset} Z`}
+              />
+              <line x1={x} x2={x} y1={centerY + yOffset} y2={centerY} className="mass-marker-line" />
+              <title>{massComponent.name}</title>
+            </g>
+          );
+        })}
         {splitViews.map((split, index) => {
           const splitX = xFor(split.positionMm);
           const labelOffset = index % 2 === 0 ? 0 : 18;
@@ -1943,6 +1985,7 @@ function DesignTree({
 function ComponentPalette({ addComponent }) {
   const categories = [
     ['Airframe', ['Nose Cone', 'Body Tube', 'Transition', 'Electronics Bay', 'Recovery Bay']],
+    ['Payload', ['Mass Component']],
     ['Control', ['Active Airbrake', 'Fins', 'Rail Button']],
     ['Propulsion and landing', ['Motor', 'Landing System']]
   ];
@@ -1994,8 +2037,8 @@ function ComponentTable({ components, selectedId, setSelectedId }) {
               >
                 <td>{component.name}</td>
                 <td>{component.type}</td>
-                <td>{formatNumber(component.length, 0)} mm</td>
-                <td>{formatNumber(getDiameter(component), 0)} mm</td>
+                <td>{component.type === 'Mass Component' ? '--' : `${formatNumber(component.length, 0)} mm`}</td>
+                <td>{component.type === 'Mass Component' ? '--' : `${formatNumber(getDiameter(component), 0)} mm`}</td>
                 <td>{positionalTypes.has(component.type) ? `${formatNumber(getComponentAxialPosition(component, getStructuralLength(components)), 0)} mm` : '--'}</td>
                 <td>{attachmentChildTypes.has(component.type) ? getAttachmentHost(component, components)?.name || 'Unattached' : '--'}</td>
                 <td>{formatNumber(componentMass(component), 0)} g</td>
@@ -2003,6 +2046,8 @@ function ComponentTable({ components, selectedId, setSelectedId }) {
                   ? `${formatNumber(component.motorThrust, 1)} N, ${formatNumber(component.motorTotalImpulse, 1)} Ns`
                   : component.type === 'Fins'
                     ? `${component.finCount} fins, ${formatNumber(component.finHeight, 0)} mm span`
+                    : component.type === 'Mass Component'
+                      ? component.massRole || 'payload'
                     : component.material || 'configured'}</td>
               </tr>
             ))}
@@ -2246,8 +2291,12 @@ function ComponentInspector({ component, components = [], updateComponent, metri
   const commonFields = (
     <>
       <Field label="Name" type="text" value={component.name} onChange={(value) => set('name', value)} />
-      <Field label="Length" value={component.length} unit="mm" checks={checks('length')} onChange={(value) => set('length', value)} />
-      <Field label="Diameter" value={component.diameter} unit="mm" checks={checks('diameter')} onChange={(value) => set('diameter', value)} />
+      {component.type !== 'Mass Component' && (
+        <>
+          <Field label="Length" value={component.length} unit="mm" checks={checks('length')} onChange={(value) => set('length', value)} />
+          <Field label="Diameter" value={component.diameter} unit="mm" checks={checks('diameter')} onChange={(value) => set('diameter', value)} />
+        </>
+      )}
       <Field label="Mass" value={componentMass(component)} unit="g" checks={checks('mass')} onChange={(value) => set(component.type === 'Motor' ? 'motorWeight' : 'weight', value)} />
     </>
   );
@@ -2314,6 +2363,20 @@ function ComponentInspector({ component, components = [], updateComponent, metri
             <Field label="Sweep" value={component.finSweep} unit="mm" onChange={(value) => set('finSweep', value)} />
             <Field label="Thickness" value={component.finThickness} unit="mm" checks={checks('finThickness')} onChange={(value) => set('finThickness', value)} />
           </>
+        )}
+        {component.type === 'Mass Component' && (
+          <Field
+            label="Mass role"
+            value={component.massRole || 'payload'}
+            onChange={(value) => set('massRole', value)}
+            options={[
+              { value: 'payload', label: 'Payload' },
+              { value: 'battery', label: 'Battery' },
+              { value: 'avionics', label: 'Avionics' },
+              { value: 'ballast', label: 'Ballast' },
+              { value: 'recovery', label: 'Recovery hardware' }
+            ]}
+          />
         )}
         {component.type === 'Active Airbrake' && (
           <>
@@ -3398,7 +3461,12 @@ function App() {
     const next = cloneComponent(type);
     if (attachmentChildTypes.has(type)) {
       const host = getDefaultAttachmentHost(components);
-      if (host) next.attachedToComponent = host.id;
+      if (host) {
+        next.attachedToComponent = host.id;
+        if (type === 'Mass Component') {
+          next.axialPosition = getAttachmentHostCenter(host, components, componentMetrics.totalLength * 0.45);
+        }
+      }
     }
     if (positionalTypes.has(type)) {
       next.axialPosition = getComponentAxialPosition(next, componentMetrics.totalLength);

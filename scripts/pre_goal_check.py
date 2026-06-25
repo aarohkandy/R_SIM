@@ -58,6 +58,7 @@ def main() -> int:
     frontend_style = (ROOT / "frontend" / "App.css").read_text(encoding="utf-8")
     backend_source = (ROOT / "backend" / "f_backend.py").read_text(encoding="utf-8")
     active_sim_source = (ROOT / "backend" / "active_simulation.py").read_text(encoding="utf-8")
+    openrocket_source = (ROOT / "backend" / "openrocket_import.py").read_text(encoding="utf-8")
     gcp_client_source = (ROOT / "backend" / "gcp_cfd_client.py").read_text(encoding="utf-8")
     heavy_cfd_source = (ROOT / "backend" / "openfoam_integration.py").read_text(encoding="utf-8")
     require("GCP_FUNCTION_URL" not in frontend_source, "Frontend still defaults to a hardcoded cloud function.")
@@ -92,9 +93,13 @@ def main() -> int:
     require("attachmentHostTypes" in frontend_source, "Frontend is missing valid subpart attachment hosts.")
     require("Attached to" in frontend_source, "Component inspector is missing subpart attachment editing.")
     require("getAttachmentHost(component, components)" in frontend_source, "Component table is missing subpart attachment visibility.")
+    require("Mass Component" in frontend_source, "Frontend is missing internal payload/ballast mass components.")
+    require("mass-marker" in frontend_source and "mass-marker" in frontend_style, "Rocket drawing is missing internal mass markers.")
     require("rail-button-dot" in frontend_style, "Rocket drawing does not render rail button placement.")
     require("position_m" in active_sim_source, "Backend CP contributions do not expose fin axial placement.")
     require("attachment must reference" in active_sim_source, "Backend does not reject invalid subpart attachment references.")
+    require("mass component" in active_sim_source and "internal_component_types" in active_sim_source, "Backend does not treat mass components as internal geometry.")
+    require("masscomponent" in openrocket_source, "OpenRocket import does not preserve mass components.")
     require("Airbrake station" in frontend_source, "Frontend is missing active airbrake station controls.")
     require("active.locationFromNose" in frontend_source, "Frontend design checks do not target active airbrake station.")
     require("moment_arm_m" in active_sim_source, "Backend active system does not report active airbrake moment arm.")
@@ -135,6 +140,7 @@ def main() -> int:
       <nosecone><name>Nose</name><length>0.120</length><aftRadius>0.020</aftRadius><mass>0.035</mass></nosecone>
       <bodytube><name>Body</name><length>0.560</length><outerRadius>0.020</outerRadius><mass>0.135</mass>
         <subcomponents>
+          <masscomponent><name>Tracker Battery</name><mass>0.065</mass><position>0.240</position><role>battery</role></masscomponent>
           <trapezoidfinset><name>Fins</name><finCount>3</finCount><rootChord>0.090</rootChord><height>0.055</height><mass>0.045</mass></trapezoidfinset>
           <motor><manufacturer>Estes</manufacturer><designation>Estes C6-5</designation><diameter>0.018</diameter><length>0.070</length><burnTime>1.600</burnTime><totalImpulse>10.000</totalImpulse><averageThrust>6.000</averageThrust><mass>0.017</mass></motor>
         </subcomponents>
@@ -153,7 +159,9 @@ def main() -> int:
     imported_components = imported_rocket.get("components") or []
     require(len(imported_components) >= 4, f"OpenRocket import returned too few components: {imported}")
     imported_motor = next((component for component in imported_components if component.get("type") == "Motor"), {})
+    imported_mass = next((component for component in imported_components if component.get("type") == "Mass Component"), {})
     require(len(imported_motor.get("thrustCurve", [])) > 5, f"Imported motor was not enriched with thrust curve: {imported_motor}")
+    require(imported_mass.get("massRole") == "battery", f"Imported OpenRocket mass component was not preserved: {imported_components}")
 
     controller_code = r"""
 ControlOutput control_function(SensorData sensor_data) {
@@ -210,12 +218,13 @@ ControlOutput control_function(SensorData sensor_data) {
                 "thrustCurve": database_thrust_curve,
                 "attachedToComponent": 2,
             },
+            {"id": 5, "type": "Mass Component", "name": "Tracker Battery", "weight": 65, "massRole": "battery", "axialPosition": 240, "attachedToComponent": 2},
         ],
         "rocketSplitPoints": [
             {"id": "prep-split", "afterComponentId": "1", "label": "Payload split"},
         ],
-        "rocketWeight": 232,
-        "rocketCG": 320,
+        "rocketWeight": 297,
+        "rocketCG": 302,
         "totalHeight": 680,
         "simulationConfig": {
             "timeStep": 0.02,

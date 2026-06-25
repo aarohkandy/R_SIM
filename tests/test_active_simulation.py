@@ -144,6 +144,25 @@ class ActiveSimulationTests(unittest.TestCase):
         self.assertFalse(result["success"])
         self.assertTrue(any("attachment must reference" in error for error in result["validation_errors"]))
 
+    def test_mass_component_does_not_change_external_geometry(self):
+        manager = ActiveSimulationManager()
+        rocket = sample_rocket()
+        rocket["components"].append({
+            "id": 5,
+            "type": "Mass Component",
+            "name": "Payload ballast",
+            "length": 1000,
+            "diameter": 200,
+            "weight": 75,
+            "axialPosition": 280,
+            "attachedToComponent": 2,
+        })
+
+        self.assertAlmostEqual(manager._rocket_length_m(rocket, rocket["components"]), 0.68)
+        self.assertAlmostEqual(manager._rocket_diameter_m(rocket["components"]), 0.04)
+        result = manager.submit_cfd_simulation(rocket, base_config())
+        self.assertTrue(result["success"])
+
     def test_active_drag_changes_flight_profile(self):
         manager = ActiveSimulationManager()
         passive_config = base_config(enabled=False)

@@ -24,8 +24,9 @@ class ActiveSimulationManager:
     """Runs deterministic local active pneumatic rocket simulations."""
 
     model_version = "active_pneumatic_local_dynamics_v1"
-    attachment_child_types = {"fins", "motor", "rail button"}
+    attachment_child_types = {"fins", "motor", "rail button", "mass component"}
     attachment_host_types = {"body tube", "transition", "electronics bay", "recovery bay", "active airbrake"}
+    internal_component_types = {"fins", "motor", "rail button", "mass component"}
 
     def __init__(self):
         self.simulations: Dict[str, Dict] = {}
@@ -1814,7 +1815,7 @@ class ActiveSimulationManager:
     def _rocket_length_m(self, rocket_data: Dict, components: List[Dict]) -> float:
         total = 0.0
         for component in components:
-            if str(component.get("type", "")).lower() in {"fins", "motor"}:
+            if str(component.get("type", "")).lower() in self.internal_component_types:
                 continue
             total += self._as_float(self._first_value(component, ["length", "totalHeight"], 0.0), 0.0)
         if total <= 0:
@@ -1828,7 +1829,7 @@ class ActiveSimulationManager:
         structural = []
         cursor_m = 0.0
         for component in components:
-            if str(component.get("type", "")).lower() in {"fins", "motor", "rail button"}:
+            if str(component.get("type", "")).lower() in self.internal_component_types:
                 continue
             length = self._distance_m(self._first_value(component, ["length", "totalHeight"], 0.0), 0.0)
             structural.append({
@@ -1877,6 +1878,8 @@ class ActiveSimulationManager:
     def _rocket_diameter_m(self, components: List[Dict]) -> float:
         diameters = []
         for component in components:
+            if str(component.get("type", "")).lower() in self.internal_component_types:
+                continue
             diameter = self._as_float(
                 self._first_value(component, ["diameter", "bottomDiameter", "topDiameter"], 0.0),
                 0.0,
@@ -1914,7 +1917,7 @@ class ActiveSimulationManager:
         cursor = 0.0
         for component in components:
             component_type = str(component.get("type", "")).lower()
-            if component_type in {"fins", "motor", "rail button"}:
+            if component_type in self.internal_component_types:
                 continue
             component_length = max(length_m(component), 0.0)
             structural.append((component, cursor, component_length))

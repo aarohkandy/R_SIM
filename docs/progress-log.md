@@ -85,3 +85,6 @@
 - Updated scenario fixtures and pre-goal smoke payloads to carry valid fin/motor attachment hosts.
 - Ran `bash scripts/run_pre_goal_checks.sh`: passed with 52 unit tests, attachment smoke gates, scenario matrix, backend API smoke, frontend production build, and frontend lint.
 - Browser-checked local app at `http://localhost:5001/`: selected the fin set, changed its host from Aft airframe to Forward airframe, saw the table update, added a rail button with automatic Aft airframe attachment, and produced no browser warnings/errors.
+- Added OpenRocket-style internal mass components for payload, battery, avionics, ballast, and recovery hardware, with station/host/role editing, side-view mass markers, mass-breakdown reporting, OpenRocket masscomponent import, and backend geometry exclusion.
+- Ran `bash scripts/run_pre_goal_checks.sh`: passed with 54 unit tests, mass-component smoke/import gates, scenario matrix, backend API smoke, frontend production build, and frontend lint.
+- Browser-checked local app at `http://localhost:5001/`: edited the Avionics battery pack from 65 g at 720 mm to 180 g at 220 mm, saw mass/CG/stability update while length stayed fixed, added a second payload mass auto-attached to Aft airframe, and produced no browser warnings/errors.

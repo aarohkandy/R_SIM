@@ -104,6 +104,21 @@ class OpenRocketImportTests(unittest.TestCase):
         self.assertEqual(motor["motorModel"], "Estes C6-5")
         self.assertGreater(len(motor["thrustCurve"]), 5)
 
+    def test_parse_openrocket_mass_component(self):
+        xml = SAMPLE_OPENROCKET_XML.replace(
+            b"<trapezoidfinset>",
+            b"<masscomponent><name>Tracker Battery</name><mass>0.065</mass><position>0.240</position><role>battery</role></masscomponent><trapezoidfinset>",
+        )
+        imported = parse_openrocket_design(xml, "mass-component.ork")
+        mass_component = next(component for component in imported.rocket_data["components"] if component["type"] == "Mass Component")
+        body = next(component for component in imported.rocket_data["components"] if component["type"] == "Body Tube")
+
+        self.assertEqual(mass_component["name"], "Tracker Battery")
+        self.assertAlmostEqual(mass_component["weight"], 65.0)
+        self.assertAlmostEqual(mass_component["axialPosition"], 240.0)
+        self.assertEqual(mass_component["massRole"], "battery")
+        self.assertEqual(mass_component["attachedToComponent"], body["id"])
+
     def test_import_endpoint_rejects_non_openrocket_extension(self):
         client = app.test_client()
         response = client.post(

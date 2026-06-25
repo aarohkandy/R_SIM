@@ -28,6 +28,12 @@ FIN_COMPONENT_TAGS = {
     "finset",
 }
 
+MASS_COMPONENT_TAGS = {
+    "masscomponent",
+    "massobject",
+    "payload",
+}
+
 
 @dataclass
 class ImportedOpenRocket:
@@ -56,6 +62,10 @@ def parse_openrocket_design(payload: bytes, filename: str = "design.ork") -> Imp
             next_id += 1
         elif tag in FIN_COMPONENT_TAGS:
             component = _parse_fin_component(element, next_id, last_body_id)
+            components.append(component)
+            next_id += 1
+        elif tag in MASS_COMPONENT_TAGS:
+            component = _parse_mass_component(element, next_id, last_body_id)
             components.append(component)
             next_id += 1
 
@@ -166,6 +176,25 @@ def _parse_fin_component(element: ET.Element, component_id: int, attached_to: Op
         "finWidth": width,
         "finThickness": thickness,
         "finSweep": sweep,
+        "attachedToComponent": attached_to,
+        "importSource": "openrocket",
+    }
+
+
+def _parse_mass_component(element: ET.Element, component_id: int, attached_to: Optional[int]) -> Dict:
+    mass = _mass_g(_numeric_child(element, ["mass", "massoverride", "componentmass"]))
+    raw_position = _numeric_child(element, ["position", "axialoffset", "componentcg", "cgx"])
+    axial_position = _length_mm(raw_position) if raw_position is not None else None
+
+    return {
+        "id": component_id,
+        "type": "Mass Component",
+        "name": _first_text(element, ["name"]) or "Imported Mass Component",
+        "length": 0,
+        "diameter": 0,
+        "weight": mass,
+        "massRole": _first_text(element, ["role", "type"]) or "payload",
+        "axialPosition": axial_position,
         "attachedToComponent": attached_to,
         "importSource": "openrocket",
     }
