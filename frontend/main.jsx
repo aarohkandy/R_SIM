@@ -227,19 +227,14 @@ const MiniLineChart = ({ title, yLabel, series }) => {
 };
 
 function App() {
-  // API Configuration - works for both local development and Netlify production
-  const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://127.0.0.1:5011';
-  const GCP_FUNCTION_URL = import.meta.env.VITE_GCP_FUNCTION_URL || 'https://us-central1-centered-scion-471523-a4.cloudfunctions.net/rocket-cfd-simulator';
-  
-  // Use local backend for now since Cloud Function deployment is having issues
-  const SIMULATION_API_URL = import.meta.env.PROD ? 'https://us-central1-centered-scion-471523-a4.cloudfunctions.net/rocket-cfd-simulator' : 'http://localhost:5011';
+  const DEFAULT_LOCAL_API_URL = 'http://localhost:5011';
+  const configuredApiUrl = import.meta.env.VITE_API_URL || import.meta.env.VITE_SIMULATION_API_URL || '';
+  const SIMULATION_API_URL = (configuredApiUrl || (import.meta.env.DEV ? DEFAULT_LOCAL_API_URL : '')).replace(/\/$/, '');
   
   // Comprehensive Debug Logging (only log once)
   if (!window.apiConfigLogged) {
     console.log('🔧 API Configuration:', {
       isProduction: import.meta.env.PROD,
-      apiBaseUrl: API_BASE_URL,
-      gcpFunctionUrl: GCP_FUNCTION_URL,
       simulationApiUrl: SIMULATION_API_URL,
       environment: import.meta.env.MODE,
       nodeEnv: import.meta.env.NODE_ENV
@@ -247,165 +242,58 @@ function App() {
     window.apiConfigLogged = true;
   }
 
-  // Google Cloud Status Check
-  const checkGoogleCloudStatus = async () => {
-    console.log('☁️ === GOOGLE CLOUD STATUS CHECK ===');
-    
+  const checkSimulationApiStatus = async () => {
+    console.log('🏠 === SIMULATION API CHECK ===');
+
     try {
-      // Test 1: Check if GCP Function URL is reachable
-      console.log('🔍 Test 1: Checking GCP Function URL reachability...');
-      const healthUrl = `${GCP_FUNCTION_URL}/health`;
-      console.log('📍 Health check URL:', healthUrl);
+      const healthUrl = `${SIMULATION_API_URL}/health`;
+      console.log('📍 Simulation API health URL:', healthUrl);
       
       const healthResponse = await fetch(healthUrl, {
         method: 'GET',
         headers: { 'Content-Type': 'application/json' }
       });
       
-      console.log('📡 Health response status:', healthResponse.status);
-      console.log('📡 Health response headers:', Object.fromEntries(healthResponse.headers.entries()));
+      console.log('📡 Simulation API response status:', healthResponse.status);
       
       if (healthResponse.ok) {
         const healthData = await healthResponse.json();
-        console.log('✅ GCP Function is ACTIVE and responding!');
-        console.log('📊 Health data:', healthData);
+        console.log('✅ Simulation API is ready.');
+        console.log('📊 Simulation API data:', healthData);
         return { status: 'active', data: healthData };
-      } else {
-        console.log('❌ GCP Function returned error:', healthResponse.status);
-        const errorText = await healthResponse.text();
-        console.log('📄 Error response:', errorText.substring(0, 200));
-        return { status: 'error', error: healthResponse.status };
       }
+
+      const errorText = await healthResponse.text();
+      console.log('❌ Simulation API returned error:', healthResponse.status, errorText.substring(0, 200));
+      return { status: 'error', error: healthResponse.status };
     } catch (error) {
-      console.log('💥 GCP Function connection failed:', error.message);
-      console.log('🔍 Error details:', {
-        name: error.name,
-        message: error.message,
-        stack: error.stack?.substring(0, 300)
-      });
+      console.log('💥 Simulation API connection failed:', error.message);
       return { status: 'offline', error: error.message };
     }
   };
 
-  // Test 2: Check Netlify proxy
-  const checkNetlifyProxy = async () => {
-    console.log('🌐 === NETLIFY PROXY CHECK ===');
-    
-    try {
-      const proxyUrl = '/api/health';
-      console.log('📍 Proxy URL:', proxyUrl);
-      
-      const proxyResponse = await fetch(proxyUrl, {
-        method: 'GET',
-        headers: { 'Content-Type': 'application/json' }
-      });
-      
-      console.log('📡 Proxy response status:', proxyResponse.status);
-      console.log('📡 Proxy response headers:', Object.fromEntries(proxyResponse.headers.entries()));
-      
-      if (proxyResponse.ok) {
-        try {
-          const proxyData = await proxyResponse.json();
-          console.log('✅ Netlify proxy is working!');
-          console.log('📊 Proxy data:', proxyData);
-          return { status: 'active', data: proxyData };
-        } catch (jsonError) {
-          console.log('⚠️ Netlify proxy returned non-JSON response (likely HTML)');
-          // This is expected in production since we're using Google Cloud Function directly
-          return { status: 'bypassed', error: 'Using direct Google Cloud Function' };
-        }
-      } else {
-        console.log('❌ Netlify proxy returned error:', proxyResponse.status);
-        const errorText = await proxyResponse.text();
-        console.log('📄 Proxy error response:', errorText.substring(0, 200));
-        return { status: 'error', error: proxyResponse.status };
-      }
-    } catch (error) {
-      console.log('💥 Netlify proxy connection failed:', error.message);
-      return { status: 'offline', error: error.message };
-    }
-  };
-
-  // Test 3: Check local backend (if in development)
-  const checkLocalBackend = async () => {
-    if (import.meta.env.PROD) {
-      console.log('🏠 Skipping local backend check (production mode)');
-      return { status: 'skipped' };
-    }
-    
-    console.log('🏠 === LOCAL BACKEND CHECK ===');
-    
-    try {
-      const localUrl = `${API_BASE_URL}/health`;
-      console.log('📍 Local backend URL:', localUrl);
-      
-      const localResponse = await fetch(localUrl, {
-        method: 'GET',
-        headers: { 'Content-Type': 'application/json' }
-      });
-      
-      console.log('📡 Local backend response status:', localResponse.status);
-      
-      if (localResponse.ok) {
-        const localData = await localResponse.json();
-        console.log('✅ Local backend is running!');
-        console.log('📊 Local backend data:', localData);
-        return { status: 'active', data: localData };
-      } else {
-        console.log('❌ Local backend returned error:', localResponse.status);
-        return { status: 'error', error: localResponse.status };
-      }
-    } catch (error) {
-      console.log('💥 Local backend connection failed:', error.message);
-      return { status: 'offline', error: error.message };
-    }
-  };
-
-  // Run all status checks
   const runAllStatusChecks = async () => {
-    console.log('🚀 === COMPREHENSIVE SYSTEM STATUS CHECK ===');
+    console.log('🚀 === LOCAL SIMULATION STATUS CHECK ===');
     console.log('⏰ Timestamp:', new Date().toISOString());
     
     const results = {
-      gcp: await checkGoogleCloudStatus(),
-      netlify: await checkNetlifyProxy(),
-      local: await checkLocalBackend()
+      simulationApi: await checkSimulationApiStatus()
     };
     
     console.log('📊 === FINAL STATUS SUMMARY ===');
-    console.log('☁️ Google Cloud Function:', results.gcp.status);
-    console.log('🌐 Netlify Proxy:', results.netlify.status);
-    console.log('🏠 Local Backend:', results.local.status);
+    console.log('🏠 Simulation API:', results.simulationApi.status);
     
-    // Overall system status
-    const hasWorkingBackend = results.gcp.status === 'active' || 
-                             results.netlify.status === 'active' || 
-                             results.netlify.status === 'bypassed' || 
-                             results.local.status === 'active';
+    const isReady = results.simulationApi.status === 'active';
+    console.log('🎯 Overall System Status:', isReady ? '✅ READY' : '❌ NOT READY');
     
-    // Check if Netlify proxy is returning HTML (function not deployed)
-    const netlifyProxyIssue = results.netlify.status === 'html_response';
-    
-    console.log('🎯 Overall System Status:', hasWorkingBackend ? '✅ READY' : '❌ NOT READY');
-    
-    if (!hasWorkingBackend) {
-      console.log('⚠️ WARNING: No backend services are available!');
-      console.log('🔧 Troubleshooting steps:');
-      console.log('1. Deploy Google Cloud Function: py deploy_gcp_function.py');
-      console.log('2. Start local backend: py backend/f_backend.py');
-      console.log('3. Check Netlify proxy configuration');
-    }
-    
-    if (netlifyProxyIssue) {
-      console.log('🔍 DIAGNOSIS: Netlify proxy is working but Google Cloud Function is not deployed');
-      console.log('💡 SOLUTION: The function needs to be deployed to Google Cloud');
-      console.log('📋 COMMAND: py deploy_gcp_function.py');
+    if (!isReady) {
+      console.log('⚠️ WARNING: The local simulation API is unavailable.');
+      console.log('🔧 Start it with: python backend/f_backend.py');
     }
     
     return results;
   };
 
-  // Run status checks on component mount
   React.useEffect(() => {
     runAllStatusChecks();
   }, []);
@@ -2144,7 +2032,7 @@ function App() {
         
         // Provide specific error messages based on status code
         if (response.status === 404) {
-          throw new Error(`Simulation service not available (404). Please deploy the Google Cloud Function first.`);
+          throw new Error(`Simulation service not available (404). Start the local backend or check VITE_API_URL.`);
         } else if (response.status === 500) {
           throw new Error(`Simulation service error (500). Check the backend logs.`);
         } else {
@@ -3010,19 +2898,6 @@ function App() {
       // finY represents the CENTER of the fin horizontally extending from the body tube
       const finY = attachedComponentBottomY - finOffset;
       
-      // Debug logging for fin positioning (reduced frequency)
-      if (Math.random() < 0.1) { // Only log 10% of the time
-        console.log('🎯 Fin Positioning Debug:', {
-          finComponent: finComponent.name,
-          attachedTo: attachedComponent.name,
-          attachedComponentBottomY: attachedComponentBottomY,
-          finOffset: finOffset,
-          finalFinY: finY,
-          startY: startY,
-          totalHeight: totalHeight
-        });
-      }
-        
         // Draw horizontal fins extending outward from the body tube
         // Only draw left and right fins (visible from side view)
     
@@ -3440,7 +3315,7 @@ function App() {
               <div className="simulation-ready">
                 <div className="launch-header">
                   <h1>🚀 Ready to Launch</h1>
-                  <p>Your rocket is configured and ready for CFD analysis</p>
+                  <p>Your rocket is configured and ready for active flight simulation</p>
             </div>
             
                     <button 
@@ -5168,10 +5043,10 @@ function App() {
                 </div>
               </div>
 
-              {/* CFD Analysis Results */}
+              {/* Local Model Details */}
               <div className="results-section cfd-analysis">
                 <div className="section-header">
-                  <h2>🔬 CFD Analysis Results</h2>
+                  <h2>🔬 Local Model Details</h2>
                   <div className="section-status">
                     <span className="status-indicator">{simulationResults?.results ? 'Available' : 'No Data'}</span>
                   </div>
@@ -5180,11 +5055,11 @@ function App() {
                   {simulationResults?.results ? (
                     <div className="data-grid">
                       <div className="data-item">
-                        <span>Pressure Distribution</span>
+                        <span>Pressure Model</span>
                         <span>{simulationResults.results.pressure_distribution || 'Not Available'}</span>
                       </div>
                       <div className="data-item">
-                        <span>Velocity Field</span>
+                        <span>Velocity Model</span>
                         <span>{simulationResults.results.velocity_field || 'Not Available'}</span>
                       </div>
                       <div className="data-item">
@@ -5192,13 +5067,13 @@ function App() {
                         <span>{simulationResults.results.trajectory_data || 'Not Available'}</span>
                       </div>
                       <div className="data-item">
-                        <span>Mesh Quality</span>
-                        <span>High Resolution</span>
+                        <span>Result Source</span>
+                        <span>{simulationResults.results.source || 'Not Available'}</span>
                       </div>
                     </div>
                   ) : (
                     <div className="no-results-message">
-                      <p>No CFD analysis data available. Run a simulation to see computational fluid dynamics results.</p>
+                      <p>No local model details available. Run a simulation to see source and profile metadata.</p>
                     </div>
                   )}
                 </div>

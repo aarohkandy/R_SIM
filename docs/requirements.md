@@ -15,6 +15,7 @@
 - Validation must fail loudly when a dependency, endpoint, or result shape is wrong.
 - Local simulation must be deterministic and labeled as active pneumatic local dynamics.
 - Fake/random placeholder output must not be accepted as a passing main workflow result.
+- The frontend must default to the local simulation API, not a hardcoded cloud/GCP service.
 - Motor thrust curves and optional aerodynamic coefficient tables must affect local simulation output when supplied.
 - OpenRocket `.ork` import must return simulation-ready rocket components and warn when motor/mass/CG data must be inferred.
 - Frontend motor search must use the local backend motor database, not hardcoded placeholder motor data.

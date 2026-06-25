@@ -710,52 +710,6 @@ class EnvironmentManager:
     def get_launch_sites(self):
         return {"launch_sites": {name: asdict(site) for name, site in self.common_launch_sites.items()}}
 
-# --- CFD Engine ---
-
-class CFDEngine:
-    def __init__(self, rocket_geometry, environment):
-        self.rocket_geometry = rocket_geometry
-        self.environment = environment
-        self.simulation_status = "idle"
-        self.simulation_progress = 0
-        self.simulation_results = {}
-        self.simulation_thread = None
-
-    def _run_simulation_task(self):
-        self.simulation_status = "running"
-        self.simulation_progress = 0
-        self.simulation_message = "Initializing CFD solver..."
-        
-        # Simulate a long-running CFD process
-        for i in range(101):
-            time.sleep(0.1) # Simulate work
-            self.simulation_progress = i
-            self.simulation_message = f"Running CFD simulation... Progress: {i}%"
-
-        self.simulation_results = {
-            "max_altitude": 850 + np.random.rand() * 50,
-            "max_velocity": 300 + np.random.rand() * 20,
-            "drag_coefficient": 0.4 + np.random.rand() * 0.1,
-            "computation_time": 10.0 + np.random.rand() * 5.0
-        }
-        self.simulation_status = "completed"
-        self.simulation_message = "Simulation completed!"
-
-    def run_simulation(self):
-        if self.simulation_status == "running":
-            return False, "Simulation already running."
-        self.simulation_thread = threading.Thread(target=self._run_simulation_task)
-        self.simulation_thread.start()
-        return True, "Simulation started."
-
-    def get_status(self):
-        return {
-            "status": self.simulation_status,
-            "progress": self.simulation_progress,
-            "message": self.simulation_message,
-            "results": self.simulation_results if self.simulation_status == "completed" else None
-        }
-
 # --- OpenFOAM Integration Manager ---
 
 class OpenFOAMManager:
@@ -1728,7 +1682,6 @@ CORS(app)
 
 motor_db = MotorDatabase(db_path=os.path.join(os.path.dirname(__file__), 'database', 'motors.db'))
 env_manager = EnvironmentManager()
-cfd_engine = CFDEngine(rocket_geometry=None, environment=None) # Geometry and environment will be passed via API
 
 # Initialize CFD managers.
 simulation_mode = os.environ.get('SIMULATION_MODE', 'local').lower()

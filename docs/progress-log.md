@@ -48,3 +48,7 @@
 - Replaced inactive export cards with trajectory CSV, force/moment CSV, active-system CSV, and full JSON report exports.
 - Ran `bash scripts/run_pre_goal_checks.sh`: passed with chart/export static gates, 19 unit tests, 6 scenario fixtures, backend API smoke, frontend production build, and frontend lint.
 - Browser-checked local app at `http://127.0.0.1:5001/`: loaded the active demo, started a simulation through the UI, rendered 4 result charts with 11 SVG line series, showed all export actions, and produced no bad responses or console errors.
+- Removed the frontend's hardcoded cloud-function default and replaced the old cloud/proxy diagnostics with a local simulation API health check.
+- Removed an unused random-output backend CFD helper from the main Flask server so the local API cannot return that placeholder path as a real result.
+- Ran `bash scripts/run_pre_goal_checks.sh`: passed with local-first/cloud-default guards, no random placeholder server output guard, 19 unit tests, 6 scenario fixtures, backend API smoke, frontend production build, and frontend lint.
+- Browser-checked local app at `http://127.0.0.1:5001/`: mount-time status made only `http://localhost:5011/health`, made no external requests, showed active flight simulation copy, and produced no bad responses or console errors.
