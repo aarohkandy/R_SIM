@@ -44,6 +44,9 @@ def main() -> int:
     frontend_source = (ROOT / "frontend" / "main.jsx").read_text(encoding="utf-8")
     require("/api/environment/motors" in frontend_source, "Frontend motor picker is not wired to the backend motor database.")
     require("mockMotors" not in frontend_source, "Frontend motor picker still contains a mock motor list.")
+    require("MiniLineChart" in frontend_source, "Frontend results view is missing live chart rendering.")
+    require("downloadSimulationArtifact('forces-csv')" in frontend_source, "Frontend force/moment CSV export is missing.")
+    require("downloadSimulationArtifact('active-csv')" in frontend_source, "Frontend active-system CSV export is missing.")
     database_motor = next(
         (motor for motor in motors.get("motors", []) if motor.get("designation") == "Estes C6-5"),
         motors["motors"][0],

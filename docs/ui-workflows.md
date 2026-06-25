@@ -11,5 +11,5 @@
 - Let users import OpenRocket `.ork` designs from the builder view and continue editing/simulating the imported components.
 - Search and add motors from the local backend motor database, including thrust-curve metadata used by the simulator.
 - Surface warnings next to the inputs that caused them.
-- Show active-system plots alongside trajectory and stability outputs.
-- Support exporting the full simulation configuration and result history.
+- Show trajectory, force, pressure, drag, and active-system plots backed by the local simulation histories.
+- Support exporting trajectory CSV, force/moment CSV, active-system CSV, and the full JSON report.

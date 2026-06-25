@@ -44,3 +44,7 @@
 - Added an inline frontend favicon to avoid missing-asset console errors during browser validation.
 - Browser-checked local app at `http://127.0.0.1:5001/`: searching `C6` in the motor modal called `/api/environment/motors`, rendered `Estes C6-5`, showed `Curve Points: 100`, and produced no bad responses or console errors.
 - Ran `bash scripts/run_pre_goal_checks.sh`: passed with 19 unit tests, 6 scenario fixtures, root and API health smoke, backend-motor thrust-curve smoke with `motor_curve_points: 100`, OpenRocket import smoke, frontend production build, and frontend lint.
+- Replaced results-page placeholder panels with live SVG charts for force history, dynamic pressure/drag coefficient, pneumatic state, and flight trajectory.
+- Replaced inactive export cards with trajectory CSV, force/moment CSV, active-system CSV, and full JSON report exports.
+- Ran `bash scripts/run_pre_goal_checks.sh`: passed with chart/export static gates, 19 unit tests, 6 scenario fixtures, backend API smoke, frontend production build, and frontend lint.
+- Browser-checked local app at `http://127.0.0.1:5001/`: loaded the active demo, started a simulation through the UI, rendered 4 result charts with 11 SVG line series, showed all export actions, and produced no bad responses or console errors.

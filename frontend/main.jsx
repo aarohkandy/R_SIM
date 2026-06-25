@@ -111,6 +111,121 @@ const normalizeBackendMotor = (motor) => {
   };
 };
 
+const finiteNumber = (value, fallback = 0) => {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : fallback;
+};
+
+const formatChartValue = (value) => {
+  const number = finiteNumber(value);
+  if (Math.abs(number) >= 1000) {
+    return Math.round(number).toLocaleString();
+  }
+  if (Math.abs(number) >= 10) {
+    return number.toFixed(1);
+  }
+  return number.toFixed(2);
+};
+
+const csvValue = (value) => {
+  if (value === null || value === undefined) {
+    return '';
+  }
+  const text = String(value);
+  return /[",\n]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
+};
+
+const rowsToCsv = (rows, headers) => [
+  headers.join(','),
+  ...(rows || []).map(row => headers.map(key => csvValue(row[key])).join(','))
+].join('\n');
+
+const valueRange = (rows, selector) => {
+  const values = (rows || []).map(selector).filter(Number.isFinite);
+  if (!values.length) {
+    return null;
+  }
+  return {
+    min: Math.min(...values),
+    max: Math.max(...values)
+  };
+};
+
+const MiniLineChart = ({ title, yLabel, series }) => {
+  const normalizedSeries = (series || []).map(item => ({
+    ...item,
+    points: (item.points || []).filter(point => Number.isFinite(point.x) && Number.isFinite(point.y))
+  })).filter(item => item.points.length > 1);
+  const allPoints = normalizedSeries.flatMap(item => item.points);
+
+  if (!allPoints.length) {
+    return (
+      <div className="result-chart empty-chart">
+        <div className="chart-title">{title}</div>
+        <div className="empty-chart-message">Run a simulation to render this chart.</div>
+      </div>
+    );
+  }
+
+  const xValues = allPoints.map(point => point.x);
+  const yValues = allPoints.map(point => point.y);
+  const xMin = Math.min(...xValues);
+  const xMax = Math.max(...xValues);
+  const yMinRaw = Math.min(...yValues);
+  const yMaxRaw = Math.max(...yValues);
+  const yPadding = Math.max((yMaxRaw - yMinRaw) * 0.08, Math.abs(yMaxRaw || 1) * 0.03, 0.01);
+  const yMin = yMinRaw >= 0 ? 0 : yMinRaw - yPadding;
+  const yMax = yMaxRaw + yPadding;
+  const width = 720;
+  const height = 260;
+  const padding = { top: 22, right: 18, bottom: 34, left: 52 };
+  const plotWidth = width - padding.left - padding.right;
+  const plotHeight = height - padding.top - padding.bottom;
+  const scaleX = (x) => padding.left + ((x - xMin) / Math.max(xMax - xMin, 1e-9)) * plotWidth;
+  const scaleY = (y) => padding.top + (1 - ((y - yMin) / Math.max(yMax - yMin, 1e-9))) * plotHeight;
+  const yTicks = [yMin, (yMin + yMax) / 2, yMax];
+
+  return (
+    <div className="result-chart">
+      <div className="chart-header-row">
+        <div>
+          <div className="chart-title">{title}</div>
+          <div className="chart-subtitle">Time history from the local simulation</div>
+        </div>
+        <div className="chart-legend">
+          {normalizedSeries.map(item => (
+            <span className="legend-item" key={item.label}>
+              <span className="legend-swatch" style={{ background: item.color }}></span>
+              {item.label}
+            </span>
+          ))}
+        </div>
+      </div>
+      <svg className="line-chart-svg" viewBox={`0 0 ${width} ${height}`} role="img" aria-label={title}>
+        <line x1={padding.left} y1={padding.top} x2={padding.left} y2={height - padding.bottom} className="chart-axis" />
+        <line x1={padding.left} y1={height - padding.bottom} x2={width - padding.right} y2={height - padding.bottom} className="chart-axis" />
+        {yTicks.map(tick => (
+          <g key={`tick-${tick}`}>
+            <line x1={padding.left} x2={width - padding.right} y1={scaleY(tick)} y2={scaleY(tick)} className="chart-gridline" />
+            <text x={padding.left - 10} y={scaleY(tick) + 4} textAnchor="end" className="chart-tick">{formatChartValue(tick)}</text>
+          </g>
+        ))}
+        <text x={padding.left} y={height - 8} className="chart-tick">0s</text>
+        <text x={width - padding.right} y={height - 8} textAnchor="end" className="chart-tick">{formatChartValue(xMax)}s</text>
+        <text x={12} y={18} className="chart-tick">{yLabel}</text>
+        {normalizedSeries.map(item => (
+          <polyline
+            key={item.label}
+            className="chart-line"
+            points={item.points.map(point => `${scaleX(point.x).toFixed(2)},${scaleY(point.y).toFixed(2)}`).join(' ')}
+            style={{ stroke: item.color }}
+          />
+        ))}
+      </svg>
+    </div>
+  );
+};
+
 function App() {
   // API Configuration - works for both local development and Netlify production
   const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://127.0.0.1:5011';
@@ -1834,7 +1949,7 @@ function App() {
     let filename = `${baseName}.json`;
     let type = 'application/json';
 
-    if (format === 'csv') {
+    if (format === 'csv' || format === 'trajectory-csv') {
       const trajectory = simulationResults.results?.trajectory || [];
       const headers = [
         'time',
@@ -1866,11 +1981,49 @@ function App() {
         'tank_pressure',
         'actuator_pressure'
       ];
-      contents = [
-        headers.join(','),
-        ...trajectory.map(row => headers.map(key => row[key] ?? '').join(','))
-      ].join('\n');
+      contents = rowsToCsv(trajectory, headers);
       filename = `${baseName}-trajectory.csv`;
+      type = 'text/csv';
+    } else if (format === 'active-csv') {
+      const activeHistory = simulationResults.results?.active_system?.history || [];
+      const headers = [
+        'time',
+        'tank_pressure',
+        'actuator_pressure',
+        'stroke_m',
+        'surface_deployment',
+        'surface_angle_deg',
+        'valve_command'
+      ];
+      contents = rowsToCsv(activeHistory, headers);
+      filename = `${baseName}-active-system.csv`;
+      type = 'text/csv';
+    } else if (format === 'forces-csv') {
+      const forceHistory = simulationResults.results?.force_history || [];
+      const momentHistory = simulationResults.results?.moment_history || [];
+      const rows = forceHistory.map((row, index) => ({
+        ...row,
+        ...(momentHistory[index] || {})
+      }));
+      const headers = [
+        'time',
+        'thrust_force',
+        'drag_force',
+        'weight_force',
+        'net_force_x',
+        'net_force_y',
+        'net_force_z',
+        'dynamic_pressure',
+        'drag_coefficient',
+        'pitch_moment',
+        'yaw_moment',
+        'roll_moment',
+        'pitch_rate_deg_s',
+        'yaw_rate_deg_s',
+        'roll_rate_deg_s'
+      ];
+      contents = rowsToCsv(rows, headers);
+      filename = `${baseName}-forces-moments.csv`;
       type = 'text/csv';
     } else {
       contents = JSON.stringify({
@@ -3211,6 +3364,13 @@ function App() {
 
     setSelectedComponent(clickedComponent);
   };
+
+  const resultData = simulationResults?.results || {};
+  const trajectoryHistory = resultData.trajectory || [];
+  const forceHistory = resultData.force_history || [];
+  const momentHistory = resultData.moment_history || [];
+  const activeHistory = resultData.active_system?.history || [];
+  const dynamicPressureRange = valueRange(trajectoryHistory, row => finiteNumber(row.dynamic_pressure));
 
   return (
     <div 
@@ -4679,11 +4839,27 @@ function App() {
                 </div>
                 <div className="analysis-content">
                   <div className="analysis-chart">
-                    <div className="chart-placeholder">
-                      <div className="chart-icon">📊</div>
-                      <h3>Force vs Time</h3>
-                      <p>Drag, lift, and side forces over flight time</p>
-                    </div>
+                    <MiniLineChart
+                      title="Force vs Time"
+                      yLabel="N"
+                      series={[
+                        {
+                          label: 'Thrust',
+                          color: '#f97316',
+                          points: forceHistory.map(row => ({ x: finiteNumber(row.time), y: finiteNumber(row.thrust_force) }))
+                        },
+                        {
+                          label: 'Drag',
+                          color: '#2563eb',
+                          points: forceHistory.map(row => ({ x: finiteNumber(row.time), y: finiteNumber(row.drag_force) }))
+                        },
+                        {
+                          label: 'Net Z',
+                          color: '#16a34a',
+                          points: forceHistory.map(row => ({ x: finiteNumber(row.time), y: finiteNumber(row.net_force_z) }))
+                        }
+                      ]}
+                    />
                   </div>
                   <div className="analysis-stats">
                     <div className="stat-item">
@@ -4717,18 +4893,29 @@ function App() {
                 </div>
                 <div className="visualization-container">
                   <div className="pressure-visualization">
-                    <div className="viz-placeholder">
-                      <div className="viz-icon">🎨</div>
-                      <h3>Pressure Field</h3>
-                      <p>3D visualization of pressure distribution on rocket surface</p>
-                    </div>
+                    <MiniLineChart
+                      title="Dynamic Pressure & Drag"
+                      yLabel="kPa / Cd x100"
+                      series={[
+                        {
+                          label: 'q',
+                          color: '#0ea5e9',
+                          points: trajectoryHistory.map(row => ({ x: finiteNumber(row.time), y: finiteNumber(row.dynamic_pressure) / 1000 }))
+                        },
+                        {
+                          label: 'Cd x100',
+                          color: '#7c3aed',
+                          points: trajectoryHistory.map(row => ({ x: finiteNumber(row.time), y: finiteNumber(row.drag_coefficient) * 100 }))
+                        }
+                      ]}
+                    />
                   </div>
                   <div className="pressure-stats">
                     <div className="pressure-range">
                       <div className="range-label">Pressure Range</div>
                       <div className="range-values">
-                        <span className="min-pressure">Min: -- Pa</span>
-                        <span className="max-pressure">Max: -- Pa</span>
+                        <span className="min-pressure">Min: {dynamicPressureRange ? `${Math.round(dynamicPressureRange.min)} Pa` : '-- Pa'}</span>
+                        <span className="max-pressure">Max: {dynamicPressureRange ? `${Math.round(dynamicPressureRange.max)} Pa` : '-- Pa'}</span>
                       </div>
                     </div>
                     <div className="pressure-zones">
@@ -4756,22 +4943,27 @@ function App() {
                 <div className="control-metrics">
                   <div className="control-chart">
                     {simulationResults?.results?.active_system?.history?.length ? (
-                      <div className="mini-table">
-                        <div className="mini-table-row header">
-                          <span>t</span>
-                          <span>Valve</span>
-                          <span>Deploy</span>
-                          <span>Tank kPa</span>
-                        </div>
-                        {simulationResults.results.active_system.history.slice(0, 8).map((row) => (
-                          <div className="mini-table-row" key={`active-${row.time}`}>
-                            <span>{row.time}s</span>
-                            <span>{Math.round((row.valve_command || 0) * 100)}%</span>
-                            <span>{Math.round((row.surface_deployment || 0) * 100)}%</span>
-                            <span>{Math.round((row.tank_pressure || 0) / 1000)}</span>
-                          </div>
-                        ))}
-                      </div>
+                      <MiniLineChart
+                        title="Pneumatic State"
+                        yLabel="kPa / %"
+                        series={[
+                          {
+                            label: 'Tank kPa',
+                            color: '#0f766e',
+                            points: activeHistory.map(row => ({ x: finiteNumber(row.time), y: finiteNumber(row.tank_pressure) / 1000 }))
+                          },
+                          {
+                            label: 'Actuator kPa',
+                            color: '#0284c7',
+                            points: activeHistory.map(row => ({ x: finiteNumber(row.time), y: finiteNumber(row.actuator_pressure) / 1000 }))
+                          },
+                          {
+                            label: 'Deploy %',
+                            color: '#dc2626',
+                            points: activeHistory.map(row => ({ x: finiteNumber(row.time), y: finiteNumber(row.surface_deployment) * 100 }))
+                          }
+                        ]}
+                      />
                     ) : (
                       <div className="chart-placeholder">
                         <div className="chart-icon">🎯</div>
@@ -4815,22 +5007,27 @@ function App() {
                 <div className="trajectory-content">
                   <div className="trajectory-plot">
                     {simulationResults?.results?.trajectory?.length ? (
-                      <div className="mini-table">
-                        <div className="mini-table-row header">
-                          <span>t</span>
-                          <span>Alt</span>
-                          <span>Vz</span>
-                          <span>Drag</span>
-                        </div>
-                        {simulationResults.results.trajectory.slice(0, 10).map((row) => (
-                          <div className="mini-table-row" key={`traj-${row.time}`}>
-                            <span>{row.time}s</span>
-                            <span>{Math.round(row.altitude)}m</span>
-                            <span>{Math.round(row.velocity_z)}m/s</span>
-                            <span>{Math.round(row.drag_force)}N</span>
-                          </div>
-                        ))}
-                      </div>
+                      <MiniLineChart
+                        title="Flight Path"
+                        yLabel="m / m/s / %"
+                        series={[
+                          {
+                            label: 'Altitude',
+                            color: '#16a34a',
+                            points: trajectoryHistory.map(row => ({ x: finiteNumber(row.time), y: finiteNumber(row.altitude) }))
+                          },
+                          {
+                            label: 'Vz',
+                            color: '#2563eb',
+                            points: trajectoryHistory.map(row => ({ x: finiteNumber(row.time), y: finiteNumber(row.velocity_z) }))
+                          },
+                          {
+                            label: 'Deploy %',
+                            color: '#dc2626',
+                            points: trajectoryHistory.map(row => ({ x: finiteNumber(row.time), y: finiteNumber(row.surface_deployment) * 100 }))
+                          }
+                        ]}
+                      />
                     ) : (
                       <div className="plot-placeholder">
                         <div className="plot-icon">📈</div>
@@ -5019,27 +5216,27 @@ function App() {
                   <div className="export-grid">
                     <div className="export-option">
                       <div className="export-icon">📊</div>
-                      <h3>CSV Data</h3>
-                      <p>Time-series data for analysis</p>
+                      <h3>Trajectory CSV</h3>
+                      <p>Flight path and sampled state history</p>
                       <button className="export-btn" onClick={() => downloadSimulationArtifact('csv')}>Download</button>
                     </div>
                     <div className="export-option">
-                      <div className="export-icon">🎥</div>
-                      <h3>Animation</h3>
-                      <p>Flight simulation video</p>
-                      <button className="export-btn">Generate</button>
+                      <div className="export-icon">📈</div>
+                      <h3>Forces CSV</h3>
+                      <p>Force and moment time history</p>
+                      <button className="export-btn" onClick={() => downloadSimulationArtifact('forces-csv')}>Download</button>
                     </div>
                     <div className="export-option">
                       <div className="export-icon">📋</div>
-                      <h3>Report</h3>
-                      <p>Complete analysis report</p>
+                      <h3>JSON Report</h3>
+                      <p>Configuration and full result object</p>
                       <button className="export-btn" onClick={() => downloadSimulationArtifact('json')}>Generate</button>
                     </div>
                     <div className="export-option">
-                      <div className="export-icon">🔧</div>
-                      <h3>OpenFOAM</h3>
-                      <p>Raw simulation files</p>
-                      <button className="export-btn">Download</button>
+                      <div className="export-icon">🎛️</div>
+                      <h3>Active CSV</h3>
+                      <p>Tank, actuator, valve, and surface history</p>
+                      <button className="export-btn" onClick={() => downloadSimulationArtifact('active-csv')}>Download</button>
                     </div>
                   </div>
                 </div>
