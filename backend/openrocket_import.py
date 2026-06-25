@@ -52,6 +52,11 @@ CENTERING_RING_COMPONENT_TAGS = {
     "centeringrings",
 }
 
+AIRFRAME_HARDWARE_COMPONENT_TAGS = {
+    "tubecoupler",
+    "bulkhead",
+}
+
 
 @dataclass
 class ImportedOpenRocket:
@@ -100,6 +105,10 @@ def parse_openrocket_design(payload: bytes, filename: str = "design.ork") -> Imp
             next_id += 1
         elif tag in CENTERING_RING_COMPONENT_TAGS:
             component = _parse_centering_ring_component(element, next_id, last_body_id)
+            components.append(component)
+            next_id += 1
+        elif tag in AIRFRAME_HARDWARE_COMPONENT_TAGS:
+            component = _parse_airframe_hardware_component(element, next_id, last_body_id, tag)
             components.append(component)
             next_id += 1
 
@@ -385,6 +394,61 @@ def _parse_centering_ring_component(element: ET.Element, component_id: int, atta
     }
 
 
+def _parse_airframe_hardware_component(element: ET.Element, component_id: int, attached_to: Optional[int], tag: str) -> Dict:
+    is_bulkhead = tag == "bulkhead"
+    component_type = "Bulkhead" if is_bulkhead else "Tube Coupler"
+    name = _first_text(element, ["name"]) or f"Imported {component_type}"
+    mass = _mass_g(_numeric_child(element, ["mass", "massoverride", "componentmass"]))
+    outer_diameter = (
+        _diameter_mm(_numeric_child(element, ["outerRadius", "radius"]))
+        or _length_mm(_numeric_child(element, ["outerDiameter", "diameter"]))
+    )
+    thickness = _length_mm(_numeric_child(element, ["thickness", "bulkheadThickness", "length"]))
+    axial_position = _length_mm(_numeric_child(element, ["position", "axialOffset", "componentCG", "cgx"]))
+
+    if is_bulkhead:
+        return {
+            "id": component_id,
+            "type": "Bulkhead",
+            "name": name,
+            "length": 0,
+            "diameter": 0,
+            "weight": mass,
+            "outerDiameter": outer_diameter or 40.0,
+            "thickness": thickness or 3.0,
+            "material": _first_text(element, ["material"]) or "plywood",
+            "axialPosition": axial_position or None,
+            "attachedToComponent": attached_to,
+            "importSource": "openrocket",
+        }
+
+    coupler_length = _length_mm(_numeric_child(element, ["length", "couplerLength", "tubeCouplerLength"]))
+    inner_diameter = (
+        _diameter_mm(_numeric_child(element, ["innerRadius"]))
+        or _length_mm(_numeric_child(element, ["innerDiameter"]))
+    )
+    if not outer_diameter and inner_diameter:
+        outer_diameter = inner_diameter + 4.0
+    if not inner_diameter and outer_diameter:
+        inner_diameter = max(0.0, outer_diameter - 4.0)
+
+    return {
+        "id": component_id,
+        "type": "Tube Coupler",
+        "name": name,
+        "length": 0,
+        "diameter": 0,
+        "weight": mass,
+        "couplerLength": coupler_length or 80.0,
+        "innerDiameter": inner_diameter or 48.0,
+        "outerDiameter": outer_diameter or 52.0,
+        "material": _first_text(element, ["material"]) or "phenolic",
+        "axialPosition": axial_position or None,
+        "attachedToComponent": attached_to,
+        "importSource": "openrocket",
+    }
+
+
 def _parse_motor(root: ET.Element, component_id: int, attached_to: Optional[int]) -> Optional[Dict]:
     motor_element = next((element for element in root.iter() if _tag(element) == "motor"), None)
     if motor_element is None:
@@ -524,6 +588,8 @@ def _sum_linear_length_mm(components: List[Dict]) -> float:
         "Shock Cord",
         "Motor Mount",
         "Centering Ring",
+        "Tube Coupler",
+        "Bulkhead",
     }
     return sum(component.get("length") or 0 for component in components if component.get("type") not in internal_types)
 

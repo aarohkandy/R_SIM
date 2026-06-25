@@ -17,9 +17,9 @@ This local model is not CFD and is not flight certification. Its output is marke
 - Output includes `recovery_analysis` with an event sequence and phase summaries for drogue/main/total descent timing, descent rate, and drift.
 - Output includes `recovery_safety` with required main drag area, estimated terminal velocity, area margin, opening load in newtons and g, shock-cord harness limit, effective opening-load limit, and safety statuses.
 - Output includes `stage_splits` as structural split/stage marker metadata derived from builder boundaries; the current local model does not separate stages in flight.
-- Input validation treats fins, motors, rail buttons, motor mount tubes, and centering rings as attached subparts. Missing host references warn, while references to non-airframe hosts block the run.
+- Input validation treats fins, motors, rail buttons, tube couplers, bulkheads, motor mount tubes, and centering rings as attached subparts. Missing host references warn, while references to non-airframe hosts block the run.
 - Internal mass components are accepted as payload/avionics/battery/ballast/recovery mass inputs. They are validated as attached subparts, included in frontend mass/CG, and ignored by backend external geometry and aerodynamic-center calculations.
-- Motor mount tubes and centering rings are accepted as attached internal propulsion hardware. They are validated for positive fit dimensions and remain internal to external geometry and aerodynamic-center calculations.
+- Tube couplers and bulkheads are accepted as attached internal airframe hardware. Motor mount tubes and centering rings are accepted as attached internal propulsion hardware. They are validated for positive fit dimensions and remain internal to external geometry and aerodynamic-center calculations.
 - Parachute and streamer components are accepted as attached recovery devices. Shock cords are accepted as attached recovery hardware. Main and drogue recovery parts are translated into the landing-system config before validation and simulation, while remaining internal to external geometry and aerodynamic-center calculations. Streamer drag area can come from explicit area or strip length multiplied by strip width. Shock-cord rated strength becomes the harness load limit used by recovery safety.
 
 ## Target Model Direction

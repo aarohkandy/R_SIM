@@ -234,6 +234,73 @@ class ActiveSimulationTests(unittest.TestCase):
         self.assertTrue(any("Broken centering ring centering ring count" in error for error in result["validation_errors"]))
         self.assertTrue(any("Broken centering ring centering ring thickness" in error for error in result["validation_errors"]))
 
+    def test_airframe_internal_hardware_does_not_change_external_geometry(self):
+        manager = ActiveSimulationManager()
+        rocket = sample_rocket()
+        rocket["components"].extend([
+            {
+                "id": 5,
+                "type": "Tube Coupler",
+                "name": "Payload coupler",
+                "length": 1000,
+                "diameter": 200,
+                "weight": 28,
+                "couplerLength": 84,
+                "innerDiameter": 48,
+                "outerDiameter": 52,
+                "attachedToComponent": 2,
+            },
+            {
+                "id": 6,
+                "type": "Bulkhead",
+                "name": "Avionics bulkhead",
+                "length": 1000,
+                "diameter": 200,
+                "weight": 22,
+                "outerDiameter": 40,
+                "thickness": 5,
+                "attachedToComponent": 2,
+            },
+        ])
+
+        self.assertAlmostEqual(manager._rocket_length_m(rocket, rocket["components"]), 0.68)
+        self.assertAlmostEqual(manager._rocket_diameter_m(rocket["components"]), 0.04)
+        result = manager.submit_cfd_simulation(rocket, base_config())
+        self.assertTrue(result["success"])
+
+    def test_invalid_airframe_internal_hardware_is_rejected(self):
+        manager = ActiveSimulationManager()
+        rocket = sample_rocket()
+        rocket["components"].extend([
+            {
+                "id": 5,
+                "type": "Tube Coupler",
+                "name": "Broken coupler",
+                "weight": 28,
+                "couplerLength": 0,
+                "innerDiameter": 54,
+                "outerDiameter": 52,
+                "attachedToComponent": 2,
+            },
+            {
+                "id": 6,
+                "type": "Bulkhead",
+                "name": "Broken bulkhead",
+                "weight": 22,
+                "outerDiameter": 0,
+                "thickness": 0,
+                "attachedToComponent": 2,
+            },
+        ])
+
+        result = manager.submit_cfd_simulation(rocket, base_config())
+
+        self.assertFalse(result["success"])
+        self.assertTrue(any("Broken coupler tube coupler length" in error for error in result["validation_errors"]))
+        self.assertTrue(any("Broken coupler tube coupler outer diameter" in error for error in result["validation_errors"]))
+        self.assertTrue(any("Broken bulkhead bulkhead outer diameter" in error for error in result["validation_errors"]))
+        self.assertTrue(any("Broken bulkhead bulkhead thickness" in error for error in result["validation_errors"]))
+
     def test_parachute_components_drive_landing_configuration(self):
         manager = ActiveSimulationManager()
         rocket = sample_rocket()

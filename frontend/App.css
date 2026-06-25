@@ -545,6 +545,8 @@ button:focus-visible {
 .rocket-part:hover,
 .rocket-part.selected,
 .motor-core.selected,
+.tube-coupler-marker.selected,
+.bulkhead-marker.selected,
 .motor-mount-marker.selected,
 .centering-ring-marker.selected,
 .mass-marker.selected,
@@ -572,6 +574,27 @@ button:focus-visible {
 
 .motor-nozzle {
   fill: #111827;
+}
+
+.tube-coupler-marker {
+  fill: rgba(128, 100, 67, 0.2);
+  stroke: #806443;
+  stroke-width: 1.5;
+  cursor: pointer;
+}
+
+.tube-coupler-bore {
+  stroke: #806443;
+  stroke-width: 1;
+  stroke-dasharray: 6 4;
+  pointer-events: none;
+}
+
+.bulkhead-marker {
+  fill: #3d6f83;
+  stroke: #204654;
+  stroke-width: 1.3;
+  cursor: pointer;
 }
 
 .motor-mount-marker {

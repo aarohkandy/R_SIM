@@ -204,6 +204,36 @@ class OpenRocketImportTests(unittest.TestCase):
         self.assertEqual(centering_ring["attachedToComponent"], body["id"])
         self.assertAlmostEqual(imported.rocket_data["totalHeight"], 680.0)
 
+    def test_parse_openrocket_airframe_internal_hardware(self):
+        xml = SAMPLE_OPENROCKET_XML.replace(
+            b"<trapezoidfinset>",
+            (
+                b"<tubeCoupler><name>Payload Coupler</name><mass>0.028</mass><length>0.084</length>"
+                b"<innerRadius>0.024</innerRadius><outerRadius>0.026</outerRadius><material>phenolic</material></tubeCoupler>"
+                b"<bulkhead><name>Avionics Bulkhead</name><mass>0.022</mass><outerRadius>0.020</outerRadius>"
+                b"<thickness>0.005</thickness><material>plywood</material></bulkhead><trapezoidfinset>"
+            ),
+        )
+        imported = parse_openrocket_design(xml, "internal-airframe.ork")
+        coupler = next(component for component in imported.rocket_data["components"] if component["type"] == "Tube Coupler")
+        bulkhead = next(component for component in imported.rocket_data["components"] if component["type"] == "Bulkhead")
+        body = next(component for component in imported.rocket_data["components"] if component["type"] == "Body Tube")
+
+        self.assertEqual(coupler["name"], "Payload Coupler")
+        self.assertAlmostEqual(coupler["weight"], 28.0)
+        self.assertAlmostEqual(coupler["couplerLength"], 84.0)
+        self.assertAlmostEqual(coupler["innerDiameter"], 48.0)
+        self.assertAlmostEqual(coupler["outerDiameter"], 52.0)
+        self.assertEqual(coupler["material"], "phenolic")
+        self.assertEqual(coupler["attachedToComponent"], body["id"])
+        self.assertEqual(bulkhead["name"], "Avionics Bulkhead")
+        self.assertAlmostEqual(bulkhead["weight"], 22.0)
+        self.assertAlmostEqual(bulkhead["outerDiameter"], 40.0)
+        self.assertAlmostEqual(bulkhead["thickness"], 5.0)
+        self.assertEqual(bulkhead["material"], "plywood")
+        self.assertEqual(bulkhead["attachedToComponent"], body["id"])
+        self.assertAlmostEqual(imported.rocket_data["totalHeight"], 680.0)
+
     def test_import_endpoint_rejects_non_openrocket_extension(self):
         client = app.test_client()
         response = client.post(

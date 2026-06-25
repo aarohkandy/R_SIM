@@ -27,9 +27,10 @@ class ActiveSimulationManager:
     recovery_component_types = {"parachute", "streamer"}
     recovery_hardware_types = {"shock cord"}
     motor_hardware_types = {"motor mount", "centering ring"}
-    attachment_child_types = {"fins", "motor", "rail button", "mass component"} | recovery_component_types | recovery_hardware_types | motor_hardware_types
+    airframe_hardware_types = {"tube coupler", "bulkhead"}
+    attachment_child_types = {"fins", "motor", "rail button", "mass component"} | recovery_component_types | recovery_hardware_types | motor_hardware_types | airframe_hardware_types
     attachment_host_types = {"body tube", "transition", "electronics bay", "recovery bay", "active airbrake"}
-    internal_component_types = {"fins", "motor", "rail button", "mass component"} | recovery_component_types | recovery_hardware_types | motor_hardware_types
+    internal_component_types = {"fins", "motor", "rail button", "mass component"} | recovery_component_types | recovery_hardware_types | motor_hardware_types | airframe_hardware_types
 
     def __init__(self):
         self.simulations: Dict[str, Dict] = {}
@@ -368,6 +369,40 @@ class ActiveSimulationManager:
                     errors.append(f"{name} motor mount outer diameter must be positive.")
                 if inner_diameter > 0 and outer_diameter > 0 and outer_diameter <= inner_diameter:
                     errors.append(f"{name} motor mount outer diameter must exceed inner diameter.")
+            if component_type == "tube coupler":
+                coupler_length = self._as_float(
+                    self._first_value(component, ["couplerLength", "tubeCouplerLength", "tubeLength", "length"], 0.0),
+                    0.0,
+                )
+                inner_diameter = self._as_float(
+                    self._first_value(component, ["innerDiameter", "inner_diameter"], 0.0),
+                    0.0,
+                )
+                outer_diameter = self._as_float(
+                    self._first_value(component, ["outerDiameter", "outer_diameter"], 0.0),
+                    0.0,
+                )
+                if coupler_length <= 0:
+                    errors.append(f"{name} tube coupler length must be positive.")
+                if inner_diameter <= 0:
+                    errors.append(f"{name} tube coupler inner diameter must be positive.")
+                if outer_diameter <= 0:
+                    errors.append(f"{name} tube coupler outer diameter must be positive.")
+                if inner_diameter > 0 and outer_diameter > 0 and outer_diameter <= inner_diameter:
+                    errors.append(f"{name} tube coupler outer diameter must exceed inner diameter.")
+            if component_type == "bulkhead":
+                outer_diameter = self._as_float(
+                    self._first_value(component, ["outerDiameter", "diameter", "bulkheadDiameter", "outer_diameter"], 0.0),
+                    0.0,
+                )
+                thickness = self._as_float(
+                    self._first_value(component, ["thickness", "bulkheadThickness", "length"], 0.0),
+                    0.0,
+                )
+                if outer_diameter <= 0:
+                    errors.append(f"{name} bulkhead outer diameter must be positive.")
+                if thickness <= 0:
+                    errors.append(f"{name} bulkhead thickness must be positive.")
             if component_type == "centering ring":
                 ring_count = self._as_float(
                     self._first_value(component, ["ringCount", "count", "instanceCount", "numberOfRings"], 0.0),

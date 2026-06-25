@@ -39,6 +39,8 @@ const componentColor = {
   'Recovery Bay': '#577590',
   'Active Airbrake': '#f2a541',
   Fins: '#2a9d8f',
+  'Tube Coupler': '#806443',
+  Bulkhead: '#3d6f83',
   Motor: '#343a40',
   'Motor Mount': '#6d597a',
   'Centering Ring': '#457b9d',
@@ -115,6 +117,27 @@ const componentDefaults = {
     finWidth: 118,
     finSweep: 36,
     finThickness: 3,
+    material: 'plywood'
+  },
+  'Tube Coupler': {
+    type: 'Tube Coupler',
+    name: 'Phenolic tube coupler',
+    length: 0,
+    diameter: 0,
+    weight: 28,
+    couplerLength: 84,
+    innerDiameter: 48,
+    outerDiameter: 52,
+    material: 'phenolic'
+  },
+  Bulkhead: {
+    type: 'Bulkhead',
+    name: 'Recovery bay bulkhead',
+    length: 0,
+    diameter: 0,
+    weight: 22,
+    outerDiameter: 54,
+    thickness: 5,
     material: 'plywood'
   },
   Motor: {
@@ -254,9 +277,11 @@ const defaultComponents = [
   { ...componentDefaults['Shock Cord'], id: 'shock-cord-1', attachedToComponent: 'recovery-1', axialPosition: 230 },
   { ...componentDefaults['Landing System'], id: 'landing-1' },
   { ...componentDefaults['Body Tube'], id: 'tube-1', name: 'Forward airframe', length: 360, weight: 110 },
+  { ...componentDefaults['Tube Coupler'], id: 'coupler-1', attachedToComponent: 'tube-1', axialPosition: 315 },
   { ...componentDefaults['Electronics Bay'], id: 'avbay-1' },
   { ...componentDefaults['Mass Component'], id: 'mass-1', name: 'Avionics battery pack', weight: 65, massRole: 'battery', axialPosition: 720, attachedToComponent: 'avbay-1' },
   { ...componentDefaults['Active Airbrake'], id: 'airbrake-1' },
+  { ...componentDefaults.Bulkhead, id: 'bulkhead-1', attachedToComponent: 'recovery-1', axialPosition: 205 },
   { ...componentDefaults['Body Tube'], id: 'tube-2', name: 'Aft airframe', length: 320, weight: 125 },
   { ...componentDefaults['Motor Mount'], id: 'motor-mount-1', attachedToComponent: 'tube-2', axialPosition: 950 },
   { ...componentDefaults['Centering Ring'], id: 'centering-ring-1', attachedToComponent: 'tube-2', axialPosition: 952 },
@@ -423,7 +448,8 @@ const recoveryDeviceTypes = new Set(['Parachute', 'Streamer']);
 const recoveryHardwareTypes = new Set(['Shock Cord']);
 const recoverySubpartTypes = new Set([...recoveryDeviceTypes, ...recoveryHardwareTypes]);
 const motorHardwareTypes = new Set(['Motor Mount', 'Centering Ring']);
-const internalSubpartTypes = new Set([...recoverySubpartTypes, ...motorHardwareTypes]);
+const airframeHardwareTypes = new Set(['Tube Coupler', 'Bulkhead']);
+const internalSubpartTypes = new Set([...recoverySubpartTypes, ...motorHardwareTypes, ...airframeHardwareTypes]);
 const internalMassTypes = new Set(['Mass Component', ...internalSubpartTypes]);
 
 const getStructuralLength = (components) => components
@@ -470,6 +496,12 @@ const getComponentAxialPosition = (component, totalLength) => {
   }
   if (component.type === 'Centering Ring') {
     return clamp(totalLength - 170, 0, totalLength);
+  }
+  if (component.type === 'Tube Coupler') {
+    return clamp(totalLength * 0.3, 0, totalLength);
+  }
+  if (component.type === 'Bulkhead') {
+    return clamp(totalLength * 0.22, 0, totalLength);
   }
   if (component.type === 'Rail Button') {
     return clamp(totalLength * 0.38 + numberValue(component.railOffset, 0), 0, totalLength);
@@ -663,7 +695,11 @@ const getMetrics = (components) => {
       position = getComponentAxialPosition(component, totalLength) + numberValue(component.length, 80) / 2;
     } else if (component.type === 'Motor Mount') {
       position = getComponentAxialPosition(component, totalLength) + numberValue(component.mountLength, 160) / 2;
+    } else if (component.type === 'Tube Coupler') {
+      position = getComponentAxialPosition(component, totalLength) + numberValue(component.couplerLength, 80) / 2;
     } else if (component.type === 'Centering Ring') {
+      position = getComponentAxialPosition(component, totalLength);
+    } else if (component.type === 'Bulkhead') {
       position = getComponentAxialPosition(component, totalLength);
     } else if (component.type === 'Rail Button') {
       position = getComponentAxialPosition(component, totalLength);
@@ -705,7 +741,7 @@ const massGroups = [
     key: 'airframe',
     label: 'Airframe',
     color: '#d8dee6',
-    types: ['Nose Cone', 'Body Tube', 'Transition', 'Electronics Bay', 'Recovery Bay', 'Rail Button']
+    types: ['Nose Cone', 'Body Tube', 'Transition', 'Electronics Bay', 'Recovery Bay', 'Rail Button', 'Tube Coupler', 'Bulkhead']
   },
   { key: 'fins', label: 'Fins', color: '#2a9d8f', types: ['Fins'] },
   { key: 'motor', label: 'Motor', color: '#343a40', types: ['Motor', 'Motor Mount', 'Centering Ring'] },
@@ -999,6 +1035,9 @@ const getDesignChecks = ({ components, splitPoints = [], metrics, config, landin
       if (component.type === 'Fins' && axialPosition + numberValue(component.finWidth, 0) > metrics.totalLength + 0.1) {
         add('warn', 'Fin position', 'Fin root chord extends past the aft end.', positionTarget);
       }
+      if (component.type === 'Tube Coupler' && axialPosition + numberValue(component.couplerLength, 0) > metrics.totalLength + 0.1) {
+        add('warn', 'Tube coupler position', 'Tube coupler extends past the rocket end.', positionTarget);
+      }
     }
 
     if (attachmentChildTypes.has(component.type)) {
@@ -1111,6 +1150,52 @@ const getDesignChecks = ({ components, splitPoints = [], metrics, config, landin
       const host = getAttachmentHost(component, components);
       if (host && outerDiameter > 0 && getDiameter(host) > 0 && outerDiameter > getDiameter(host) + 0.1) {
         add('error', 'Motor mount host fit', 'Motor mount outer diameter must fit inside its host airframe.', [
+          componentTarget(component, 'outerDiameter'),
+          componentTarget(component, 'attachedToComponent')
+        ]);
+      }
+    }
+
+    if (component.type === 'Tube Coupler') {
+      const couplerLength = numberValue(component.couplerLength, 0);
+      const innerDiameter = numberValue(component.innerDiameter, 0);
+      const outerDiameter = numberValue(component.outerDiameter, 0);
+      if (couplerLength <= 0) {
+        add('error', 'Tube coupler length', 'Tube coupler length must be positive.', componentTarget(component, 'couplerLength'));
+      }
+      if (innerDiameter <= 0) {
+        add('error', 'Tube coupler ID', 'Tube coupler inner diameter must be positive.', componentTarget(component, 'innerDiameter'));
+      }
+      if (outerDiameter <= 0) {
+        add('error', 'Tube coupler OD', 'Tube coupler outer diameter must be positive.', componentTarget(component, 'outerDiameter'));
+      }
+      if (innerDiameter > 0 && outerDiameter > 0 && outerDiameter <= innerDiameter) {
+        add('error', 'Tube coupler wall', 'Tube coupler outer diameter must exceed inner diameter.', [
+          componentTarget(component, 'innerDiameter'),
+          componentTarget(component, 'outerDiameter')
+        ]);
+      }
+      const host = getAttachmentHost(component, components);
+      if (host && outerDiameter > 0 && getDiameter(host) > 0 && outerDiameter > getDiameter(host) + 0.1) {
+        add('error', 'Tube coupler host fit', 'Tube coupler outer diameter must fit inside its host airframe.', [
+          componentTarget(component, 'outerDiameter'),
+          componentTarget(component, 'attachedToComponent')
+        ]);
+      }
+    }
+
+    if (component.type === 'Bulkhead') {
+      const outerDiameter = numberValue(component.outerDiameter, 0);
+      const thickness = numberValue(component.thickness, 0);
+      if (outerDiameter <= 0) {
+        add('error', 'Bulkhead diameter', 'Bulkhead outer diameter must be positive.', componentTarget(component, 'outerDiameter'));
+      }
+      if (thickness <= 0) {
+        add('error', 'Bulkhead thickness', 'Bulkhead thickness must be positive.', componentTarget(component, 'thickness'));
+      }
+      const host = getAttachmentHost(component, components);
+      if (host && outerDiameter > 0 && getDiameter(host) > 0 && outerDiameter > getDiameter(host) + 0.1) {
+        add('error', 'Bulkhead host fit', 'Bulkhead outer diameter must fit inside its host airframe.', [
           componentTarget(component, 'outerDiameter'),
           componentTarget(component, 'attachedToComponent')
         ]);
@@ -2121,6 +2206,47 @@ function RocketDrawing({ components, splitPoints, selectedId, setSelectedId, met
             <title>{motor.name}</title>
           </g>
         )}
+        {components.filter((component) => component.type === 'Tube Coupler').map((coupler) => {
+          const couplerStart = getComponentAxialPosition(coupler, length);
+          const couplerLength = Math.max(8, Math.min(numberValue(coupler.couplerLength, 80), length - couplerStart));
+          const outerHeight = heightFor(numberValue(coupler.outerDiameter, maxDiameter * 0.94));
+          const innerHeight = heightFor(numberValue(coupler.innerDiameter, maxDiameter * 0.88));
+          const selected = selectedId === coupler.id;
+          return (
+            <g key={coupler.id} onClick={() => setSelectedId(coupler.id)}>
+              <rect
+                x={xFor(couplerStart)}
+                y={centerY - outerHeight / 2}
+                width={couplerLength * pxPerMm}
+                height={outerHeight}
+                rx="2"
+                className={`tube-coupler-marker ${selected ? 'selected' : ''}`}
+              />
+              <line x1={xFor(couplerStart)} x2={xFor(couplerStart + couplerLength)} y1={centerY - innerHeight / 2} y2={centerY - innerHeight / 2} className="tube-coupler-bore" />
+              <line x1={xFor(couplerStart)} x2={xFor(couplerStart + couplerLength)} y1={centerY + innerHeight / 2} y2={centerY + innerHeight / 2} className="tube-coupler-bore" />
+              <title>{coupler.name}</title>
+            </g>
+          );
+        })}
+        {components.filter((component) => component.type === 'Bulkhead').map((bulkhead) => {
+          const x = xFor(getComponentAxialPosition(bulkhead, length));
+          const h = heightFor(numberValue(bulkhead.outerDiameter, maxDiameter));
+          const w = Math.max(3, numberValue(bulkhead.thickness, 5) * pxPerMm);
+          const selected = selectedId === bulkhead.id;
+          return (
+            <g key={bulkhead.id} onClick={() => setSelectedId(bulkhead.id)}>
+              <rect
+                x={x - w / 2}
+                y={centerY - h / 2}
+                width={w}
+                height={h}
+                rx="1"
+                className={`bulkhead-marker ${selected ? 'selected' : ''}`}
+              />
+              <title>{bulkhead.name}</title>
+            </g>
+          );
+        })}
         {components.filter((component) => component.type === 'Motor Mount').map((mount) => {
           const mountStart = getComponentAxialPosition(mount, length);
           const mountLength = Math.max(8, Math.min(numberValue(mount.mountLength, 160), length - mountStart));
@@ -2402,7 +2528,7 @@ function DesignTree({
 function ComponentPalette({ addComponent }) {
   const categories = [
     ['Airframe', ['Nose Cone', 'Body Tube', 'Transition', 'Electronics Bay', 'Recovery Bay']],
-    ['Payload', ['Mass Component']],
+    ['Internal structure', ['Tube Coupler', 'Bulkhead', 'Mass Component']],
     ['Control', ['Active Airbrake', 'Fins', 'Rail Button']],
     ['Propulsion', ['Motor', 'Motor Mount', 'Centering Ring']],
     ['Recovery and landing', ['Parachute', 'Streamer', 'Shock Cord', 'Landing System']]
@@ -2431,6 +2557,12 @@ function ComponentPalette({ addComponent }) {
 const getComponentDetailText = (component) => {
   if (component.type === 'Motor') {
     return `${formatNumber(component.motorThrust, 1)} N, ${formatNumber(component.motorTotalImpulse, 1)} Ns`;
+  }
+  if (component.type === 'Tube Coupler') {
+    return `${formatNumber(component.outerDiameter, 0)} mm OD, ${formatNumber(component.couplerLength, 0)} mm`;
+  }
+  if (component.type === 'Bulkhead') {
+    return `${formatNumber(component.outerDiameter, 0)} mm, ${formatNumber(component.thickness, 0)} mm thick`;
   }
   if (component.type === 'Motor Mount') {
     return `${formatNumber(component.innerDiameter, 0)} mm ID, ${formatNumber(component.mountLength, 0)} mm`;
@@ -2832,6 +2964,21 @@ function ComponentInspector({ component, components = [], updateComponent, metri
             <Field label="Cord length" value={component.cordLength ?? 3} unit="m" step="0.1" checks={checks('cordLength')} onChange={(value) => set('cordLength', value)} />
             <Field label="Cord diameter" value={component.cordDiameter ?? 3} unit="mm" step="0.1" checks={checks('cordDiameter')} onChange={(value) => set('cordDiameter', value)} />
             <Field label="Rated strength" value={component.maxTensionN ?? 450} unit="N" step="10" checks={checks('maxTensionN')} onChange={(value) => set('maxTensionN', value)} />
+            <Field label="Material" type="text" value={component.material || ''} onChange={(value) => set('material', value)} />
+          </>
+        )}
+        {component.type === 'Tube Coupler' && (
+          <>
+            <Field label="Coupler length" value={component.couplerLength ?? 84} unit="mm" checks={checks('couplerLength')} onChange={(value) => set('couplerLength', value)} />
+            <Field label="Inner diameter" value={component.innerDiameter ?? 48} unit="mm" checks={checks('innerDiameter')} onChange={(value) => set('innerDiameter', value)} />
+            <Field label="Outer diameter" value={component.outerDiameter ?? 52} unit="mm" checks={checks('outerDiameter')} onChange={(value) => set('outerDiameter', value)} />
+            <Field label="Material" type="text" value={component.material || ''} onChange={(value) => set('material', value)} />
+          </>
+        )}
+        {component.type === 'Bulkhead' && (
+          <>
+            <Field label="Outer diameter" value={component.outerDiameter ?? 54} unit="mm" checks={checks('outerDiameter')} onChange={(value) => set('outerDiameter', value)} />
+            <Field label="Thickness" value={component.thickness ?? 5} unit="mm" checks={checks('thickness')} onChange={(value) => set('thickness', value)} />
             <Field label="Material" type="text" value={component.material || ''} onChange={(value) => set('material', value)} />
           </>
         )}
@@ -4004,11 +4151,23 @@ function App() {
         ? components.find((component) => component.type === 'Recovery Bay') || getDefaultAttachmentHost(components)
         : motorHardwareTypes.has(type)
           ? motorHost || components.find((component) => component.type === 'Body Tube' && /aft/i.test(component.name || '')) || getDefaultAttachmentHost(components)
+        : airframeHardwareTypes.has(type)
+          ? (type === 'Bulkhead'
+            ? components.find((component) => component.type === 'Recovery Bay') || getDefaultAttachmentHost(components)
+            : components.find((component) => component.type === 'Body Tube' && /forward/i.test(component.name || '')) || getDefaultAttachmentHost(components))
         : getDefaultAttachmentHost(components);
       if (host) {
         next.attachedToComponent = host.id;
-        if (type === 'Mass Component' || recoverySubpartTypes.has(type)) {
+        if (type === 'Mass Component' || recoverySubpartTypes.has(type) || airframeHardwareTypes.has(type)) {
           next.axialPosition = getAttachmentHostCenter(host, components, componentMetrics.totalLength * 0.45);
+        }
+        if (type === 'Tube Coupler') {
+          next.outerDiameter = Math.max(0, (getDiameter(host) || next.outerDiameter) - 2);
+          next.innerDiameter = Math.max(0, next.outerDiameter - 4);
+          next.axialPosition = Math.max(0, next.axialPosition - numberValue(next.couplerLength, 84) / 2);
+        }
+        if (type === 'Bulkhead') {
+          next.outerDiameter = getDiameter(host) || next.outerDiameter;
         }
         if (type === 'Centering Ring') {
           next.outerDiameter = getDiameter(host) || next.outerDiameter;
