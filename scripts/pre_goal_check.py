@@ -69,6 +69,11 @@ ControlOutput control_function(SensorData sensor_data) {
     compile_result = json_body(client.post("/api/control-code/compile", json={"code": controller_code}))
     require(compile_result.get("success") is True, f"Controller did not compile: {compile_result}")
 
+    unsafe_code = controller_code.replace("return out;", 'system("echo unsafe"); return out;')
+    unsafe_compile = json_body(client.post("/api/control-code/compile", json={"code": unsafe_code}))
+    require(unsafe_compile.get("success") is False, f"Unsafe controller compiled unexpectedly: {unsafe_compile}")
+    require("Forbidden" in unsafe_compile.get("message", ""), f"Unsafe controller did not return a clear safety message: {unsafe_compile}")
+
     payload = {
         "rocketComponents": [
             {"id": 1, "type": "Nose Cone", "name": "Prep Nose", "length": 120, "diameter": 40, "weight": 35},
@@ -182,6 +187,7 @@ ControlOutput control_function(SensorData sensor_data) {
         "motors": len(motors.get("motors", [])),
         "launch_sites": len(sites.get("launch_sites", {})),
         "controller_compile": "ok",
+        "controller_safety": "ok",
         "simulation_id": simulation_id,
         "max_altitude": round(results["max_altitude"], 2),
         "max_velocity": round(results["max_velocity"], 2),

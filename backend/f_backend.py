@@ -7,6 +7,7 @@ import time
 import threading
 import uuid
 import math
+import re
 import numpy as np
 import sqlite3
 import shutil
@@ -207,31 +208,117 @@ class SimulationStatus:
 # --- CppIntegrationManager ---
 
 class CPPControlSystem:
-    def __init__(self, hardware_limits: HardwareLimitations):
+    def __init__(
+        self,
+        hardware_limits: HardwareLimitations,
+        compile_timeout_seconds: float = 30.0,
+        runtime_timeout_seconds: float = 0.35,
+        max_code_bytes: int = 20000,
+    ):
         self.hardware_limits = hardware_limits
+        self.compile_timeout_seconds = compile_timeout_seconds
+        self.runtime_timeout_seconds = runtime_timeout_seconds
+        self.max_code_bytes = max_code_bytes
         self.compiled_programs = {}
         self.active_simulations = {}
         
     def validate_cpp_code(self, cpp_code: str) -> Tuple[bool, str]:
-        forbidden_includes = [
-            '#include <fstream>', '#include <filesystem>', '#include <system>',
-            'system(', 'exec(', 'fork(', 'kill(', 'exit(', 'abort(',
-            'std::system', 'std::exit', 'std::abort'
-        ]
-        for forbidden in forbidden_includes:
-            if forbidden in cpp_code:
-                return False, f"Forbidden operation detected: {forbidden}"
-        
+        if not isinstance(cpp_code, str) or not cpp_code.strip():
+            return False, "Controller code must be a non-empty string."
+        if len(cpp_code.encode("utf-8")) > self.max_code_bytes:
+            return False, f"Controller code is too large. Limit is {self.max_code_bytes} bytes."
+
         if 'ControlOutput control_function(SensorData sensor_data)' not in cpp_code:
             return False, "Missing required function: ControlOutput control_function(SensorData sensor_data)"
+
+        sanitized = self._strip_cpp_comments_and_literals(cpp_code)
+        if re.search(r'(?m)^\s*#\s*(include|define|pragma|line|if|ifdef|ifndef|endif|undef|error|warning|import)\b', sanitized):
+            return False, "Forbidden controller code: preprocessor directives are not allowed."
+
+        forbidden_patterns = [
+            (r'\b(std::)?(system|exit|quick_exit|abort)\s*\(', "process termination or shell execution"),
+            (r'\b(exec[lvpe]*|fork|kill|raise|popen)\s*\(', "process control"),
+            (r'\b(fopen|freopen|fclose|fread|fwrite|remove|rename|tmpfile|mkstemp)\s*\(', "file access"),
+            (r'\b(open|close|read|write)\s*\(', "low-level file access"),
+            (r'\b(std::)?(ifstream|ofstream|fstream|filesystem)\b', "filesystem streams"),
+            (r'\b(std::)?(cin|cout|cerr|clog)\b', "console I/O"),
+            (r'\b(printf|fprintf|sprintf|snprintf|puts|putchar)\s*\(', "stdio output"),
+            (r'\b(new|delete)\b', "dynamic allocation"),
+            (r'\b(goto|asm)\b|__asm__|__attribute__|reinterpret_cast', "unsafe language feature"),
+            (r'\b(std::)?thread\b|pthread_', "thread creation"),
+            (r'\bwhile\s*\(\s*(true|1)\s*\)', "unbounded loop"),
+            (r'\bfor\s*\(\s*;\s*;\s*\)', "unbounded loop"),
+        ]
+        for pattern, description in forbidden_patterns:
+            if re.search(pattern, sanitized):
+                return False, f"Forbidden controller code: {description}."
         
         return True, "Code validation passed"
+
+    def _strip_cpp_comments_and_literals(self, code: str) -> str:
+        """Remove comments and string/char literal contents before safety scanning."""
+        output = []
+        i = 0
+        state = "normal"
+        quote = ""
+        while i < len(code):
+            char = code[i]
+            nxt = code[i + 1] if i + 1 < len(code) else ""
+            if state == "normal":
+                if char == "/" and nxt == "/":
+                    state = "line_comment"
+                    output.extend("  ")
+                    i += 2
+                    continue
+                if char == "/" and nxt == "*":
+                    state = "block_comment"
+                    output.extend("  ")
+                    i += 2
+                    continue
+                if char in {'"', "'"}:
+                    state = "literal"
+                    quote = char
+                    output.append(char)
+                    i += 1
+                    continue
+                output.append(char)
+                i += 1
+                continue
+            if state == "line_comment":
+                if char == "\n":
+                    state = "normal"
+                    output.append("\n")
+                else:
+                    output.append(" ")
+                i += 1
+                continue
+            if state == "block_comment":
+                if char == "*" and nxt == "/":
+                    state = "normal"
+                    output.extend("  ")
+                    i += 2
+                else:
+                    output.append("\n" if char == "\n" else " ")
+                    i += 1
+                continue
+            if state == "literal":
+                if char == "\\" and nxt:
+                    output.extend("  ")
+                    i += 2
+                    continue
+                output.append(quote if char == quote else ("\n" if char == "\n" else " "))
+                if char == quote:
+                    state = "normal"
+                    quote = ""
+                i += 1
+        return "".join(output)
     
     def compile_cpp_code(self, cpp_code: str, program_id: str) -> Tuple[bool, str]:
         is_valid, validation_msg = self.validate_cpp_code(cpp_code)
         if not is_valid:
             return False, validation_msg
         
+        temp_dir = None
         try:
             temp_dir = tempfile.mkdtemp(prefix=f"rocket_control_{program_id}_")
             header_content = self._generate_header_file()
@@ -252,7 +339,7 @@ class CPPControlSystem:
             ]
             
             result = subprocess.run(
-                compile_cmd, capture_output=True, text=True, timeout=30, cwd=temp_dir
+                compile_cmd, capture_output=True, text=True, timeout=self.compile_timeout_seconds, cwd=temp_dir
             )
             
             if result.returncode == 0:
@@ -267,8 +354,12 @@ class CPPControlSystem:
                 return False, f"Compilation failed: {result.stderr}"
                 
         except subprocess.TimeoutExpired:
+            if temp_dir:
+                shutil.rmtree(temp_dir, ignore_errors=True)
             return False, "Compilation timeout"
         except Exception as e:
+            if temp_dir:
+                shutil.rmtree(temp_dir, ignore_errors=True)
             return False, f"Compilation error: {str(e)}"
 
     def run_control_program(self, program_id: str, sensor_data: Dict) -> Dict:
@@ -298,12 +389,16 @@ class CPPControlSystem:
             str(sensor_data.get("predicted_apogee", 0.0)),
             str(sensor_data.get("dynamic_pressure", 0.0)),
         ]
-        result = subprocess.run(
-            [program["executable_path"], *args],
-            capture_output=True,
-            text=True,
-            timeout=0.35,
-        )
+        try:
+            result = subprocess.run(
+                [program["executable_path"], *args],
+                capture_output=True,
+                text=True,
+                timeout=self.runtime_timeout_seconds,
+                cwd=program["temp_dir"],
+            )
+        except subprocess.TimeoutExpired as exc:
+            raise RuntimeError(f"Controller runtime timeout after {self.runtime_timeout_seconds:.2f}s.") from exc
         if result.returncode != 0:
             raise RuntimeError(result.stderr.strip() or "Controller exited with an error.")
 
@@ -321,7 +416,24 @@ class CPPControlSystem:
         ]
         parsed = {}
         for key, value in zip(keys, values):
-            parsed[key] = bool(int(float(value))) if key == "recovery_trigger" else float(value)
+            parsed[key] = bool(int(float(value))) if key == "recovery_trigger" else self._finite_float(value)
+        max_fin = abs(self.hardware_limits.max_fin_deflection)
+        for key in ("fin_deflection_1", "fin_deflection_2", "fin_deflection_3", "fin_deflection_4"):
+            parsed[key] = max(-max_fin, min(max_fin, parsed[key]))
+        parsed["valve_command"] = max(0.0, min(1.0, parsed["valve_command"]))
+        parsed["surface_target"] = max(0.0, min(1.0, parsed["surface_target"]))
+        return parsed
+
+    def cleanup_program(self, program_id: str) -> None:
+        program = self.compiled_programs.pop(program_id, None)
+        if program:
+            shutil.rmtree(program.get("temp_dir", ""), ignore_errors=True)
+
+    @staticmethod
+    def _finite_float(value) -> float:
+        parsed = float(value)
+        if not math.isfinite(parsed):
+            raise RuntimeError(f"Controller returned non-finite output: {value!r}")
         return parsed
     
     def _generate_header_file(self) -> str:
@@ -1727,7 +1839,16 @@ def start_simulation():
             return jsonify({"success": False, "message": message}), 400
         simulation_payload["compiledControllerId"] = program_id
         simulation_payload["controllerCompileMessage"] = message
-        controller_callback = lambda sensor: cpp_control_system.run_control_program(program_id, sensor)
+        controller_error = {"message": None}
+
+        def controller_callback(sensor):
+            if controller_error["message"]:
+                raise RuntimeError(f"Controller disabled after runtime failure: {controller_error['message']}")
+            try:
+                return cpp_control_system.run_control_program(program_id, sensor)
+            except Exception as exc:
+                controller_error["message"] = str(exc)
+                raise
 
     if isinstance(openfoam_manager, ActiveSimulationManager):
         result = openfoam_manager.submit_cfd_simulation(

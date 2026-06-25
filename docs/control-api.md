@@ -27,6 +27,9 @@ The active simulation can execute compiled C++ controller code during a run. The
 ## Safety Constraints
 
 - Controller execution must be sandboxed.
-- Dangerous filesystem/process operations must remain blocked.
-- Timeouts must be enforced.
+- User code may use the generated `SensorData`, `ControlOutput`, `std::map`, `std::string`, and math helpers already provided by the wrapper.
+- User code may not add preprocessor directives such as `#include`, `#define`, or `#pragma`.
+- Dangerous filesystem, process, console I/O, dynamic allocation, thread, and unbounded-loop patterns must remain blocked before compilation.
+- Compile and runtime timeouts must be enforced.
+- Runtime output must be finite and clamped to hardware/control limits before it can drive the active system.
 - Compile and runtime errors must return clear messages to the user.

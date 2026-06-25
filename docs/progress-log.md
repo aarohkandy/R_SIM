@@ -32,3 +32,6 @@
 - Added `examples/scenarios/calibrated_thrust_curve.json` to prove a thrust curve and aero table affect the model.
 - Ran `bash scripts/run_pre_goal_checks.sh`: passed with 9 active simulation unit tests, 6 scenario fixtures, backend API smoke, frontend production build, and frontend lint. The smoke output included 78 force samples and 78 moment samples.
 - Browser-checked local app at `http://127.0.0.1:5001/`: loaded the built-in active demo, launched it against a freshly restarted local backend, reached results, showed Max Net Force, Max Drag Coefficient, Attitude & Forces, Force Samples, and Moment Samples, with no new browser console errors.
+- Hardened the C++ controller path: preprocessor directives, filesystem/process/console I/O, dynamic allocation, thread creation, and unbounded-loop patterns are rejected before compile; runtime timeouts return clear errors; output is clamped to controller/hardware limits.
+- Added controller safety tests for safe compile/run, forbidden operations, comment/string false positives, runtime timeout, and output clamping.
+- Ran `bash scripts/run_pre_goal_checks.sh`: passed with 15 unit tests, 6 scenario fixtures, backend API smoke including `controller_safety: ok`, frontend production build, and frontend lint.

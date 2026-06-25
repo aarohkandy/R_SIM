@@ -21,6 +21,7 @@ The active scenario matrix uses importable files in `examples/scenarios/`:
 
 - Python syntax compile succeeds over the repo.
 - Active simulation unit tests pass.
+- C++ controller safety tests pass for safe compilation, forbidden operations, runtime timeout, and output clamping.
 - Active scenario matrix passes for passive, target-apogee, calibrated thrust-curve/aero-table, descent-brake, low-pressure, and invalid-input cases.
 - Backend dependencies install in a clean Python 3.9 environment.
 - Backend smoke tests pass:
@@ -28,6 +29,7 @@ The active scenario matrix uses importable files in `examples/scenarios/`:
   - `/api/environment/motors`
   - `/api/environment/launch-sites`
   - `/api/control-code/compile`
+  - `/api/control-code/compile` rejection of forbidden controller code
   - `/api/simulation/start`
   - `/api/simulation/status`
 - Sample active pneumatic rocket simulation returns structured deterministic output.
