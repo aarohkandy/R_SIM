@@ -8,10 +8,11 @@
 - Keep the main setup uncluttered with advanced active-system sections collapsed.
 - Put rocket geometry, motor, environment, controller, and results in clear steps.
 - Let users save, restore, duplicate, and run named simulation setups from the current rocket.
-- Let users set axial placement for fins, motors, rail buttons, tube couplers, bulkheads, motor mount tubes, and centering rings, and reflect those positions in drawing, mass, and CP analysis.
-- Let users choose the airframe host for fins, motors, and rail buttons, and show that attachment in the component table.
-- Show fins, motors, rail buttons, tube couplers, bulkheads, motor mount tubes, centering rings, internal masses, parachutes, streamers, and shock cords nested under their selected host in the design tree, with unattached subparts separated for repair.
+- Let users set axial placement for fins, motors, rail buttons, launch lugs, tube couplers, bulkheads, motor mount tubes, and centering rings, and reflect those positions in drawing, mass, and CP analysis.
+- Let users choose the airframe host for fins, motors, rail buttons, and launch lugs, and show that attachment in the component table.
+- Show fins, motors, rail buttons, launch lugs, tube couplers, bulkheads, motor mount tubes, centering rings, internal masses, parachutes, streamers, and shock cords nested under their selected host in the design tree, with unattached subparts separated for repair.
 - Let users add payload, avionics, battery, ballast, recovery-hardware mass components, tube couplers, bulkheads, motor mount tubes, and centering rings with editable station, host, dimensions, material, and mass.
+- Let users add launch lugs and rail buttons with editable station, host, guide dimensions, spacing/count, material, and mass.
 - Let users add main/drogue parachutes, streamers, and shock cords as attached recovery components, then edit deployment event, altitude, drag area, Cd, opening-load limits, streamer strip geometry, and harness strength from the component inspector.
 - Let users add and remove split markers only between structural parts, with red markers in both the design tree and rocket side view.
 - Let users set the active airbrake force station and see its moment arm against CG before and after simulation.

@@ -124,6 +124,8 @@ def main() -> int:
     require("motor-mount-marker" in frontend_source and "motor-mount-marker" in frontend_style, "Rocket drawing is missing motor mount markers.")
     require("Centering Ring" in frontend_source, "Frontend is missing internal centering ring components.")
     require("centering-ring-marker" in frontend_source and "centering-ring-marker" in frontend_style, "Rocket drawing is missing centering ring markers.")
+    require("Launch Lug" in frontend_source, "Frontend is missing launch lug components.")
+    require("launch-lug-marker" in frontend_source and "launch-lug-marker" in frontend_style, "Rocket drawing is missing launch lug markers.")
     require("rail-button-dot" in frontend_style, "Rocket drawing does not render rail button placement.")
     require("position_m" in active_sim_source, "Backend CP contributions do not expose fin axial placement.")
     require("attachment must reference" in active_sim_source, "Backend does not reject invalid subpart attachment references.")
@@ -137,6 +139,8 @@ def main() -> int:
     require("innertube" in openrocket_source and "centeringring" in openrocket_source, "OpenRocket import does not preserve motor mount hardware.")
     require("tube coupler" in active_sim_source and "bulkhead" in active_sim_source, "Backend does not treat airframe internal hardware as internal geometry.")
     require("tubecoupler" in openrocket_source and "bulkhead" in openrocket_source, "OpenRocket import does not preserve airframe internal hardware.")
+    require("launch lug" in active_sim_source and "rail button" in active_sim_source, "Backend does not treat launch-guide hardware as internal geometry.")
+    require("launchlug" in openrocket_source and "railbutton" in openrocket_source, "OpenRocket import does not preserve launch-guide hardware.")
     require("Airbrake station" in frontend_source, "Frontend is missing active airbrake station controls.")
     require("active.locationFromNose" in frontend_source, "Frontend design checks do not target active airbrake station.")
     require("moment_arm_m" in active_sim_source, "Backend active system does not report active airbrake moment arm.")
@@ -184,6 +188,8 @@ def main() -> int:
           <shockcord><name>Nylon Harness</name><mass>0.024</mass><length>3.000</length><diameter>0.003</diameter><maxTensionN>450</maxTensionN></shockcord>
           <tubeCoupler><name>Payload Coupler</name><mass>0.028</mass><length>0.084</length><innerRadius>0.024</innerRadius><outerRadius>0.026</outerRadius></tubeCoupler>
           <bulkhead><name>Avionics Bulkhead</name><mass>0.022</mass><outerRadius>0.020</outerRadius><thickness>0.005</thickness></bulkhead>
+          <launchlug><name>Quarter-inch Lug</name><mass>0.010</mass><length>0.045</length><innerRadius>0.0025</innerRadius><outerRadius>0.004</outerRadius><standoffHeight>0.003</standoffHeight></launchlug>
+          <railbutton><name>1010 Rail Buttons</name><mass>0.008</mass><diameter>0.010</diameter><height>0.012</height><instanceCount>2</instanceCount><buttonSpacing>0.170</buttonSpacing></railbutton>
           <innertube><name>Motor Mount Tube</name><mass>0.036</mass><length>0.160</length><innerRadius>0.0145</innerRadius><outerRadius>0.017</outerRadius></innertube>
           <centeringring><name>Centering Rings</name><mass>0.018</mass><ringCount>2</ringCount><innerRadius>0.017</innerRadius><outerRadius>0.020</outerRadius><thickness>0.004</thickness></centeringring>
           <trapezoidfinset><name>Fins</name><finCount>3</finCount><rootChord>0.090</rootChord><height>0.055</height><mass>0.045</mass></trapezoidfinset>
@@ -212,6 +218,8 @@ def main() -> int:
     imported_centering_ring = next((component for component in imported_components if component.get("type") == "Centering Ring"), {})
     imported_coupler = next((component for component in imported_components if component.get("type") == "Tube Coupler"), {})
     imported_bulkhead = next((component for component in imported_components if component.get("type") == "Bulkhead"), {})
+    imported_launch_lug = next((component for component in imported_components if component.get("type") == "Launch Lug"), {})
+    imported_rail_button = next((component for component in imported_components if component.get("type") == "Rail Button"), {})
     require(len(imported_motor.get("thrustCurve", [])) > 5, f"Imported motor was not enriched with thrust curve: {imported_motor}")
     require(imported_mass.get("massRole") == "battery", f"Imported OpenRocket mass component was not preserved: {imported_components}")
     require(imported_parachute.get("dragArea", 0) > 0.2, f"Imported OpenRocket parachute was not preserved: {imported_components}")
@@ -221,6 +229,8 @@ def main() -> int:
     require(imported_centering_ring.get("ringCount") == 2, f"Imported OpenRocket centering ring was not preserved: {imported_components}")
     require(imported_coupler.get("couplerLength") == 84, f"Imported OpenRocket tube coupler was not preserved: {imported_components}")
     require(imported_bulkhead.get("thickness") == 5, f"Imported OpenRocket bulkhead was not preserved: {imported_components}")
+    require(imported_launch_lug.get("innerDiameter") == 5, f"Imported OpenRocket launch lug was not preserved: {imported_components}")
+    require(imported_rail_button.get("buttonSpacing") == 170, f"Imported OpenRocket rail button was not preserved: {imported_components}")
 
     controller_code = r"""
 ControlOutput control_function(SensorData sensor_data) {
@@ -285,11 +295,13 @@ ControlOutput control_function(SensorData sensor_data) {
             {"id": 10, "type": "Centering Ring", "name": "Prep Centering Rings", "weight": 18, "ringCount": 2, "innerDiameter": 34, "outerDiameter": 40, "thickness": 4, "axialPosition": 505, "attachedToComponent": 2},
             {"id": 11, "type": "Tube Coupler", "name": "Prep Payload Coupler", "weight": 28, "couplerLength": 84, "innerDiameter": 36, "outerDiameter": 39, "axialPosition": 180, "attachedToComponent": 2},
             {"id": 12, "type": "Bulkhead", "name": "Prep Avionics Bulkhead", "weight": 22, "outerDiameter": 40, "thickness": 5, "axialPosition": 210, "attachedToComponent": 2},
+            {"id": 13, "type": "Launch Lug", "name": "Prep Launch Lug", "length": 45, "diameter": 8, "weight": 10, "innerDiameter": 5, "standoffHeight": 3, "axialPosition": 280, "attachedToComponent": 2},
+            {"id": 14, "type": "Rail Button", "name": "Prep Rail Buttons", "length": 12, "diameter": 10, "weight": 8, "instanceCount": 2, "buttonSpacing": 170, "standoffHeight": 4, "axialPosition": 420, "attachedToComponent": 2},
         ],
         "rocketSplitPoints": [
             {"id": "prep-split", "afterComponentId": "1", "label": "Payload split"},
         ],
-        "rocketWeight": 425,
+        "rocketWeight": 443,
         "rocketCG": 296,
         "totalHeight": 680,
         "simulationConfig": {

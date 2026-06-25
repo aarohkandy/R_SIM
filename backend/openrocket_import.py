@@ -57,6 +57,12 @@ AIRFRAME_HARDWARE_COMPONENT_TAGS = {
     "bulkhead",
 }
 
+LAUNCH_HARDWARE_COMPONENT_TAGS = {
+    "launchlug",
+    "railbutton",
+    "railbuttons",
+}
+
 
 @dataclass
 class ImportedOpenRocket:
@@ -109,6 +115,10 @@ def parse_openrocket_design(payload: bytes, filename: str = "design.ork") -> Imp
             next_id += 1
         elif tag in AIRFRAME_HARDWARE_COMPONENT_TAGS:
             component = _parse_airframe_hardware_component(element, next_id, last_body_id, tag)
+            components.append(component)
+            next_id += 1
+        elif tag in LAUNCH_HARDWARE_COMPONENT_TAGS:
+            component = _parse_launch_hardware_component(element, next_id, last_body_id, tag)
             components.append(component)
             next_id += 1
 
@@ -449,6 +459,68 @@ def _parse_airframe_hardware_component(element: ET.Element, component_id: int, a
     }
 
 
+def _parse_launch_hardware_component(element: ET.Element, component_id: int, attached_to: Optional[int], tag: str) -> Dict:
+    is_lug = tag == "launchlug"
+    component_type = "Launch Lug" if is_lug else "Rail Button"
+    name = _first_text(element, ["name"]) or f"Imported {component_type}"
+    mass = _mass_g(_numeric_child(element, ["mass", "massoverride", "componentmass"]))
+    axial_position = _length_mm(_numeric_child(element, ["position", "axialOffset", "componentCG", "cgx"]))
+    standoff_height = _length_mm(_numeric_child(element, ["standoffHeight", "standOffHeight", "radialOffset", "radialPosition"]))
+
+    if is_lug:
+        length = _length_mm(_numeric_child(element, ["length", "lugLength", "launchLugLength"]))
+        inner_diameter = (
+            _diameter_mm(_numeric_child(element, ["innerRadius", "lugInnerRadius"]))
+            or _length_mm(_numeric_child(element, ["innerDiameter", "lugInnerDiameter"]))
+        )
+        outer_diameter = (
+            _diameter_mm(_numeric_child(element, ["outerRadius", "radius", "lugOuterRadius"]))
+            or _length_mm(_numeric_child(element, ["outerDiameter", "diameter", "lugOuterDiameter"]))
+        )
+        if not outer_diameter and inner_diameter:
+            outer_diameter = inner_diameter + 2.0
+        if not inner_diameter and outer_diameter:
+            inner_diameter = max(0.0, outer_diameter - 2.0)
+        return {
+            "id": component_id,
+            "type": "Launch Lug",
+            "name": name,
+            "length": length or 40.0,
+            "diameter": outer_diameter or 6.0,
+            "weight": mass,
+            "innerDiameter": inner_diameter or 4.0,
+            "standoffHeight": standoff_height or 0.0,
+            "material": _first_text(element, ["material"]) or "phenolic",
+            "axialPosition": axial_position or None,
+            "attachedToComponent": attached_to,
+            "importSource": "openrocket",
+        }
+
+    button_diameter = (
+        _diameter_mm(_numeric_child(element, ["radius", "buttonRadius"]))
+        or _length_mm(_numeric_child(element, ["diameter", "buttonDiameter", "outerDiameter"]))
+    )
+    button_height = _length_mm(_numeric_child(element, ["height", "buttonHeight", "length"]))
+    instance_count = int(_numeric_child(element, ["instanceCount", "buttonCount", "count", "numberOfButtons"]) or 2)
+    button_spacing = _length_mm(_numeric_child(element, ["buttonSpacing", "instanceSeparation", "separation", "instanceOffset"]))
+
+    return {
+        "id": component_id,
+        "type": "Rail Button",
+        "name": name,
+        "length": button_height or 12.0,
+        "diameter": button_diameter or 10.0,
+        "weight": mass,
+        "instanceCount": max(1, instance_count),
+        "buttonSpacing": button_spacing or 160.0,
+        "standoffHeight": standoff_height or 4.0,
+        "material": _first_text(element, ["material"]) or "nylon",
+        "axialPosition": axial_position or None,
+        "attachedToComponent": attached_to,
+        "importSource": "openrocket",
+    }
+
+
 def _parse_motor(root: ET.Element, component_id: int, attached_to: Optional[int]) -> Optional[Dict]:
     motor_element = next((element for element in root.iter() if _tag(element) == "motor"), None)
     if motor_element is None:
@@ -590,6 +662,8 @@ def _sum_linear_length_mm(components: List[Dict]) -> float:
         "Centering Ring",
         "Tube Coupler",
         "Bulkhead",
+        "Rail Button",
+        "Launch Lug",
     }
     return sum(component.get("length") or 0 for component in components if component.get("type") not in internal_types)
 

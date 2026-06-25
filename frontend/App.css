@@ -630,6 +630,25 @@ button:focus-visible {
   stroke-width: 3;
 }
 
+.launch-lug-marker {
+  fill: rgba(122, 130, 138, 0.24);
+  stroke: #444d55;
+  stroke-width: 1.4;
+  cursor: pointer;
+}
+
+.launch-lug-marker.selected {
+  stroke: var(--accent);
+  stroke-width: 3;
+}
+
+.launch-lug-bore {
+  stroke: #444d55;
+  stroke-width: 1;
+  stroke-dasharray: 4 3;
+  pointer-events: none;
+}
+
 .mass-marker {
   fill: #b56576;
   stroke: #6f2d3d;

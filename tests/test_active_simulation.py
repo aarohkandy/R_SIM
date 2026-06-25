@@ -301,6 +301,76 @@ class ActiveSimulationTests(unittest.TestCase):
         self.assertTrue(any("Broken bulkhead bulkhead outer diameter" in error for error in result["validation_errors"]))
         self.assertTrue(any("Broken bulkhead bulkhead thickness" in error for error in result["validation_errors"]))
 
+    def test_launch_hardware_does_not_change_external_geometry(self):
+        manager = ActiveSimulationManager()
+        rocket = sample_rocket()
+        rocket["components"].extend([
+            {
+                "id": 5,
+                "type": "Rail Button",
+                "name": "Rail button pair",
+                "length": 12,
+                "diameter": 10,
+                "weight": 8,
+                "instanceCount": 2,
+                "buttonSpacing": 170,
+                "standoffHeight": 4,
+                "attachedToComponent": 2,
+            },
+            {
+                "id": 6,
+                "type": "Launch Lug",
+                "name": "Quarter-inch launch lug",
+                "length": 45,
+                "diameter": 8,
+                "weight": 10,
+                "innerDiameter": 5,
+                "standoffHeight": 3,
+                "attachedToComponent": 2,
+            },
+        ])
+
+        self.assertAlmostEqual(manager._rocket_length_m(rocket, rocket["components"]), 0.68)
+        self.assertAlmostEqual(manager._rocket_diameter_m(rocket["components"]), 0.04)
+        result = manager.submit_cfd_simulation(rocket, base_config())
+        self.assertTrue(result["success"])
+
+    def test_invalid_launch_hardware_is_rejected(self):
+        manager = ActiveSimulationManager()
+        rocket = sample_rocket()
+        rocket["components"].extend([
+            {
+                "id": 5,
+                "type": "Rail Button",
+                "name": "Broken rail buttons",
+                "length": 0,
+                "diameter": 10,
+                "weight": 8,
+                "instanceCount": 2,
+                "buttonSpacing": 0,
+                "standoffHeight": -1,
+                "attachedToComponent": 2,
+            },
+            {
+                "id": 6,
+                "type": "Launch Lug",
+                "name": "Broken launch lug",
+                "length": 45,
+                "diameter": 5,
+                "weight": 10,
+                "innerDiameter": 6,
+                "attachedToComponent": 2,
+            },
+        ])
+
+        result = manager.submit_cfd_simulation(rocket, base_config())
+
+        self.assertFalse(result["success"])
+        self.assertTrue(any("Broken rail buttons launch hardware length" in error for error in result["validation_errors"]))
+        self.assertTrue(any("Broken rail buttons launch hardware stand-off height" in error for error in result["validation_errors"]))
+        self.assertTrue(any("Broken rail buttons rail button spacing" in error for error in result["validation_errors"]))
+        self.assertTrue(any("Broken launch lug launch lug outer diameter" in error for error in result["validation_errors"]))
+
     def test_parachute_components_drive_landing_configuration(self):
         manager = ActiveSimulationManager()
         rocket = sample_rocket()

@@ -3,11 +3,12 @@
 ## User Workflow
 
 - Define a rocket with structural parts, fins, motor data, mass, CG, and launch conditions.
-- Mark structural split/stage boundaries between rocket parts while keeping fins, motors, and rail buttons as non-splittable subparts.
-- Attach fins, motors, and rail buttons to valid airframe hosts so subparts behave like an OpenRocket-style component hierarchy.
+- Mark structural split/stage boundaries between rocket parts while keeping fins, motors, rail buttons, and launch lugs as non-splittable subparts.
+- Attach fins, motors, rail buttons, and launch lugs to valid airframe hosts so subparts behave like an OpenRocket-style component hierarchy.
 - Inspect attached subparts nested beneath their host airframe parts in the design tree.
 - Place internal payload, avionics, battery, and ballast mass components along the rocket so CG and stability can be tuned without changing exterior geometry.
 - Place tube couplers, bulkheads, motor mount tubes, and centering rings inside an airframe host so internal hardware affects mass/CG without changing exterior geometry.
+- Place launch lugs and rail buttons on an airframe host so launch-guide hardware affects mass/CG without changing exterior length or aerodynamic reference geometry.
 - Place main/drogue parachute, streamer, and shock-cord recovery components in the rocket tree so recovery area, Cd, deployment event, altitude, harness length, and opening-load limits can be edited as parts.
 - Import an existing OpenRocket `.ork` design when available, preserving common body, nose, fin, motor, mass, and CG data.
 - Import RASP `.eng` and RockSim `.rse` motor thrust-curve files into the local motor catalog.
@@ -30,10 +31,11 @@
 - Supplied motor thrust curves must be inspectable/editable in the UI and must own simulated impulse when valid.
 - OpenRocket `.ork` import must return simulation-ready rocket components and warn when motor/mass/CG data must be inferred.
 - Builder split markers must appear in the design tree and side-view drawing, persist through save/export/import, and be reported in simulation output.
-- Builder subparts must expose their airframe attachment host in the inspector/table, auto-attach to a valid aft host when added, and reject invalid subpart-to-subpart references during simulation validation.
+- Builder subparts must expose their airframe attachment host in the inspector/table, auto-attach to a valid host when added, and reject invalid subpart-to-subpart references during simulation validation.
 - Builder design tree must nest attached subparts below their host airframe components and flag unattached subparts separately.
 - Internal mass components must expose station, host, role, and mass controls; affect component mass/CG calculations; render in the side view; and remain excluded from external length, diameter, and aerodynamic geometry.
 - Tube couplers, bulkheads, motor mount tubes, and centering rings must expose host, station, mass, material, and fit dimensions; render in the side view; import from OpenRocket files; and remain excluded from external length, diameter, and aerodynamic geometry.
+- Rail buttons and launch lugs must expose host, station, mass, material, count/spacing or lug bore dimensions; render in the side view; import from OpenRocket files; and remain excluded from external length, diameter, and aerodynamic geometry.
 - Parachute, streamer, and shock-cord recovery components must expose host, station, and recovery-specific controls; render in the side view; import from OpenRocket files; and drive the landing/recovery simulation config. Parachutes/streamers must expose main/drogue role, deploy event, deploy altitude, drag area, Cd, and opening-load controls. Streamers must expose strip length/width controls that can compute drag area. Shock cords must expose cord length, diameter, material, and rated strength that limits recovery opening loads.
 - Frontend motor search must use the local backend motor database, not hardcoded placeholder motor data, and support designation, impulse class, manufacturer, diameter, and TARC filters.
 - Motor imports must accept common `.eng` and `.rse` thrust-curve files, compute impulse/burn/average/peak values from the curve, and make the imported motor selectable from the Motors tab.

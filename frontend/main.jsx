@@ -46,6 +46,7 @@ const componentColor = {
   'Centering Ring': '#457b9d',
   'Landing System': '#7b61ff',
   'Rail Button': '#6c757d',
+  'Launch Lug': '#7a828a',
   'Mass Component': '#b56576',
   Parachute: '#ef476f',
   Streamer: '#ff9f1c',
@@ -196,11 +197,24 @@ const componentDefaults = {
   },
   'Rail Button': {
     type: 'Rail Button',
-    name: 'Rail button pair',
+    name: '1010 rail button pair',
     length: 12,
-    diameter: 8,
+    diameter: 10,
     weight: 8,
-    railOffset: 4
+    instanceCount: 2,
+    buttonSpacing: 170,
+    standoffHeight: 4,
+    material: 'nylon'
+  },
+  'Launch Lug': {
+    type: 'Launch Lug',
+    name: 'Launch lug',
+    length: 45,
+    diameter: 8,
+    weight: 10,
+    innerDiameter: 5,
+    standoffHeight: 3,
+    material: 'phenolic'
   },
   'Mass Component': {
     type: 'Mass Component',
@@ -286,6 +300,7 @@ const defaultComponents = [
   { ...componentDefaults['Motor Mount'], id: 'motor-mount-1', attachedToComponent: 'tube-2', axialPosition: 950 },
   { ...componentDefaults['Centering Ring'], id: 'centering-ring-1', attachedToComponent: 'tube-2', axialPosition: 952 },
   { ...componentDefaults.Fins, id: 'fins-1', attachedToComponent: 'tube-2' },
+  { ...componentDefaults['Rail Button'], id: 'rail-button-1', attachedToComponent: 'tube-2', axialPosition: 850 },
   { ...componentDefaults.Motor, id: 'motor-1', attachedToComponent: 'tube-2' }
 ];
 
@@ -380,7 +395,8 @@ const structuralTypes = new Set([
   'Recovery Bay',
   'Active Airbrake',
   'Landing System',
-  'Rail Button'
+  'Rail Button',
+  'Launch Lug'
 ]);
 
 const normalizeMotor = (motor) => {
@@ -449,15 +465,16 @@ const recoveryHardwareTypes = new Set(['Shock Cord']);
 const recoverySubpartTypes = new Set([...recoveryDeviceTypes, ...recoveryHardwareTypes]);
 const motorHardwareTypes = new Set(['Motor Mount', 'Centering Ring']);
 const airframeHardwareTypes = new Set(['Tube Coupler', 'Bulkhead']);
+const launchHardwareTypes = new Set(['Rail Button', 'Launch Lug']);
 const internalSubpartTypes = new Set([...recoverySubpartTypes, ...motorHardwareTypes, ...airframeHardwareTypes]);
 const internalMassTypes = new Set(['Mass Component', ...internalSubpartTypes]);
 
 const getStructuralLength = (components) => components
-  .filter((component) => structuralTypes.has(component.type) && component.type !== 'Rail Button')
+  .filter((component) => structuralTypes.has(component.type) && !launchHardwareTypes.has(component.type))
   .reduce((sum, component) => sum + Math.max(0, numberValue(component.length)), 0);
 
-const positionalTypes = new Set(['Fins', 'Motor', 'Rail Button', 'Mass Component', ...internalSubpartTypes]);
-const attachmentChildTypes = new Set(['Fins', 'Motor', 'Rail Button', 'Mass Component', ...internalSubpartTypes]);
+const positionalTypes = new Set(['Fins', 'Motor', 'Mass Component', ...launchHardwareTypes, ...internalSubpartTypes]);
+const attachmentChildTypes = new Set(['Fins', 'Motor', 'Mass Component', ...launchHardwareTypes, ...internalSubpartTypes]);
 const attachmentHostTypes = new Set(['Body Tube', 'Transition', 'Electronics Bay', 'Recovery Bay', 'Active Airbrake']);
 
 const normalizeAttachmentId = (value) => (value === null || value === undefined ? '' : String(value));
@@ -503,8 +520,8 @@ const getComponentAxialPosition = (component, totalLength) => {
   if (component.type === 'Bulkhead') {
     return clamp(totalLength * 0.22, 0, totalLength);
   }
-  if (component.type === 'Rail Button') {
-    return clamp(totalLength * 0.38 + numberValue(component.railOffset, 0), 0, totalLength);
+  if (launchHardwareTypes.has(component.type)) {
+    return clamp(totalLength * 0.74, 0, totalLength);
   }
   if (component.type === 'Mass Component') {
     return clamp(totalLength * 0.45, 0, totalLength);
@@ -527,7 +544,7 @@ const layoutComponents = (components) => {
   let cursor = 0;
   const structural = [];
   components.forEach((component) => {
-    if (structuralTypes.has(component.type) && component.type !== 'Rail Button') {
+    if (structuralTypes.has(component.type) && !launchHardwareTypes.has(component.type)) {
       const length = Math.max(0, numberValue(component.length));
       structural.push({
         ...component,
@@ -701,7 +718,7 @@ const getMetrics = (components) => {
       position = getComponentAxialPosition(component, totalLength);
     } else if (component.type === 'Bulkhead') {
       position = getComponentAxialPosition(component, totalLength);
-    } else if (component.type === 'Rail Button') {
+    } else if (launchHardwareTypes.has(component.type)) {
       position = getComponentAxialPosition(component, totalLength);
     } else if (component.type === 'Mass Component') {
       position = getComponentAxialPosition(component, totalLength);
@@ -741,7 +758,7 @@ const massGroups = [
     key: 'airframe',
     label: 'Airframe',
     color: '#d8dee6',
-    types: ['Nose Cone', 'Body Tube', 'Transition', 'Electronics Bay', 'Recovery Bay', 'Rail Button', 'Tube Coupler', 'Bulkhead']
+    types: ['Nose Cone', 'Body Tube', 'Transition', 'Electronics Bay', 'Recovery Bay', 'Rail Button', 'Launch Lug', 'Tube Coupler', 'Bulkhead']
   },
   { key: 'fins', label: 'Fins', color: '#2a9d8f', types: ['Fins'] },
   { key: 'motor', label: 'Motor', color: '#343a40', types: ['Motor', 'Motor Mount', 'Centering Ring'] },
@@ -1006,7 +1023,7 @@ const getDesignChecks = ({ components, splitPoints = [], metrics, config, landin
       add('error', 'Mass missing', `${component.name} needs a positive mass.`, componentTarget(component, 'mass'));
     }
 
-    if (structuralTypes.has(component.type) && component.type !== 'Rail Button' && numberValue(component.length, 0) <= 0) {
+    if (structuralTypes.has(component.type) && !launchHardwareTypes.has(component.type) && numberValue(component.length, 0) <= 0) {
       add('error', 'Length missing', `${component.name} needs a positive length.`, componentTarget(component, 'length'));
     }
 
@@ -1037,6 +1054,19 @@ const getDesignChecks = ({ components, splitPoints = [], metrics, config, landin
       }
       if (component.type === 'Tube Coupler' && axialPosition + numberValue(component.couplerLength, 0) > metrics.totalLength + 0.1) {
         add('warn', 'Tube coupler position', 'Tube coupler extends past the rocket end.', positionTarget);
+      }
+      if (component.type === 'Launch Lug' && axialPosition + numberValue(component.length, 0) > metrics.totalLength + 0.1) {
+        add('warn', 'Launch lug position', 'Launch lug extends past the rocket end.', positionTarget);
+      }
+      if (component.type === 'Rail Button') {
+        const instanceCount = Math.max(1, numberValue(component.instanceCount, 2));
+        const spacing = numberValue(component.buttonSpacing, 0);
+        if (instanceCount > 1 && axialPosition + spacing * (instanceCount - 1) > metrics.totalLength + 0.1) {
+          add('warn', 'Rail button spacing', 'Rail button pattern extends past the rocket end.', [
+            componentTarget(component, 'axialPosition'),
+            componentTarget(component, 'buttonSpacing')
+          ]);
+        }
       }
     }
 
@@ -1074,6 +1104,39 @@ const getDesignChecks = ({ components, splitPoints = [], metrics, config, landin
       }
       if (numberValue(component.finThickness, 0) <= 0) {
         add('warn', 'Fin thickness', 'Add fin thickness for mass and drag realism.', componentTarget(component, 'finThickness'));
+      }
+    }
+
+    if (launchHardwareTypes.has(component.type)) {
+      if (numberValue(component.length, 0) <= 0) {
+        add('error', 'Launch hardware length', `${component.name} needs a positive length.`, componentTarget(component, 'length'));
+      }
+      if (numberValue(component.diameter, 0) <= 0) {
+        add('error', 'Launch hardware diameter', `${component.name} needs a positive diameter.`, componentTarget(component, 'diameter'));
+      }
+      if (numberValue(component.standoffHeight, 0) < 0) {
+        add('error', 'Launch hardware standoff', 'Stand-off height cannot be negative.', componentTarget(component, 'standoffHeight'));
+      }
+      if (component.type === 'Rail Button') {
+        if (numberValue(component.instanceCount, 0) < 1) {
+          add('error', 'Rail button count', 'Rail button count must be at least one.', componentTarget(component, 'instanceCount'));
+        }
+        if (numberValue(component.instanceCount, 2) > 1 && numberValue(component.buttonSpacing, 0) <= 0) {
+          add('error', 'Rail button spacing', 'Rail button spacing must be positive for multiple buttons.', componentTarget(component, 'buttonSpacing'));
+        }
+      }
+      if (component.type === 'Launch Lug') {
+        const innerDiameter = numberValue(component.innerDiameter, 0);
+        const outerDiameter = numberValue(component.diameter, 0);
+        if (innerDiameter <= 0) {
+          add('error', 'Launch lug ID', 'Launch lug inner diameter must be positive.', componentTarget(component, 'innerDiameter'));
+        }
+        if (innerDiameter > 0 && outerDiameter > 0 && innerDiameter >= outerDiameter) {
+          add('error', 'Launch lug wall', 'Launch lug outer diameter must exceed inner diameter.', [
+            componentTarget(component, 'innerDiameter'),
+            componentTarget(component, 'diameter')
+          ]);
+        }
       }
     }
 
@@ -2306,13 +2369,59 @@ function RocketDrawing({ components, splitPoints, selectedId, setSelectedId, met
           );
         })}
         {components.filter((component) => component.type === 'Rail Button').map((button) => {
-          const x = xFor(getComponentAxialPosition(button, length));
+          const start = getComponentAxialPosition(button, length);
+          const count = Math.max(1, Math.min(4, Math.round(numberValue(button.instanceCount, 2))));
+          const spacing = count > 1 ? Math.max(8, numberValue(button.buttonSpacing, 160)) : 0;
+          const radius = Math.max(3, Math.min(8, numberValue(button.diameter, 10) * pxPerMm / 2));
+          const y = centerY - heightFor(maxDiameter) / 2 - 10 - Math.max(0, numberValue(button.standoffHeight, 4)) * 0.6;
           const selected = selectedId === button.id;
           return (
             <g key={button.id} onClick={() => setSelectedId(button.id)}>
-              <circle cx={x} cy={centerY - heightFor(maxDiameter) / 2 - 12} r="6" className={`rail-button-dot ${selected ? 'selected' : ''}`} />
-              <circle cx={x + 22} cy={centerY - heightFor(maxDiameter) / 2 - 12} r="6" className={`rail-button-dot ${selected ? 'selected' : ''}`} />
+              {Array.from({ length: count }, (_, index) => (
+                <circle
+                  key={`${button.id}-${index}`}
+                  cx={xFor(clamp(start + index * spacing, 0, length))}
+                  cy={y}
+                  r={radius}
+                  className={`rail-button-dot ${selected ? 'selected' : ''}`}
+                />
+              ))}
               <title>{button.name}</title>
+            </g>
+          );
+        })}
+        {components.filter((component) => component.type === 'Launch Lug').map((lug) => {
+          const lugStart = getComponentAxialPosition(lug, length);
+          const lugLength = Math.max(8, Math.min(numberValue(lug.length, 45), length - lugStart));
+          const outerHeight = Math.max(5, numberValue(lug.diameter, 8) * pxPerMm);
+          const innerHeight = Math.max(2, numberValue(lug.innerDiameter, 5) * pxPerMm);
+          const y = centerY - heightFor(maxDiameter) / 2 - outerHeight - 8 - Math.max(0, numberValue(lug.standoffHeight, 3)) * 0.6;
+          const selected = selectedId === lug.id;
+          return (
+            <g key={lug.id} onClick={() => setSelectedId(lug.id)}>
+              <rect
+                x={xFor(lugStart)}
+                y={y}
+                width={lugLength * pxPerMm}
+                height={outerHeight}
+                rx="2"
+                className={`launch-lug-marker ${selected ? 'selected' : ''}`}
+              />
+              <line
+                x1={xFor(lugStart)}
+                x2={xFor(lugStart + lugLength)}
+                y1={y + (outerHeight - innerHeight) / 2}
+                y2={y + (outerHeight - innerHeight) / 2}
+                className="launch-lug-bore"
+              />
+              <line
+                x1={xFor(lugStart)}
+                x2={xFor(lugStart + lugLength)}
+                y1={y + (outerHeight + innerHeight) / 2}
+                y2={y + (outerHeight + innerHeight) / 2}
+                className="launch-lug-bore"
+              />
+              <title>{lug.name}</title>
             </g>
           );
         })}
@@ -2402,7 +2511,7 @@ function RocketDrawing({ components, splitPoints, selectedId, setSelectedId, met
 }
 
 const isTreeAirframeComponent = (component) => (
-  structuralTypes.has(component.type) && !['Landing System', 'Rail Button'].includes(component.type)
+  structuralTypes.has(component.type) && component.type !== 'Landing System' && !launchHardwareTypes.has(component.type)
 );
 
 const getTreeAttachmentGroups = (components) => {
@@ -2529,7 +2638,8 @@ function ComponentPalette({ addComponent }) {
   const categories = [
     ['Airframe', ['Nose Cone', 'Body Tube', 'Transition', 'Electronics Bay', 'Recovery Bay']],
     ['Internal structure', ['Tube Coupler', 'Bulkhead', 'Mass Component']],
-    ['Control', ['Active Airbrake', 'Fins', 'Rail Button']],
+    ['Control', ['Active Airbrake', 'Fins']],
+    ['Launch guide', ['Rail Button', 'Launch Lug']],
     ['Propulsion', ['Motor', 'Motor Mount', 'Centering Ring']],
     ['Recovery and landing', ['Parachute', 'Streamer', 'Shock Cord', 'Landing System']]
   ];
@@ -2569,6 +2679,12 @@ const getComponentDetailText = (component) => {
   }
   if (component.type === 'Centering Ring') {
     return `${formatNumber(component.ringCount, 0)} rings, ${formatNumber(component.innerDiameter, 0)}/${formatNumber(component.outerDiameter, 0)} mm`;
+  }
+  if (component.type === 'Rail Button') {
+    return `${formatNumber(component.instanceCount ?? 2, 0)} buttons, ${formatNumber(component.buttonSpacing ?? 0, 0)} mm spacing`;
+  }
+  if (component.type === 'Launch Lug') {
+    return `${formatNumber(component.innerDiameter, 0)} mm ID, ${formatNumber(component.length, 0)} mm`;
   }
   if (component.type === 'Fins') {
     return `${component.finCount} fins, ${formatNumber(component.finHeight, 0)} mm span`;
@@ -2943,6 +3059,21 @@ function ComponentInspector({ component, components = [], updateComponent, metri
             <Field label="Span" value={component.finHeight} unit="mm" checks={checks('finHeight')} onChange={(value) => set('finHeight', value)} />
             <Field label="Sweep" value={component.finSweep} unit="mm" onChange={(value) => set('finSweep', value)} />
             <Field label="Thickness" value={component.finThickness} unit="mm" checks={checks('finThickness')} onChange={(value) => set('finThickness', value)} />
+          </>
+        )}
+        {component.type === 'Rail Button' && (
+          <>
+            <Field label="Button count" value={component.instanceCount ?? 2} checks={checks('instanceCount')} onChange={(value) => set('instanceCount', value)} />
+            <Field label="Button spacing" value={component.buttonSpacing ?? 170} unit="mm" checks={checks('buttonSpacing')} onChange={(value) => set('buttonSpacing', value)} />
+            <Field label="Stand-off height" value={component.standoffHeight ?? 4} unit="mm" checks={checks('standoffHeight')} onChange={(value) => set('standoffHeight', value)} />
+            <Field label="Material" type="text" value={component.material || ''} onChange={(value) => set('material', value)} />
+          </>
+        )}
+        {component.type === 'Launch Lug' && (
+          <>
+            <Field label="Inner diameter" value={component.innerDiameter ?? 5} unit="mm" checks={checks('innerDiameter')} onChange={(value) => set('innerDiameter', value)} />
+            <Field label="Stand-off height" value={component.standoffHeight ?? 3} unit="mm" checks={checks('standoffHeight')} onChange={(value) => set('standoffHeight', value)} />
+            <Field label="Material" type="text" value={component.material || ''} onChange={(value) => set('material', value)} />
           </>
         )}
         {component.type === 'Mass Component' && (
@@ -4155,6 +4286,8 @@ function App() {
           ? (type === 'Bulkhead'
             ? components.find((component) => component.type === 'Recovery Bay') || getDefaultAttachmentHost(components)
             : components.find((component) => component.type === 'Body Tube' && /forward/i.test(component.name || '')) || getDefaultAttachmentHost(components))
+        : launchHardwareTypes.has(type)
+          ? components.find((component) => component.type === 'Body Tube' && /aft/i.test(component.name || '')) || getDefaultAttachmentHost(components)
         : getDefaultAttachmentHost(components);
       if (host) {
         next.attachedToComponent = host.id;
@@ -4172,9 +4305,14 @@ function App() {
         if (type === 'Centering Ring') {
           next.outerDiameter = getDiameter(host) || next.outerDiameter;
         }
+        if (launchHardwareTypes.has(type)) {
+          const hostSegment = layoutComponents(components).find((component) => String(component.id) === String(host.id));
+          const hostStart = hostSegment ? hostSegment.start : getAttachmentHostCenter(host, components, componentMetrics.totalLength * 0.7);
+          next.axialPosition = clamp(hostStart + (type === 'Launch Lug' ? 80 : 45), 0, componentMetrics.totalLength);
+        }
       }
     }
-    if (positionalTypes.has(type)) {
+    if (positionalTypes.has(type) && !Number.isFinite(numberValue(next.axialPosition, NaN))) {
       next.axialPosition = getComponentAxialPosition(next, componentMetrics.totalLength);
     }
     setComponents((current) => [...current, next]);

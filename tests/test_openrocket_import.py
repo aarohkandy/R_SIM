@@ -234,6 +234,43 @@ class OpenRocketImportTests(unittest.TestCase):
         self.assertEqual(bulkhead["attachedToComponent"], body["id"])
         self.assertAlmostEqual(imported.rocket_data["totalHeight"], 680.0)
 
+    def test_parse_openrocket_launch_hardware(self):
+        xml = SAMPLE_OPENROCKET_XML.replace(
+            b"<trapezoidfinset>",
+            (
+                b"<launchlug><name>Quarter-inch Lug</name><mass>0.010</mass><length>0.045</length>"
+                b"<innerRadius>0.0025</innerRadius><outerRadius>0.004</outerRadius><standoffHeight>0.003</standoffHeight>"
+                b"<position>0.280</position><material>phenolic</material></launchlug>"
+                b"<railbutton><name>1010 Rail Buttons</name><mass>0.008</mass><diameter>0.010</diameter>"
+                b"<height>0.012</height><instanceCount>2</instanceCount><buttonSpacing>0.170</buttonSpacing>"
+                b"<standoffHeight>0.004</standoffHeight><position>0.420</position><material>nylon</material></railbutton>"
+                b"<trapezoidfinset>"
+            ),
+        )
+        imported = parse_openrocket_design(xml, "launch-hardware.ork")
+        launch_lug = next(component for component in imported.rocket_data["components"] if component["type"] == "Launch Lug")
+        rail_button = next(component for component in imported.rocket_data["components"] if component["type"] == "Rail Button")
+        body = next(component for component in imported.rocket_data["components"] if component["type"] == "Body Tube")
+
+        self.assertEqual(launch_lug["name"], "Quarter-inch Lug")
+        self.assertAlmostEqual(launch_lug["weight"], 10.0)
+        self.assertAlmostEqual(launch_lug["length"], 45.0)
+        self.assertAlmostEqual(launch_lug["diameter"], 8.0)
+        self.assertAlmostEqual(launch_lug["innerDiameter"], 5.0)
+        self.assertAlmostEqual(launch_lug["standoffHeight"], 3.0)
+        self.assertEqual(launch_lug["material"], "phenolic")
+        self.assertEqual(launch_lug["attachedToComponent"], body["id"])
+        self.assertEqual(rail_button["name"], "1010 Rail Buttons")
+        self.assertAlmostEqual(rail_button["weight"], 8.0)
+        self.assertAlmostEqual(rail_button["length"], 12.0)
+        self.assertAlmostEqual(rail_button["diameter"], 10.0)
+        self.assertEqual(rail_button["instanceCount"], 2)
+        self.assertAlmostEqual(rail_button["buttonSpacing"], 170.0)
+        self.assertAlmostEqual(rail_button["standoffHeight"], 4.0)
+        self.assertEqual(rail_button["material"], "nylon")
+        self.assertEqual(rail_button["attachedToComponent"], body["id"])
+        self.assertAlmostEqual(imported.rocket_data["totalHeight"], 680.0)
+
     def test_import_endpoint_rejects_non_openrocket_extension(self):
         client = app.test_client()
         response = client.post(

@@ -28,9 +28,10 @@ class ActiveSimulationManager:
     recovery_hardware_types = {"shock cord"}
     motor_hardware_types = {"motor mount", "centering ring"}
     airframe_hardware_types = {"tube coupler", "bulkhead"}
-    attachment_child_types = {"fins", "motor", "rail button", "mass component"} | recovery_component_types | recovery_hardware_types | motor_hardware_types | airframe_hardware_types
+    launch_hardware_types = {"rail button", "launch lug"}
+    attachment_child_types = {"fins", "motor", "mass component"} | launch_hardware_types | recovery_component_types | recovery_hardware_types | motor_hardware_types | airframe_hardware_types
     attachment_host_types = {"body tube", "transition", "electronics bay", "recovery bay", "active airbrake"}
-    internal_component_types = {"fins", "motor", "rail button", "mass component"} | recovery_component_types | recovery_hardware_types | motor_hardware_types | airframe_hardware_types
+    internal_component_types = {"fins", "motor", "mass component"} | launch_hardware_types | recovery_component_types | recovery_hardware_types | motor_hardware_types | airframe_hardware_types
 
     def __init__(self):
         self.simulations: Dict[str, Dict] = {}
@@ -297,6 +298,47 @@ class ActiveSimulationManager:
                 host = components_by_id.get(str(attached_to))
                 if host is None or str(host.get("type", "")).lower() not in self.attachment_host_types:
                     errors.append(f"{name} attachment must reference a body tube, transition, electronics bay, recovery bay, or active airbrake.")
+            if component_type in self.launch_hardware_types:
+                hardware_length = self._as_float(
+                    self._first_value(component, ["length", "lugLength", "buttonHeight"], 0.0),
+                    0.0,
+                )
+                hardware_diameter = self._as_float(
+                    self._first_value(component, ["diameter", "outerDiameter", "buttonDiameter"], 0.0),
+                    0.0,
+                )
+                standoff_height = self._as_float(
+                    self._first_value(component, ["standoffHeight", "standOffHeight", "railOffset"], 0.0),
+                    0.0,
+                )
+                if hardware_length <= 0:
+                    errors.append(f"{name} launch hardware length must be positive.")
+                if hardware_diameter <= 0:
+                    errors.append(f"{name} launch hardware diameter must be positive.")
+                if standoff_height < 0:
+                    errors.append(f"{name} launch hardware stand-off height cannot be negative.")
+                if component_type == "rail button":
+                    instance_count = self._as_float(
+                        self._first_value(component, ["instanceCount", "buttonCount", "count"], 2.0),
+                        2.0,
+                    )
+                    button_spacing = self._as_float(
+                        self._first_value(component, ["buttonSpacing", "instanceSeparation", "separation"], 0.0),
+                        0.0,
+                    )
+                    if instance_count < 1:
+                        errors.append(f"{name} rail button count must be at least one.")
+                    if instance_count > 1 and button_spacing <= 0:
+                        errors.append(f"{name} rail button spacing must be positive for multiple buttons.")
+                if component_type == "launch lug":
+                    inner_diameter = self._as_float(
+                        self._first_value(component, ["innerDiameter", "inner_diameter", "lugInnerDiameter"], 0.0),
+                        0.0,
+                    )
+                    if inner_diameter <= 0:
+                        errors.append(f"{name} launch lug inner diameter must be positive.")
+                    if inner_diameter > 0 and hardware_diameter > 0 and inner_diameter >= hardware_diameter:
+                        errors.append(f"{name} launch lug outer diameter must exceed inner diameter.")
             if component_type in self.recovery_component_types:
                 deploy_event = self._normalize_deploy_event(
                     self._first_value(component, ["deployEvent", "deploymentEvent"], "altitude"),
