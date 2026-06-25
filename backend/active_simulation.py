@@ -585,8 +585,9 @@ class ActiveSimulationManager:
         downrange = math.sqrt(x**2 + y**2)
         cg_m = self._as_float(rocket_data.get("cg"), total_length_m * 470.0)
         cg_m = cg_m / 1000.0 if cg_m > 5 else cg_m
-        cp_m = total_length_m * (0.61 + min(0.08, 0.01 * fin_count))
-        stability_margin = max(0.05, (cp_m - cg_m) / diameter_m)
+        aero_center = self._aerodynamic_center_m(components, total_length_m, diameter_m)
+        cp_m = aero_center["cp_m"]
+        stability_margin = (cp_m - cg_m) / diameter_m
         flight_events = self._build_flight_events(
             burn_time_s=burn_time_s,
             max_altitude=max_altitude,
@@ -615,6 +616,8 @@ class ActiveSimulationManager:
             "motor_burn_time": burn_time_s,
             "total_impulse": total_impulse_ns,
             "stability_margin": stability_margin,
+            "center_of_pressure_m": cp_m,
+            "cp_contributions": aero_center["contributions"],
             "drag_coefficient": aero["base_cd"],
             "max_drag_coefficient": max_drag_coefficient,
             "lift_coefficient": 0.0,
@@ -1093,6 +1096,108 @@ class ActiveSimulationManager:
                 diameters.append(diameter)
         diameter = max(diameters) if diameters else 40.0
         return max(0.01, diameter / 1000.0 if diameter > 1 else diameter)
+
+    def _aerodynamic_center_m(self, components: List[Dict], total_length_m: float, diameter_m: float) -> Dict:
+        def length_m(component: Dict) -> float:
+            raw = self._as_float(self._first_value(component, ["length", "totalHeight"], 0.0), 0.0)
+            return raw / 1000.0 if raw > 5 else raw
+
+        def diameter_value_m(component: Dict, key: str = "diameter") -> float:
+            raw = self._as_float(
+                self._first_value(component, [key, "diameter", "bottomDiameter", "topDiameter"], 0.0),
+                0.0,
+            )
+            return raw / 1000.0 if raw > 1 else raw
+
+        structural = []
+        cursor = 0.0
+        for component in components:
+            component_type = str(component.get("type", "")).lower()
+            if component_type in {"fins", "motor", "rail button"}:
+                continue
+            component_length = max(length_m(component), 0.0)
+            structural.append((component, cursor, component_length))
+            cursor += component_length
+
+        reference_diameter = max(diameter_m, 0.001)
+        contributions = []
+        for component, start_m, component_length in structural:
+            component_type = str(component.get("type", "")).lower()
+            if component_type == "nose cone":
+                shape = str(component.get("shape", "ogive")).lower()
+                cp_fraction = {
+                    "conical": 0.667,
+                    "elliptical": 0.5,
+                    "von-karman": 0.5,
+                    "ogive": 0.466,
+                }.get(shape, 0.466)
+                ratio = diameter_value_m(component) / reference_diameter
+                normal_force = 2.0 * ratio * ratio
+                contributions.append({
+                    "name": component.get("name", "Nose cone"),
+                    "type": component.get("type", "Nose Cone"),
+                    "normal_force": normal_force,
+                    "cp_m": start_m + component_length * cp_fraction,
+                })
+            elif component_type == "transition" and component_length > 0:
+                front = diameter_value_m(component, "topDiameter")
+                rear = diameter_value_m(component, "bottomDiameter")
+                normal_force = 2.0 * ((rear / reference_diameter) ** 2 - (front / reference_diameter) ** 2)
+                if abs(normal_force) > 0.01:
+                    contributions.append({
+                        "name": component.get("name", "Transition"),
+                        "type": component.get("type", "Transition"),
+                        "normal_force": normal_force,
+                        "cp_m": start_m + component_length * 0.55,
+                    })
+
+        for component in components:
+            if str(component.get("type", "")).lower() != "fins":
+                continue
+            fin_count = max(self._as_float(self._first_value(component, ["finCount", "fin_count"], 3), 3), 1)
+            span = max(self._as_float(self._first_value(component, ["finHeight", "span"], 0.0), 0.0), 1.0)
+            root = max(self._as_float(self._first_value(component, ["finWidth", "rootChord"], 0.0), 0.0), 1.0)
+            sweep = max(self._as_float(self._first_value(component, ["finSweep", "sweep"], 0.0), 0.0), 0.0)
+            if span > 1:
+                span /= 1000.0
+            if root > 1:
+                root /= 1000.0
+            if sweep > 1:
+                sweep /= 1000.0
+            tip = max(root * 0.45, root - sweep, root * 0.2)
+            mid_chord = math.sqrt(span**2 + (sweep + (root - tip) / 2.0) ** 2)
+            denominator = 1.0 + math.sqrt(1.0 + ((2.0 * mid_chord) / max(root + tip, 1e-6)) ** 2)
+            normal_force = 1.8 * fin_count * ((span / reference_diameter) ** 2) / denominator
+            leading_edge = max(0.0, total_length_m - root)
+            cp_m = (
+                leading_edge
+                + (sweep * (root + 2.0 * tip)) / (3.0 * max(root + tip, 1e-6))
+                + (root + tip - (root * tip) / max(root + tip, 1e-6)) / 6.0
+            )
+            contributions.append({
+                "name": component.get("name", "Fins"),
+                "type": component.get("type", "Fins"),
+                "normal_force": normal_force,
+                "cp_m": self._clamp(cp_m, 0.0, total_length_m),
+            })
+
+        total_normal_force = sum(item["normal_force"] for item in contributions)
+        if abs(total_normal_force) > 1e-6:
+            cp_m = sum(item["normal_force"] * item["cp_m"] for item in contributions) / total_normal_force
+        else:
+            cp_m = total_length_m * 0.65
+        cp_m = self._clamp(cp_m, 0.0, total_length_m)
+        return {
+            "cp_m": cp_m,
+            "total_normal_force": total_normal_force,
+            "contributions": [
+                {
+                    **item,
+                    "share": (item["normal_force"] / total_normal_force * 100.0) if total_normal_force else 0.0,
+                }
+                for item in contributions
+            ],
+        }
 
     def _fin_count(self, components: List[Dict]) -> int:
         total = 0

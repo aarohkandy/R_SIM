@@ -201,6 +201,20 @@ class ActiveSimulationTests(unittest.TestCase):
         self.assertGreater(calibrated["max_drag_coefficient"], baseline["max_drag_coefficient"])
         self.assertGreater(calibrated["max_drag_force"], baseline["max_drag_force"])
 
+    def test_cp_contributions_are_exported_and_fin_span_moves_cp_aft(self):
+        manager = ActiveSimulationManager()
+        baseline = manager.submit_cfd_simulation(sample_rocket(), base_config())["results"]
+        larger_fin_rocket = sample_rocket()
+        fin_set = next(component for component in larger_fin_rocket["components"] if component["type"] == "Fins")
+        fin_set["finHeight"] = 95
+        larger_fins = manager.submit_cfd_simulation(larger_fin_rocket, base_config())["results"]
+
+        self.assertGreater(len(baseline["cp_contributions"]), 1)
+        self.assertTrue(any(item["type"] == "Fins" for item in baseline["cp_contributions"]))
+        self.assertGreater(baseline["center_of_pressure_m"], 0)
+        self.assertGreater(larger_fins["center_of_pressure_m"], baseline["center_of_pressure_m"])
+        self.assertGreater(larger_fins["stability_margin"], baseline["stability_margin"])
+
     def test_landing_system_reduces_touchdown_velocity(self):
         manager = ActiveSimulationManager()
         with_landing = manager.submit_cfd_simulation(sample_rocket(), base_config())["results"]

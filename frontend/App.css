@@ -724,6 +724,58 @@ button:focus-visible {
   white-space: nowrap;
 }
 
+.cp-breakdown {
+  display: grid;
+  gap: 6px;
+  padding: 0 8px 8px;
+}
+
+.cp-breakdown-title,
+.cp-row {
+  display: grid;
+  align-items: center;
+  gap: 7px;
+}
+
+.cp-breakdown-title {
+  grid-template-columns: minmax(0, 1fr) auto;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.cp-row {
+  grid-template-columns: 10px minmax(0, 1fr) 54px 38px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  padding: 6px 7px;
+  background: #fafbfc;
+}
+
+.cp-row strong,
+.cp-row em,
+.cp-row b {
+  min-width: 0;
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+.cp-row strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.cp-row em {
+  color: var(--muted);
+  font-style: normal;
+}
+
+.cp-row b {
+  color: var(--muted);
+  text-align: right;
+}
+
 .mass-breakdown {
   display: grid;
   gap: 6px;

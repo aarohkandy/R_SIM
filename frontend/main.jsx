@@ -326,11 +326,96 @@ const layoutComponents = (components) => {
   return structural;
 };
 
+const noseCpFraction = (shape = 'ogive') => ({
+  conical: 0.667,
+  elliptical: 0.5,
+  'von-karman': 0.5,
+  ogive: 0.466
+})[shape] || 0.466;
+
+const getCpAnalysis = (components) => {
+  const totalLength = getStructuralLength(components);
+  const maxDiameter = getMaxDiameter(components);
+  const structural = layoutComponents(components);
+  const referenceDiameter = Math.max(maxDiameter, 1);
+  const contributions = [];
+
+  structural.forEach((component) => {
+    if (component.type === 'Nose Cone') {
+      const diameterRatio = getDiameter(component) / referenceDiameter;
+      contributions.push({
+        id: component.id,
+        name: component.name,
+        type: component.type,
+        color: componentColor[component.type],
+        normalForce: 2 * diameterRatio * diameterRatio,
+        cp: component.start + component.length * noseCpFraction(component.shape)
+      });
+    }
+
+    if (component.type === 'Transition' && component.length > 0) {
+      const frontDiameter = numberValue(component.topDiameter, component.diameter);
+      const rearDiameter = numberValue(component.bottomDiameter, component.diameter);
+      const normalForce = 2 * (((rearDiameter / referenceDiameter) ** 2) - ((frontDiameter / referenceDiameter) ** 2));
+      if (Math.abs(normalForce) > 0.01) {
+        contributions.push({
+          id: component.id,
+          name: component.name,
+          type: component.type,
+          color: componentColor[component.type],
+          normalForce,
+          cp: component.start + component.length * 0.55
+        });
+      }
+    }
+  });
+
+  components
+    .filter((component) => component.type === 'Fins')
+    .forEach((component) => {
+      const finCount = Math.max(numberValue(component.finCount, 3), 1);
+      const span = Math.max(numberValue(component.finHeight, 0), 1);
+      const rootChord = Math.max(numberValue(component.finWidth, 0), 1);
+      const sweep = Math.max(numberValue(component.finSweep, 0), 0);
+      const tipChord = Math.max(rootChord * 0.45, rootChord - sweep, rootChord * 0.2);
+      const midChord = Math.sqrt(span ** 2 + (sweep + (rootChord - tipChord) / 2) ** 2);
+      const denominator = 1 + Math.sqrt(1 + ((2 * midChord) / (rootChord + tipChord)) ** 2);
+      const normalForce = 1.8 * finCount * ((span / referenceDiameter) ** 2) / denominator;
+      const leadingEdge = Math.max(0, totalLength - rootChord);
+      const cp = leadingEdge
+        + (sweep * (rootChord + 2 * tipChord)) / (3 * (rootChord + tipChord))
+        + (rootChord + tipChord - (rootChord * tipChord) / (rootChord + tipChord)) / 6;
+      contributions.push({
+        id: component.id,
+        name: component.name,
+        type: component.type,
+        color: componentColor.Fins,
+        normalForce,
+        cp: clamp(cp, 0, totalLength)
+      });
+    });
+
+  const totalNormalForce = contributions.reduce((sum, item) => sum + item.normalForce, 0);
+  const weightedCp = contributions.reduce((sum, item) => sum + item.normalForce * item.cp, 0);
+  const cp = Math.abs(totalNormalForce) > 0.001
+    ? weightedCp / totalNormalForce
+    : totalLength * 0.65;
+  return {
+    cp: clamp(cp, 0, totalLength),
+    totalNormalForce,
+    contributions: contributions.map((item) => ({
+      ...item,
+      share: totalNormalForce ? (item.normalForce / totalNormalForce) * 100 : 0
+    }))
+  };
+};
+
 const getMetrics = (components) => {
   const totalLength = getStructuralLength(components);
   const maxDiameter = getMaxDiameter(components);
   const mass = components.reduce((sum, component) => sum + componentMass(component), 0);
   const structural = layoutComponents(components);
+  const cpAnalysis = getCpAnalysis(components);
   let moment = 0;
   let weightedMass = 0;
 
@@ -351,8 +436,7 @@ const getMetrics = (components) => {
   });
 
   const cg = weightedMass > 0 ? moment / weightedMass : totalLength * 0.45;
-  const finSet = components.find((component) => component.type === 'Fins');
-  const cp = totalLength * (0.61 + Math.min(0.09, numberValue(finSet?.finCount, 3) * 0.012));
+  const cp = cpAnalysis.cp;
   const stability = maxDiameter > 0 ? (cp - cg) / maxDiameter : 0;
   const motor = components.find((component) => component.type === 'Motor');
   const thrust = numberValue(motor?.motorThrust, 0);
@@ -365,6 +449,7 @@ const getMetrics = (components) => {
     cg,
     cp,
     stability,
+    cpAnalysis,
     motor,
     thrustToWeight
   };
@@ -970,6 +1055,20 @@ function DesignAnalysis({ metrics, massBreakdown, config }) {
           <span>Motor impulse class</span>
           <strong>{guideAnalysis.impulseClass} / {formatNumber(guideAnalysis.totalImpulse, 1)} Ns</strong>
         </div>
+      </div>
+      <div className="cp-breakdown">
+        <div className="cp-breakdown-title">
+          <strong>CP contributors</strong>
+          <span>CNa {formatNumber(metrics.cpAnalysis.totalNormalForce, 2)}</span>
+        </div>
+        {metrics.cpAnalysis.contributions.map((item) => (
+          <div className="cp-row" key={item.id}>
+            <span className="mass-swatch" style={{ backgroundColor: item.color }} />
+            <strong>{item.name}</strong>
+            <em>{formatNumber(item.cp, 0)} mm</em>
+            <b>{formatNumber(item.share, 0)}%</b>
+          </div>
+        ))}
       </div>
       <div className="mass-breakdown" aria-label="Mass breakdown">
         {massBreakdown.map((row) => (
