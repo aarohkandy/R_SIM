@@ -3,6 +3,7 @@
 ## User Workflow
 
 - Define a rocket with structural parts, fins, motor data, mass, CG, and launch conditions.
+- Mark structural split/stage boundaries between rocket parts while keeping fins, motors, and rail buttons as non-splittable subparts.
 - Import an existing OpenRocket `.ork` design when available, preserving common body, nose, fin, motor, mass, and CG data.
 - Define an active air system with pressure source, valves, actuator geometry, deployment location, and surface limits.
 - Write controller code that receives simulated sensor data and commands the active system.
@@ -22,6 +23,7 @@
 - Motor thrust curves and optional aerodynamic coefficient tables must affect local simulation output when supplied.
 - Supplied motor thrust curves must be inspectable/editable in the UI and must own simulated impulse when valid.
 - OpenRocket `.ork` import must return simulation-ready rocket components and warn when motor/mass/CG data must be inferred.
+- Builder split markers must appear in the design tree and side-view drawing, persist through save/export/import, and be reported in simulation output.
 - Frontend motor search must use the local backend motor database, not hardcoded placeholder motor data, and support designation, impulse class, manufacturer, diameter, and TARC filters.
 - C++ controller code must compile before it is used by an active simulation.
 - Pneumatic outputs must show pressure use, actuator movement, and surface deployment when active control commands it.

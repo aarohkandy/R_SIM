@@ -102,9 +102,13 @@ def main() -> int:
     require("LandingFootprintMap" in frontend_source, "Frontend results view is missing landing footprint map.")
     require("RecoveryAnalysisPanel" in frontend_source, "Frontend results view is missing recovery analysis panel.")
     require("RecoverySafetyPanel" in frontend_source, "Frontend results view is missing recovery safety panel.")
+    require("tree-add-split" in frontend_source, "Frontend design tree is missing split-marker controls.")
+    require("split-marker" in frontend_source, "Frontend rocket drawing is missing split-marker rendering.")
+    require("rocketSplitPoints" in frontend_source, "Frontend simulation payload does not include split markers.")
     require("landing_footprint" in active_sim_source, "Backend does not report landing footprint output.")
     require("recovery_analysis" in active_sim_source, "Backend does not report recovery analysis output.")
     require("recovery_safety" in active_sim_source, "Backend does not report recovery safety output.")
+    require("stage_splits" in active_sim_source, "Backend does not report stage/split marker output.")
     require("drift_after_main_deploy_m" in active_sim_source, "Backend does not report recovery drift after main deployment.")
     database_motor = next(
         (motor for motor in motors.get("motors", []) if motor.get("designation") == "Estes C6-5"),
@@ -202,6 +206,9 @@ ControlOutput control_function(SensorData sensor_data) {
                 "thrustCurve": database_thrust_curve,
             },
         ],
+        "rocketSplitPoints": [
+            {"id": "prep-split", "afterComponentId": "1", "label": "Payload split"},
+        ],
         "rocketWeight": 232,
         "rocketCG": 320,
         "totalHeight": 680,
@@ -293,6 +300,10 @@ ControlOutput control_function(SensorData sensor_data) {
     require(len(results.get("trajectory", [])) > 5, "Trajectory history is missing or too short.")
     require(len(results.get("force_history", [])) > 5, "Force history is missing or too short.")
     require(len(results.get("moment_history", [])) > 5, "Moment history is missing or too short.")
+    stage_splits = results.get("stage_splits") or []
+    require(len(stage_splits) == 1, f"Stage split markers were not preserved: {stage_splits}")
+    require(stage_splits[0].get("label") == "Payload split", f"Stage split label was not preserved: {stage_splits}")
+    require(abs(stage_splits[0].get("position_mm", 0) - 120.0) < 1e-6, f"Stage split position is wrong: {stage_splits}")
     landing_footprint = results.get("landing_footprint") or {}
     require(landing_footprint.get("touchdown_range_m") is not None, "Landing footprint touchdown range is missing.")
     require(landing_footprint.get("touchdown_bearing_deg") is not None, "Landing footprint touchdown bearing is missing.")
@@ -333,6 +344,7 @@ ControlOutput control_function(SensorData sensor_data) {
         "touchdown_range": round(landing_footprint["touchdown_range_m"], 2),
         "recovery_phases": len(recovery_analysis["phases"]),
         "main_opening_load_g": round(recovery_safety["main_opening_load_g"], 2),
+        "stage_splits": len(stage_splits),
         "source": results["source"],
     }
     print(json.dumps(summary, indent=2, sort_keys=True))

@@ -1972,6 +1972,7 @@ def start_simulation():
     
     # Extract data from request
     rocket_components = data.get('rocketComponents', [])
+    rocket_split_points = data.get('rocketSplitPoints') or data.get('splitPoints') or []
     rocket_weight = data.get('rocketWeight', 0)
     rocket_cg = data.get('rocketCG', 0)
     simulation_config_data = data.get('simulationConfig', {})
@@ -2006,6 +2007,7 @@ def start_simulation():
     
     rocket_data = {
         'components': rocket_components,
+        'splitPoints': rocket_split_points,
         'weight': rocket_weight,
         'cg': rocket_cg,
         'totalHeight': data.get('totalHeight')

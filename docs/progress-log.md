@@ -78,3 +78,6 @@
 - Added OpenRocket-style motor browser filters to the frontend so designation search no longer doubles as manufacturer/class search.
 - Ran `bash scripts/run_pre_goal_checks.sh`: passed with 49 unit tests, motor catalog/filter smoke gates, frontend production build, and frontend lint.
 - Browser-checked local app at `http://localhost:5001/`: the Motors tab loaded 20 catalog motors, designation search rejected manufacturer-only text, G40/AeroTech/G/29 mm filters narrowed to AeroTech G40-7W, and no browser warnings/errors were produced.
+- Added builder split/stage markers between structural parts, with red markers in the design tree and rocket side view, persistence through save/export/import, simulation payload inclusion, and `stage_splits` result metadata.
+- Ran `bash scripts/run_pre_goal_checks.sh`: passed with 50 unit tests, split-marker smoke gates, frontend production build, and frontend lint.
+- Browser-checked local app at `http://localhost:5001/`: added Split 1 between the nose cone and recovery bay, saw one red tree marker and one red side-view marker, ran a simulation to completion, and produced no browser warnings/errors.

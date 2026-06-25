@@ -36,9 +36,11 @@ The active scenario matrix uses importable files in `examples/scenarios/`:
   - `/api/simulation/status`
 - Sample active pneumatic rocket simulation returns structured deterministic output.
 - Sample active pneumatic rocket simulation uses a motor thrust curve from the backend motor database.
+- Sample active pneumatic rocket simulation preserves builder split markers in `results.stage_splits`.
 - Frontend launch-site selection is wired to `/api/environment/launch-sites`.
 - Frontend setup exposes deterministic sensor, atmosphere, attitude, and pneumatic pressure noise settings.
 - Frontend motor search is wired to `/api/environment/motors` and must not contain a mock motor list.
+- Frontend design tree and rocket side-view drawing expose structural split markers.
 - Frontend results view renders live charts from trajectory, force, pressure, and active-system histories.
 - Frontend export actions include trajectory CSV, force/moment CSV, active-system CSV, and full JSON.
 - Frontend API configuration does not default to hardcoded cloud/GCP services for the local workflow.
@@ -64,6 +66,7 @@ The sample simulation must include:
 - `results.trajectory`
 - `results.force_history`
 - `results.moment_history`
+- `results.stage_splits`
 - `results.active_system`
 - `results.controller`
 

@@ -298,6 +298,58 @@ button:focus-visible {
   color: var(--muted);
 }
 
+.tree-add-split,
+.tree-split-marker {
+  margin: 3px 0 3px 19px;
+  min-height: 25px;
+  border-radius: 6px;
+  border: 1px dashed rgba(217, 81, 78, 0.42);
+  background: rgba(217, 81, 78, 0.06);
+}
+
+.tree-add-split {
+  width: calc(100% - 19px);
+  justify-content: flex-start;
+  color: #8f2f2d;
+  font-size: 11px;
+  padding: 4px 8px;
+}
+
+.tree-split-marker {
+  display: grid;
+  grid-template-columns: 14px minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 5px;
+}
+
+.tree-split-marker strong,
+.tree-split-marker em {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 11px;
+}
+
+.tree-split-marker em {
+  color: var(--muted);
+  font-style: normal;
+}
+
+.tree-split-marker button {
+  min-height: 22px;
+  padding: 2px 5px;
+  font-size: 10px;
+}
+
+.split-swatch {
+  width: 12px;
+  height: 2px;
+  background: var(--accent);
+  box-shadow: 0 -4px 0 rgba(217, 81, 78, 0.24), 0 4px 0 rgba(217, 81, 78, 0.24);
+}
+
 .tree-name {
   overflow: hidden;
   white-space: nowrap;
@@ -499,7 +551,8 @@ button:focus-visible {
 
 .cg-line,
 .cp-line,
-.landing-line {
+.landing-line,
+.split-line {
   stroke-width: 2;
   stroke-dasharray: 7 5;
 }
@@ -514,6 +567,14 @@ button:focus-visible {
 
 .landing-line {
   stroke: var(--violet);
+}
+
+.split-line {
+  stroke: var(--accent);
+}
+
+.split-marker text {
+  fill: #8f2f2d;
 }
 
 .marker-label {

@@ -857,11 +857,16 @@ class ActiveSimulationManager:
             touchdown_time=touchdown_time,
             landing_velocity=landing_velocity,
         )
+        stage_splits = self._build_stage_splits(
+            rocket_data.get("splitPoints") or rocket_data.get("stageSplits") or [],
+            components,
+        )
 
         return {
             "source": "active_pneumatic_local_dynamics",
             "model_version": self.model_version,
             "is_placeholder": False,
+            "stage_splits": stage_splits,
             "max_altitude": max_altitude,
             "max_velocity": max_velocity,
             "total_flight_time": total_time,
@@ -1782,6 +1787,59 @@ class ActiveSimulationManager:
         if total <= 0:
             total = self._as_float(rocket_data.get("totalHeight"), 680.0)
         return max(0.2, total / 1000.0 if total > 5 else total)
+
+    def _build_stage_splits(self, split_points: List[Dict], components: List[Dict]) -> List[Dict]:
+        if not isinstance(split_points, list):
+            return []
+
+        structural = []
+        cursor_m = 0.0
+        for component in components:
+            if str(component.get("type", "")).lower() in {"fins", "motor", "rail button"}:
+                continue
+            length = self._distance_m(self._first_value(component, ["length", "totalHeight"], 0.0), 0.0)
+            structural.append({
+                "id": str(component.get("id", "")),
+                "name": component.get("name") or component.get("type") or "Component",
+                "start_m": cursor_m,
+                "end_m": cursor_m + max(length, 0.0),
+            })
+            cursor_m += max(length, 0.0)
+
+        boundaries = {}
+        for index, component in enumerate(structural[:-1]):
+            next_component = structural[index + 1]
+            boundaries[component["id"]] = {
+                "after_component_id": component["id"],
+                "after_component_name": component["name"],
+                "before_component_id": next_component["id"],
+                "before_component_name": next_component["name"],
+                "position_m": component["end_m"],
+                "position_mm": component["end_m"] * 1000.0,
+            }
+
+        stage_splits = []
+        seen = set()
+        for index, split in enumerate(split_points):
+            if not isinstance(split, dict):
+                continue
+            after_component_id = str(
+                split.get("afterComponentId")
+                or split.get("after_component_id")
+                or split.get("componentId")
+                or ""
+            )
+            boundary = boundaries.get(after_component_id)
+            if not boundary or after_component_id in seen:
+                continue
+            seen.add(after_component_id)
+            stage_splits.append({
+                "id": str(split.get("id") or f"split-{index + 1}"),
+                "label": split.get("label") or split.get("name") or f"Split {len(stage_splits) + 1}",
+                **boundary,
+            })
+
+        return stage_splits
 
     def _rocket_diameter_m(self, components: List[Dict]) -> float:
         diameters = []

@@ -383,6 +383,57 @@ const layoutComponents = (components) => {
   return structural;
 };
 
+const getSplitBoundaries = (components) => {
+  const structural = layoutComponents(components);
+  return structural.slice(0, -1).map((component, index) => {
+    const next = structural[index + 1];
+    return {
+      id: `${component.id}->${next.id}`,
+      afterComponentId: String(component.id),
+      beforeComponentId: String(next.id),
+      afterName: component.name,
+      beforeName: next.name,
+      positionMm: component.end
+    };
+  });
+};
+
+const normalizeSplitPoints = (rawSplitPoints = [], components = []) => {
+  const boundaries = getSplitBoundaries(components);
+  const seen = new Set();
+  return (Array.isArray(rawSplitPoints) ? rawSplitPoints : []).reduce((items, point, index) => {
+    const afterComponentId = String(point.afterComponentId ?? point.after_component_id ?? point.componentId ?? '');
+    const boundary = boundaries.find((item) => item.afterComponentId === afterComponentId);
+    if (!boundary || seen.has(boundary.afterComponentId)) return items;
+    seen.add(boundary.afterComponentId);
+    items.push({
+      id: String(point.id || makeId('split')),
+      afterComponentId: boundary.afterComponentId,
+      label: point.label || point.name || `Split ${items.length + 1}`,
+      color: point.color || '#d9514e',
+      order: numberValue(point.order, index)
+    });
+    return items;
+  }, []);
+};
+
+const getSplitPointViews = (splitPoints = [], components = []) => {
+  const boundaries = getSplitBoundaries(components);
+  return normalizeSplitPoints(splitPoints, components)
+    .map((point, index) => {
+      const boundary = boundaries.find((item) => item.afterComponentId === String(point.afterComponentId));
+      if (!boundary) return null;
+      return {
+        ...point,
+        ...boundary,
+        label: point.label || `Split ${index + 1}`,
+        position_m: boundary.positionMm / 1000,
+        position_mm: boundary.positionMm
+      };
+    })
+    .filter(Boolean);
+};
+
 const noseCpFraction = (shape = 'ogive') => ({
   conical: 0.667,
   elliptical: 0.5,
@@ -682,7 +733,7 @@ const severityRank = {
 
 const componentTarget = (component, field) => (component ? `component.${component.id}.${field}` : null);
 
-const getDesignChecks = ({ components, metrics, config, landingSizing, activeEnvelope, guideAnalysis }) => {
+const getDesignChecks = ({ components, splitPoints = [], metrics, config, landingSizing, activeEnvelope, guideAnalysis }) => {
   const checks = [];
   const add = (severity, label, detail, targets) => {
     const targetList = (Array.isArray(targets) ? targets : [targets]).filter(Boolean);
@@ -707,6 +758,9 @@ const getDesignChecks = ({ components, metrics, config, landingSizing, activeEnv
 
   if (!motor) {
     add('error', 'Motor missing', 'Add a motor before simulation.', 'component.motor');
+  }
+  if (splitPoints.length !== getSplitPointViews(splitPoints, components).length) {
+    add('warn', 'Split marker', 'A split marker no longer sits between structural parts.', 'structure.splitPoints');
   }
 
   components.forEach((component) => {
@@ -1251,10 +1305,16 @@ const normalizeImportedDesign = (data) => {
   const incomingConfig = data.config || data.simulationConfig || {};
   const config = mergeConfig(defaultConfig, incomingConfig);
   const rocketOverrides = data.rocketOverrides || normalizeRocketOverrides(rocketData, data);
+  const components = normalizeImportedComponents(rawComponents);
+  const splitPoints = normalizeSplitPoints(
+    data.splitPoints || rocketData.splitPoints || data.stageSplits || rocketData.stageSplits,
+    components
+  );
   return {
     id: data.id || data.name || 'imported-design',
     description: data.description || '',
-    components: normalizeImportedComponents(rawComponents),
+    components,
+    splitPoints,
     config,
     rocketOverrides,
     simulationSetups: normalizeSimulationSetups(data.simulationSetups || data.simulations, config, rocketOverrides)
@@ -1586,8 +1646,9 @@ function RecoverySafetyPanel({ safety = {} }) {
   );
 }
 
-function RocketDrawing({ components, selectedId, setSelectedId, metrics, results }) {
+function RocketDrawing({ components, splitPoints, selectedId, setSelectedId, metrics, results }) {
   const structural = layoutComponents(components);
+  const splitViews = getSplitPointViews(splitPoints, components);
   const length = Math.max(metrics.totalLength, 1);
   const maxDiameter = Math.max(metrics.maxDiameter, 1);
   const viewWidth = 980;
@@ -1744,6 +1805,18 @@ function RocketDrawing({ components, selectedId, setSelectedId, metrics, results
             </g>
           );
         })}
+        {splitViews.map((split, index) => {
+          const splitX = xFor(split.positionMm);
+          const labelOffset = index % 2 === 0 ? 0 : 18;
+          return (
+            <g className="split-marker" key={split.id}>
+              <line x1={splitX} x2={splitX} y1="42" y2="238" className="split-line" />
+              <text x={splitX + 7} y={48 + labelOffset} className="marker-label">
+                {split.label} {formatNumber(split.positionMm, 0)} mm
+              </text>
+            </g>
+          );
+        })}
         <line x1={cgX} x2={cgX} y1="58" y2="226" className="cg-line" />
         <text x={cgX + 6} y="72" className="marker-label">CG</text>
         <line x1={cpX} x2={cpX} y1="58" y2="226" className="cp-line" />
@@ -1759,12 +1832,26 @@ function RocketDrawing({ components, selectedId, setSelectedId, metrics, results
   );
 }
 
-function DesignTree({ components, selectedId, setSelectedId, moveComponent, duplicateComponent, removeComponent }) {
+function DesignTree({
+  components,
+  splitPoints,
+  selectedId,
+  setSelectedId,
+  moveComponent,
+  duplicateComponent,
+  removeComponent,
+  addSplitPoint,
+  removeSplitPoint
+}) {
   const groups = [
     ['Airframe', components.filter((component) => structuralTypes.has(component.type) && component.type !== 'Landing System')],
     ['Motor and fins', components.filter((component) => ['Motor', 'Fins'].includes(component.type))],
     ['Recovery and landing', components.filter((component) => component.type === 'Landing System')]
   ];
+  const splitViews = getSplitPointViews(splitPoints, components);
+  const boundaries = getSplitBoundaries(components);
+  const splitByAfter = new Map(splitViews.map((point) => [point.afterComponentId, point]));
+  const boundaryByAfter = new Map(boundaries.map((boundary) => [boundary.afterComponentId, boundary]));
 
   return (
     <section className="left-section">
@@ -1775,18 +1862,48 @@ function DesignTree({ components, selectedId, setSelectedId, moveComponent, dupl
           <div className="tree-group" key={label}>
             <div className="tree-group-label">{label}</div>
             {items.map((component) => (
-              <div
-                key={component.id}
-                className={`tree-item ${selectedId === component.id ? 'active' : ''}`}
-                onClick={() => setSelectedId(component.id)}
-              >
-                <span className="part-swatch" style={{ backgroundColor: componentColor[component.type] || '#999' }} />
-                <span className="tree-name">{component.name}</span>
-                <button type="button" onClick={(event) => { event.stopPropagation(); moveComponent(component.id, -1); }}>Up</button>
-                <button type="button" onClick={(event) => { event.stopPropagation(); moveComponent(component.id, 1); }}>Down</button>
-                <button type="button" onClick={(event) => { event.stopPropagation(); duplicateComponent(component.id); }}>Copy</button>
-                <button type="button" onClick={(event) => { event.stopPropagation(); removeComponent(component.id); }}>Remove</button>
-              </div>
+              <React.Fragment key={component.id}>
+                <div
+                  className={`tree-item ${selectedId === component.id ? 'active' : ''}`}
+                  onClick={() => setSelectedId(component.id)}
+                >
+                  <span className="part-swatch" style={{ backgroundColor: componentColor[component.type] || '#999' }} />
+                  <span className="tree-name">{component.name}</span>
+                  <button type="button" onClick={(event) => { event.stopPropagation(); moveComponent(component.id, -1); }}>Up</button>
+                  <button type="button" onClick={(event) => { event.stopPropagation(); moveComponent(component.id, 1); }}>Down</button>
+                  <button type="button" onClick={(event) => { event.stopPropagation(); duplicateComponent(component.id); }}>Copy</button>
+                  <button type="button" onClick={(event) => { event.stopPropagation(); removeComponent(component.id); }}>Remove</button>
+                </div>
+                {boundaryByAfter.has(String(component.id)) && (
+                  splitByAfter.has(String(component.id)) ? (
+                    <div className="tree-split-marker">
+                      <span className="split-swatch" />
+                      <strong>{splitByAfter.get(String(component.id)).label}</strong>
+                      <em>{formatNumber(splitByAfter.get(String(component.id)).positionMm, 0)} mm</em>
+                      <button
+                        type="button"
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          removeSplitPoint(splitByAfter.get(String(component.id)).id);
+                        }}
+                      >
+                        Remove
+                      </button>
+                    </div>
+                  ) : (
+                    <button
+                      type="button"
+                      className="tree-add-split"
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        addSplitPoint(component.id);
+                      }}
+                    >
+                      Add split between {component.name} and {boundaryByAfter.get(String(component.id)).beforeName}
+                    </button>
+                  )
+                )}
+              </React.Fragment>
             ))}
           </div>
         ))}
@@ -3061,6 +3178,7 @@ function App() {
   const [message, setMessage] = useState('');
   const [result, setResult] = useState(null);
   const [comparisonResult, setComparisonResult] = useState(null);
+  const [splitPoints, setSplitPoints] = useState([]);
   const [simulationCases, setSimulationCases] = useState([]);
   const [selectedCaseId, setSelectedCaseId] = useState(null);
   const [simulationSetups, setSimulationSetups] = useState(() => createInitialSimulationSetups(defaultConfig, {}));
@@ -3080,14 +3198,16 @@ function App() {
   const landingSizing = useMemo(() => getLandingSizing(metrics, config), [metrics, config]);
   const activeEnvelope = useMemo(() => getActiveEnvelope(metrics, config), [metrics, config]);
   const guideAnalysis = useMemo(() => getLaunchGuideAnalysis(metrics, config), [metrics, config]);
+  const splitPointViews = useMemo(() => getSplitPointViews(splitPoints, components), [splitPoints, components]);
   const designChecks = useMemo(() => getDesignChecks({
     components,
+    splitPoints,
     metrics,
     config,
     landingSizing,
     activeEnvelope,
     guideAnalysis
-  }), [components, metrics, config, landingSizing, activeEnvelope, guideAnalysis]);
+  }), [components, splitPoints, metrics, config, landingSizing, activeEnvelope, guideAnalysis]);
   const fieldChecks = useMemo(() => getFieldCheckMap(designChecks), [designChecks]);
   const selectedComponent = components.find((component) => component.id === selectedId);
   const selectedSimulationSetup = simulationSetups.find((setup) => setup.id === selectedSetupId);
@@ -3188,6 +3308,10 @@ function App() {
     }));
   }, [components]);
 
+  useEffect(() => {
+    setSplitPoints((current) => normalizeSplitPoints(current, components));
+  }, [components]);
+
   const updateComponent = (id, patch) => {
     setComponents((current) => current.map((component) => (
       component.id === id ? { ...component, ...patch } : component
@@ -3205,6 +3329,23 @@ function App() {
     setComponents((current) => current.map((component) => (
       component.type === 'Landing System' ? { ...component, [key]: value } : component
     )));
+  };
+
+  const addSplitPoint = (afterComponentId) => {
+    setSplitPoints((current) => normalizeSplitPoints([
+      ...current,
+      {
+        id: makeId('split'),
+        afterComponentId: String(afterComponentId),
+        label: `Split ${current.length + 1}`
+      }
+    ], components));
+    staleResults();
+  };
+
+  const removeSplitPoint = (id) => {
+    setSplitPoints((current) => current.filter((point) => point.id !== id));
+    staleResults();
   };
 
   const addComponent = (type) => {
@@ -3320,6 +3461,7 @@ function App() {
 
     return {
       rocketComponents: components,
+      rocketSplitPoints: splitPointViews,
       rocketWeight: runMetrics.mass,
       rocketCG: runMetrics.cg,
       totalHeight: runMetrics.totalLength,
@@ -3519,12 +3661,14 @@ function App() {
       components,
       config,
       rocketOverrides,
+      splitPoints,
       simulationSetups,
       rocketData: {
         weight: metrics.mass,
         cg: metrics.cg,
         totalHeight: metrics.totalLength,
-        components
+        components,
+        splitPoints
       },
       simulationConfig: config,
       savedAt: new Date().toISOString()
@@ -3543,6 +3687,7 @@ function App() {
       const data = JSON.parse(raw);
       const imported = normalizeImportedDesign(data);
       setComponents(imported.components);
+      setSplitPoints(imported.splitPoints);
       setConfig(imported.config);
       setRocketOverrides(imported.rocketOverrides);
       setSimulationSetups(imported.simulationSetups);
@@ -3565,10 +3710,12 @@ function App() {
         weight: metrics.mass,
         cg: metrics.cg,
         totalHeight: metrics.totalLength,
-        components
+        components,
+        splitPoints
       },
       simulationConfig: config,
       components,
+      splitPoints,
       config,
       rocketOverrides,
       simulationSetups,
@@ -3755,6 +3902,7 @@ function App() {
         const data = JSON.parse(await file.text());
         const imported = normalizeImportedDesign(data);
         setComponents(imported.components);
+        setSplitPoints(imported.splitPoints);
         setConfig(imported.config);
         setRocketOverrides(imported.rocketOverrides);
         setSimulationSetups(imported.simulationSetups);
@@ -3775,6 +3923,7 @@ function App() {
           id: String(component.id || makeId(component.type || 'component'))
         }));
         setComponents(imported.length ? imported : defaultComponents);
+        setSplitPoints([]);
         setRocketOverrides({});
         const nextSetups = createInitialSimulationSetups(defaultConfig, {});
         setSimulationSetups(nextSetups);
@@ -3797,6 +3946,7 @@ function App() {
   const newDesign = () => {
     const nextSetups = createInitialSimulationSetups(defaultConfig, {});
     setComponents(defaultComponents.map((component) => ({ ...component, id: makeId(component.type.toLowerCase().replace(/[^a-z0-9]+/g, '-')) })));
+    setSplitPoints([]);
     setConfig(defaultConfig);
     setRocketOverrides({});
     setSimulationSetups(nextSetups);
@@ -3928,11 +4078,14 @@ function App() {
         <aside className="left-rail">
           <DesignTree
             components={components}
+            splitPoints={splitPoints}
             selectedId={selectedId}
             setSelectedId={setSelectedId}
             moveComponent={moveComponent}
             duplicateComponent={duplicateComponent}
             removeComponent={removeComponent}
+            addSplitPoint={addSplitPoint}
+            removeSplitPoint={removeSplitPoint}
           />
           <ComponentPalette addComponent={addComponent} />
         </aside>
@@ -3949,6 +4102,7 @@ function App() {
 
           <RocketDrawing
             components={components}
+            splitPoints={splitPoints}
             selectedId={selectedId}
             setSelectedId={setSelectedId}
             metrics={metrics}

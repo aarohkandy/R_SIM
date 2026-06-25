@@ -9,6 +9,7 @@
 - Put rocket geometry, motor, environment, controller, and results in clear steps.
 - Let users save, restore, duplicate, and run named simulation setups from the current rocket.
 - Let users set axial placement for fins, motors, and rail buttons, and reflect those positions in drawing, mass, and CP analysis.
+- Let users add and remove split markers only between structural parts, with red markers in both the design tree and rocket side view.
 - Let users set the active airbrake force station and see its moment arm against CG before and after simulation.
 - Provide a built-in active demo rocket and accept full scenario JSON files with both `rocketData` and `simulationConfig`.
 - Let users import OpenRocket `.ork` designs from the builder view and continue editing/simulating the imported components.

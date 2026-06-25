@@ -109,6 +109,22 @@ class ActiveSimulationTests(unittest.TestCase):
         self.assertGreater(len(active["history"]), 5)
         self.assertGreater(len(result["trajectory"]), 5)
 
+    def test_stage_split_markers_are_reported(self):
+        manager = ActiveSimulationManager()
+        rocket = sample_rocket()
+        rocket["splitPoints"] = [
+            {"id": "split-body", "afterComponentId": "1", "label": "Avionics split"},
+            {"id": "bad-split", "afterComponentId": "3", "label": "Fin split"},
+        ]
+        result = manager.submit_cfd_simulation(rocket, base_config())["results"]
+        stage_splits = result["stage_splits"]
+
+        self.assertEqual(len(stage_splits), 1)
+        self.assertEqual(stage_splits[0]["label"], "Avionics split")
+        self.assertEqual(stage_splits[0]["after_component_name"], "Nose Cone")
+        self.assertEqual(stage_splits[0]["before_component_name"], "Body Tube")
+        self.assertAlmostEqual(stage_splits[0]["position_mm"], 120.0)
+
     def test_active_drag_changes_flight_profile(self):
         manager = ActiveSimulationManager()
         passive_config = base_config(enabled=False)
