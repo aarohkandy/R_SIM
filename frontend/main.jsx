@@ -1404,6 +1404,91 @@ function LineChart({ title, series, yUnit = '', compact = false }) {
   );
 }
 
+function LandingFootprintMap({ footprint = {} }) {
+  const readPoint = (key) => {
+    const x = footprint[`${key}_x_m`];
+    const y = footprint[`${key}_y_m`];
+    if (x === null || x === undefined || y === null || y === undefined) return null;
+    const parsedX = Number(x);
+    const parsedY = Number(y);
+    if (!Number.isFinite(parsedX) || !Number.isFinite(parsedY)) return null;
+    return { x: parsedX, y: parsedY };
+  };
+  const points = [
+    { key: 'launch', label: 'Launch', color: '#343a40', ...readPoint('launch') },
+    { key: 'apogee', label: 'Apogee', color: '#4d908e', ...readPoint('apogee') },
+    { key: 'drogue', label: 'Drogue', color: '#f2a541', ...readPoint('drogue_deploy') },
+    { key: 'main', label: 'Main', color: '#7b61ff', ...readPoint('main_deploy') },
+    { key: 'touchdown', label: 'Touchdown', color: '#d9514e', ...readPoint('touchdown') }
+  ].filter((point) => Number.isFinite(point.x) && Number.isFinite(point.y));
+
+  if (points.length < 2) {
+    return <div className="chart-empty">No landing footprint data yet</div>;
+  }
+
+  const width = 720;
+  const height = 220;
+  const pad = { top: 28, right: 28, bottom: 38, left: 54 };
+  const xs = points.map((point) => point.x);
+  const ys = points.map((point) => point.y);
+  const xSpan = Math.max(Math.max(...xs) - Math.min(...xs), 1);
+  const ySpan = Math.max(Math.max(...ys) - Math.min(...ys), 1);
+  const xMin = Math.min(...xs) - xSpan * 0.1;
+  const xMax = Math.max(...xs) + xSpan * 0.1;
+  const yMin = Math.min(...ys) - ySpan * 0.2;
+  const yMax = Math.max(...ys) + ySpan * 0.2;
+  const sx = (x) => pad.left + ((x - xMin) / Math.max(xMax - xMin, 1e-9)) * (width - pad.left - pad.right);
+  const sy = (y) => pad.top + (1 - ((y - yMin) / Math.max(yMax - yMin, 1e-9))) * (height - pad.top - pad.bottom);
+  const xTicks = [xMin, (xMin + xMax) / 2, xMax];
+  const yTicks = [yMin, (yMin + yMax) / 2, yMax];
+  const path = points.map((point) => `${sx(point.x).toFixed(2)},${sy(point.y).toFixed(2)}`).join(' ');
+
+  return (
+    <div className="footprint-map">
+      <div className="footprint-legend">
+        {points.map((point) => (
+          <span key={point.key}><i style={{ backgroundColor: point.color }} />{point.label}</span>
+        ))}
+      </div>
+      <svg viewBox={`0 0 ${width} ${height}`} className="footprint-svg" role="img" aria-label="Landing footprint">
+        {xTicks.map((tick) => (
+          <g key={`x-${tick}`}>
+            <line x1={sx(tick)} x2={sx(tick)} y1={pad.top} y2={height - pad.bottom} className="gridline" />
+            <text x={sx(tick)} y={height - 13} textAnchor="middle">{formatNumber(tick, 1)} m</text>
+          </g>
+        ))}
+        {yTicks.map((tick) => (
+          <g key={`y-${tick}`}>
+            <line x1={pad.left} x2={width - pad.right} y1={sy(tick)} y2={sy(tick)} className="gridline" />
+            <text x={pad.left - 8} y={sy(tick) + 4} textAnchor="end">{formatNumber(tick, 1)}</text>
+          </g>
+        ))}
+        <line x1={pad.left} y1={height - pad.bottom} x2={width - pad.right} y2={height - pad.bottom} className="axis" />
+        <line x1={pad.left} y1={pad.top} x2={pad.left} y2={height - pad.bottom} className="axis" />
+        <text x="10" y="18">crossrange</text>
+        <text x={width - pad.right} y={height - 6} textAnchor="end">downrange</text>
+        <polyline className="footprint-path" points={path} />
+        {points.map((point, index) => {
+          const rightSide = sx(point.x) > width * 0.62;
+          const yOffset = index % 2 === 0 ? -10 : 16;
+          return (
+            <g className={`footprint-point ${point.key}`} key={point.key}>
+              <circle cx={sx(point.x)} cy={sy(point.y)} r={5} style={{ fill: point.color }} />
+              <text
+                x={sx(point.x) + (rightSide ? -8 : 8)}
+                y={sy(point.y) + yOffset}
+                textAnchor={rightSide ? 'end' : 'start'}
+              >
+                {point.label}
+              </text>
+            </g>
+          );
+        })}
+      </svg>
+    </div>
+  );
+}
+
 function RocketDrawing({ components, selectedId, setSelectedId, metrics, results }) {
   const structural = layoutComponents(components);
   const length = Math.max(metrics.totalLength, 1);
@@ -2501,6 +2586,7 @@ function ResultsPanel({
   const forceHistory = data?.force_history || [];
   const momentHistory = data?.moment_history || [];
   const touchdown = data?.landing_system;
+  const footprint = data?.landing_footprint || {};
   const launchGuide = data?.launch_guide;
   const recoveryTiming = data?.recovery_timing;
   const events = data?.flight_events || [];
@@ -2596,6 +2682,18 @@ function ResultsPanel({
           </div>
         </div>
       )}
+      <div className="footprint-panel">
+        <div className="comparison-title">Landing footprint</div>
+        <div className="comparison-grid footprint-stats">
+          <div><span>Touchdown range</span><strong>{formatNumber(footprint.touchdown_range_m, 1)} m</strong></div>
+          <div><span>Bearing</span><strong>{formatNumber(footprint.touchdown_bearing_deg, 1)} deg</strong></div>
+          <div><span>Crossrange</span><strong>{formatNumber(footprint.touchdown_y_m, 1)} m</strong></div>
+          <div><span>Main drift</span><strong>{formatNumber(footprint.drift_after_main_deploy_m, 1)} m</strong></div>
+          <div><span>Drogue drift</span><strong>{formatNumber(footprint.drift_after_drogue_deploy_m, 1)} m</strong></div>
+          <div><span>Descent time</span><strong>{formatNumber(footprint.descent_time_s, 2)} s</strong></div>
+        </div>
+        <LandingFootprintMap footprint={footprint} />
+      </div>
       <div className="tuning-panel">
         <div className="comparison-title">Tuning notes</div>
         <div className="tuning-list">
@@ -3357,6 +3455,10 @@ function App() {
           'time',
           'phase',
           'altitude',
+          'downrange_x',
+          'crossrange_y',
+          'range_m',
+          'bearing_deg',
           'velocity_z',
           'deployed',
           'deployment',

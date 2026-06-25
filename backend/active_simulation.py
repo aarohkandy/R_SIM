@@ -64,6 +64,18 @@ class ActiveSimulationManager:
         return max(low, min(high, value))
 
     @staticmethod
+    def _distance_xy(x: Optional[float], y: Optional[float]) -> Optional[float]:
+        if x is None or y is None:
+            return None
+        return math.sqrt(x * x + y * y)
+
+    @staticmethod
+    def _bearing_deg(x: Optional[float], y: Optional[float]) -> Optional[float]:
+        if x is None or y is None or (abs(x) < 1e-9 and abs(y) < 1e-9):
+            return None
+        return (math.degrees(math.atan2(y, x)) + 360.0) % 360.0
+
+    @staticmethod
     def _normalize_deploy_event(value, default: str) -> str:
         raw = str(value or default).strip().lower().replace("-", "_").replace(" ", "_")
         aliases = {
@@ -381,11 +393,17 @@ class ActiveSimulationManager:
         landing_deployed = False
         landing_deploy_time = None
         landing_deploy_altitude = None
+        landing_deploy_x = None
+        landing_deploy_y = None
         drogue_deployed = False
         drogue_deploy_time = None
         drogue_deploy_altitude = None
+        drogue_deploy_x = None
+        drogue_deploy_y = None
 
         max_altitude = altitude
+        apogee_x = x
+        apogee_y = y
         max_velocity = 0.0
         max_drag_force = 0.0
         max_net_force = 0.0
@@ -439,6 +457,8 @@ class ActiveSimulationManager:
                     drogue_deployed = True
                     drogue_deploy_time = t
                     drogue_deploy_altitude = altitude
+                    drogue_deploy_x = x
+                    drogue_deploy_y = y
 
                 if (
                     not landing_deployed
@@ -455,6 +475,8 @@ class ActiveSimulationManager:
                     landing_deployed = True
                     landing_deploy_time = t
                     landing_deploy_altitude = altitude
+                    landing_deploy_x = x
+                    landing_deploy_y = y
 
             sensor = {
                 "timestamp": t,
@@ -584,6 +606,8 @@ class ActiveSimulationManager:
             if altitude >= max_altitude:
                 max_altitude = altitude
                 apogee_time = t
+                apogee_x = x
+                apogee_y = y
             max_velocity = max(max_velocity, math.sqrt(vx**2 + vy**2 + velocity_z**2))
             max_drag_force = max(max_drag_force, abs(drag_force))
             max_net_force = max(max_net_force, math.sqrt(net_force_x**2 + net_force_y**2 + net_force_z**2))
@@ -647,6 +671,7 @@ class ActiveSimulationManager:
                     "actuator_pressure": round(actuator_pressure, 2),
                 }
                 trajectory.append(sample)
+                sample_bearing = self._bearing_deg(x, y)
                 active_history.append({
                     "time": sample["time"],
                     "tank_pressure": sample["tank_pressure"],
@@ -666,6 +691,10 @@ class ActiveSimulationManager:
                     "main_deployment": sample["main_deployment"],
                     "phase": "main" if landing_deployed else "drogue" if drogue_deployed else "stowed",
                     "altitude": sample["altitude"],
+                    "downrange_x": sample["downrange_x"],
+                    "crossrange_y": sample["crossrange_y"],
+                    "range_m": round(self._distance_xy(x, y), 4),
+                    "bearing_deg": round(sample_bearing, 4) if sample_bearing is not None else None,
                     "velocity_z": sample["velocity_z"],
                 })
                 controller_history.append({
@@ -720,6 +749,41 @@ class ActiveSimulationManager:
         if touchdown_time is None and altitude <= 0.0:
             touchdown_time = total_time
         downrange = math.sqrt(x**2 + y**2)
+        touchdown_bearing = self._bearing_deg(x, y)
+        main_drift = (
+            self._distance_xy(x - landing_deploy_x, y - landing_deploy_y)
+            if landing_deploy_x is not None and landing_deploy_y is not None
+            else None
+        )
+        drogue_drift = (
+            self._distance_xy(x - drogue_deploy_x, y - drogue_deploy_y)
+            if drogue_deploy_x is not None and drogue_deploy_y is not None
+            else None
+        )
+        descent_time = touchdown_time - apogee_time if touchdown_time is not None else None
+        landing_footprint = {
+            "launch_x_m": 0.0,
+            "launch_y_m": 0.0,
+            "apogee_x_m": apogee_x,
+            "apogee_y_m": apogee_y,
+            "apogee_range_m": self._distance_xy(apogee_x, apogee_y),
+            "apogee_bearing_deg": self._bearing_deg(apogee_x, apogee_y),
+            "drogue_deploy_x_m": drogue_deploy_x,
+            "drogue_deploy_y_m": drogue_deploy_y,
+            "drogue_deploy_range_m": self._distance_xy(drogue_deploy_x, drogue_deploy_y),
+            "drogue_deploy_bearing_deg": self._bearing_deg(drogue_deploy_x, drogue_deploy_y),
+            "main_deploy_x_m": landing_deploy_x,
+            "main_deploy_y_m": landing_deploy_y,
+            "main_deploy_range_m": self._distance_xy(landing_deploy_x, landing_deploy_y),
+            "main_deploy_bearing_deg": self._bearing_deg(landing_deploy_x, landing_deploy_y),
+            "touchdown_x_m": x,
+            "touchdown_y_m": y,
+            "touchdown_range_m": downrange,
+            "touchdown_bearing_deg": touchdown_bearing,
+            "drift_after_main_deploy_m": main_drift,
+            "drift_after_drogue_deploy_m": drogue_drift,
+            "descent_time_s": descent_time,
+        }
         aero_center = self._aerodynamic_center_m(components, total_length_m, diameter_m)
         cp_m = aero_center["cp_m"]
         stability_margin = (cp_m - cg_m) / diameter_m
@@ -759,6 +823,7 @@ class ActiveSimulationManager:
             "apogee_time": apogee_time,
             "landing_velocity": landing_velocity,
             "downrange_distance": downrange,
+            "landing_footprint": landing_footprint,
             "motor_thrust": thrust_n,
             "motor_burn_time": burn_time_s,
             "motor_delay": motor_delay_s,
@@ -816,10 +881,18 @@ class ActiveSimulationManager:
                 "main_deploy_event": landing["main_deploy_event"],
                 "deploy_time": landing_deploy_time,
                 "deploy_actual_altitude_m": landing_deploy_altitude,
+                "deploy_x_m": landing_deploy_x,
+                "deploy_y_m": landing_deploy_y,
+                "deploy_range_m": landing_footprint["main_deploy_range_m"],
+                "deploy_bearing_deg": landing_footprint["main_deploy_bearing_deg"],
                 "drogue_deploy_event": landing["drogue_deploy_event"],
                 "drogue_deploy_altitude_target_m": landing["drogue_deploy_altitude_m"],
                 "drogue_deploy_time": drogue_deploy_time,
                 "drogue_deploy_altitude_m": drogue_deploy_altitude,
+                "drogue_deploy_x_m": drogue_deploy_x,
+                "drogue_deploy_y_m": drogue_deploy_y,
+                "drogue_deploy_range_m": landing_footprint["drogue_deploy_range_m"],
+                "drogue_deploy_bearing_deg": landing_footprint["drogue_deploy_bearing_deg"],
                 "drag_area_m2": landing["drag_area_m2"],
                 "drag_coefficient": landing["drag_coefficient"],
                 "drogue_drag_area_m2": landing["drogue_drag_area_m2"],
@@ -827,6 +900,13 @@ class ActiveSimulationManager:
                 "max_safe_velocity_mps": landing["max_safe_velocity_mps"],
                 "touchdown_velocity_mps": landing_velocity,
                 "touchdown_time": touchdown_time,
+                "touchdown_x_m": x,
+                "touchdown_y_m": y,
+                "touchdown_range_m": downrange,
+                "touchdown_bearing_deg": touchdown_bearing,
+                "drift_after_main_deploy_m": main_drift,
+                "drift_after_drogue_deploy_m": drogue_drift,
+                "descent_time_s": descent_time,
                 "touchdown_status": "safe" if landing_velocity <= landing["max_safe_velocity_mps"] else "hard",
                 "history": landing_history,
             },

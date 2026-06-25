@@ -65,3 +65,6 @@
 - Added editable axial placement for fins, motors, and rail buttons so drawing, mass properties, frontend CP analysis, and backend CP exports honor component location along the rocket.
 - Added active airbrake force-station controls and backend moment-arm reporting so airbrake placement affects moment histories and result exports.
 - Added selected-motor thrust curve inspection and editing, including curve summary, charting, sampled point editing, average-curve generation, and backend curve-owned impulse validation.
+- Added recovery footprint output and a landing-footprint results panel with touchdown range, bearing, crossrange, descent time, and drift after main/drogue deployment.
+- Ran `bash scripts/run_pre_goal_checks.sh`: passed with 42 unit tests, backend API smoke including touchdown range, frontend production build, and frontend lint.
+- Browser-checked local app at `http://localhost:5001/`: ran a simulation, rendered the landing footprint map with launch/apogee/main/touchdown points, showed touchdown range 62.3 m, and produced no browser warnings/errors.

@@ -8,6 +8,7 @@
 - Write controller code that receives simulated sensor data and commands the active system.
 - Add deterministic or seeded noise for sensors, atmosphere, actuator response, and pressure behavior.
 - Run a simulation and inspect trajectory, stability, controller, actuator, pressure, active-drag, moment, and landing outputs.
+- Inspect recovery footprint output with touchdown range, bearing, deployment positions, descent time, and drift after landing-system deployment.
 
 ## Current Requirements
 
@@ -23,4 +24,5 @@
 - C++ controller code must compile before it is used by an active simulation.
 - Pneumatic outputs must show pressure use, actuator movement, and surface deployment when active control commands it.
 - Active airbrake location must be editable, validated against rocket length, and reflected in moment outputs.
+- Landing outputs must include recovery footprint data and a visible touchdown/drift analysis in the results UI.
 - Importable scenario files in `examples/scenarios/` must keep passive, active, warning, and invalid-input behavior reproducible.

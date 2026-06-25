@@ -1394,6 +1394,7 @@ button:focus-visible {
 .comparison-panel,
 .case-panel,
 .tuning-panel,
+.footprint-panel,
 .event-panel {
   border: 1px solid var(--line);
   border-radius: 8px;
@@ -1448,6 +1449,77 @@ button:focus-visible {
   display: block;
   margin-top: 3px;
   font-size: 15px;
+}
+
+.footprint-stats {
+  border-bottom: 1px solid var(--line);
+}
+
+.footprint-map {
+  padding: 8px 9px 10px;
+}
+
+.footprint-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px 12px;
+  align-items: center;
+  margin-bottom: 6px;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.footprint-legend span {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-width: 0;
+}
+
+.footprint-legend i {
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  display: inline-block;
+}
+
+.footprint-svg {
+  width: 100%;
+  height: auto;
+  min-height: 150px;
+  display: block;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: #fbfcfd;
+}
+
+.footprint-svg text {
+  fill: var(--muted);
+  font-size: 11px;
+  font-weight: 750;
+}
+
+.footprint-path {
+  fill: none;
+  stroke: #28313d;
+  stroke-width: 2.25;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.footprint-point circle {
+  stroke: #fff;
+  stroke-width: 2;
+}
+
+.footprint-point text {
+  fill: #28313d;
+  paint-order: stroke;
+  stroke: #fbfcfd;
+  stroke-width: 3px;
+  stroke-linejoin: round;
 }
 
 .event-list {

@@ -16,4 +16,5 @@
 - Show selected motor thrust curves with impulse, burn-time, peak-thrust, and editable sampled points.
 - Surface warnings next to the inputs that caused them.
 - Show trajectory, force, pressure, drag, and active-system plots backed by the local simulation histories.
-- Support exporting trajectory CSV, force/moment CSV, active-system CSV, and the full JSON report.
+- Show landing footprint results with touchdown range, bearing, crossrange, descent time, and recovery drift.
+- Support exporting trajectory CSV, force/moment CSV, active-system CSV, recovery CSV, and the full JSON report.

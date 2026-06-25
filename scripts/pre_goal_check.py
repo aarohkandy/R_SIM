@@ -83,6 +83,9 @@ def main() -> int:
     require("Simplify to edit" in frontend_source, "Frontend motor curve editor is missing sampled editing controls.")
     require("motorPatchFromCurve" in frontend_source, "Frontend motor curve edits do not sync motor impulse fields.")
     require("Motor thrust curve must include at least two valid time/thrust points." in active_sim_source, "Backend does not reject invalid supplied thrust curves.")
+    require("LandingFootprintMap" in frontend_source, "Frontend results view is missing landing footprint map.")
+    require("landing_footprint" in active_sim_source, "Backend does not report landing footprint output.")
+    require("drift_after_main_deploy_m" in active_sim_source, "Backend does not report recovery drift after main deployment.")
     database_motor = next(
         (motor for motor in motors.get("motors", []) if motor.get("designation") == "Estes C6-5"),
         motors["motors"][0],
@@ -220,6 +223,15 @@ ControlOutput control_function(SensorData sensor_data) {
                 "kd": 0.01,
                 "minimumCommand": 0.03,
             },
+            "landingSystem": {
+                "enabled": True,
+                "type": "main_parachute",
+                "mainDeployEvent": "altitude",
+                "deployAltitude": 80,
+                "dragArea": 0.18,
+                "dragCoefficient": 1.55,
+                "maxSafeVelocity": 7.5,
+            },
             "noise": {
                 "seed": 20260625,
                 "altitudeStd": 0.15,
@@ -260,6 +272,10 @@ ControlOutput control_function(SensorData sensor_data) {
     require(len(results.get("trajectory", [])) > 5, "Trajectory history is missing or too short.")
     require(len(results.get("force_history", [])) > 5, "Force history is missing or too short.")
     require(len(results.get("moment_history", [])) > 5, "Moment history is missing or too short.")
+    landing_footprint = results.get("landing_footprint") or {}
+    require(landing_footprint.get("touchdown_range_m") is not None, "Landing footprint touchdown range is missing.")
+    require(landing_footprint.get("touchdown_bearing_deg") is not None, "Landing footprint touchdown bearing is missing.")
+    require(landing_footprint.get("drift_after_main_deploy_m") is not None, "Landing footprint main-deployment drift is missing.")
     first_sample = results["trajectory"][0]
     for key in ("net_force_z", "thrust_force", "pitch_moment", "angular_velocity_y_deg_s", "drag_coefficient"):
         require(key in first_sample, f"Trajectory sample missing {key}: {first_sample}")
@@ -285,6 +301,7 @@ ControlOutput control_function(SensorData sensor_data) {
         "final_tank_kpa": round(active_system["tank_pressure_final"] / 1000, 1),
         "force_samples": len(results["force_history"]),
         "moment_samples": len(results["moment_history"]),
+        "touchdown_range": round(landing_footprint["touchdown_range_m"], 2),
         "source": results["source"],
     }
     print(json.dumps(summary, indent=2, sort_keys=True))

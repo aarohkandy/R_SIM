@@ -306,6 +306,21 @@ class ActiveSimulationTests(unittest.TestCase):
         self.assertLess(with_landing["landing_velocity"], without_landing["landing_velocity"])
         self.assertGreater(len(with_landing["landing_system"]["history"]), 5)
 
+    def test_landing_footprint_reports_touchdown_and_recovery_drift(self):
+        manager = ActiveSimulationManager()
+        result = manager.submit_cfd_simulation(sample_rocket(), base_config())["results"]
+        footprint = result["landing_footprint"]
+        landing = result["landing_system"]
+
+        self.assertAlmostEqual(footprint["touchdown_range_m"], result["downrange_distance"], places=6)
+        self.assertIsNotNone(footprint["apogee_range_m"])
+        self.assertIsNotNone(footprint["touchdown_bearing_deg"])
+        self.assertIsNotNone(footprint["main_deploy_range_m"])
+        self.assertIsNotNone(footprint["drift_after_main_deploy_m"])
+        self.assertGreaterEqual(footprint["drift_after_main_deploy_m"], 0)
+        self.assertEqual(landing["touchdown_range_m"], footprint["touchdown_range_m"])
+        self.assertEqual(landing["touchdown_bearing_deg"], footprint["touchdown_bearing_deg"])
+
     def test_drogue_main_recovery_has_two_deploy_events(self):
         config = base_config()
         config["landingSystem"].update({

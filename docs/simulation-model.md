@@ -11,6 +11,7 @@ This local model is not CFD and is not flight certification. Its output is marke
 - Motor components may provide `thrustCurve` points as `{time, thrust}` records or `[time, thrust]` pairs. The local model linearly interpolates thrust, uses the integrated curve area as total impulse, and reports `thrust_profile.source: curve`.
 - Simulation config may provide `aerodynamics.baseDragCoefficient` and `aerodynamics.activeDragCoefficientTable` points with deployment-to-`cdIncrement` calibration. Without a table, the model falls back to surface-area drag coupling.
 - Output includes `trajectory`, `force_history`, and `moment_history` samples so the UI/export path can inspect net forces, thrust, drag, angular rates, and pitch/yaw/roll moments.
+- Output includes `landing_footprint` and recovery history ground-track fields so the UI/export path can inspect touchdown range, bearing, deployment points, descent time, and drift after recovery deployment.
 
 ## Target Model Direction
 
@@ -24,5 +25,5 @@ This local model is not CFD and is not flight certification. Its output is marke
 ## Required Future Outputs
 
 - Time history of position, velocity, attitude, angular rates, forces, and moments.
-- Apogee, max velocity, flight time, landing/descent summary, and warnings.
+- Apogee, max velocity, flight time, landing/descent summary, recovery footprint, and warnings.
 - Active-system state: tank pressure, valve commands, actuator stroke, surface deployment, and controller outputs.
