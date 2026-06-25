@@ -228,6 +228,30 @@ class ActiveSimulationTests(unittest.TestCase):
         self.assertLess(with_landing["landing_velocity"], without_landing["landing_velocity"])
         self.assertGreater(len(with_landing["landing_system"]["history"]), 5)
 
+    def test_drogue_main_recovery_has_two_deploy_events(self):
+        config = base_config()
+        config["landingSystem"].update({
+            "type": "drogue_main",
+            "deployAltitude": 45,
+            "dragArea": 0.18,
+            "drogueDragArea": 0.035,
+            "drogueDragCoefficient": 1.25,
+        })
+        manager = ActiveSimulationManager()
+        result = manager.submit_cfd_simulation(sample_rocket(), config)["results"]
+        landing = result["landing_system"]
+        event_names = [event["name"] for event in result["flight_events"]]
+
+        self.assertEqual(landing["type"], "drogue_main")
+        self.assertTrue(landing["drogue_deployed"])
+        self.assertTrue(landing["main_deployed"])
+        self.assertIsNotNone(landing["drogue_deploy_time"])
+        self.assertIsNotNone(landing["deploy_time"])
+        self.assertLess(landing["drogue_deploy_time"], landing["deploy_time"])
+        self.assertIn("Drogue deploy", event_names)
+        self.assertIn("Main deploy", event_names)
+        self.assertTrue(any(row["phase"] == "drogue" for row in landing["history"]))
+
     def test_invalid_landing_system_is_rejected(self):
         config = base_config()
         config["landingSystem"]["dragArea"] = 0

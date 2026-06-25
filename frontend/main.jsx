@@ -127,6 +127,8 @@ const componentDefaults = {
     deployAltitude: 120,
     dragArea: 0.24,
     dragCoefficient: 1.55,
+    drogueDragArea: 0.04,
+    drogueDragCoefficient: 1.25,
     maxSafeVelocity: 7.5
   },
   'Rail Button': {
@@ -205,6 +207,8 @@ const defaultConfig = {
     deployAltitude: 120,
     dragArea: 0.24,
     dragCoefficient: 1.55,
+    drogueDragArea: 0.04,
+    drogueDragCoefficient: 1.25,
     maxSafeVelocity: 7.5
   },
   aerodynamics: {
@@ -1169,6 +1173,8 @@ function ComponentInspector({ component, updateComponent }) {
             <Field label="Deploy altitude" value={component.deployAltitude} unit="m" onChange={(value) => set('deployAltitude', value)} />
             <Field label="Drag area" value={component.dragArea} unit="m2" step="0.01" onChange={(value) => set('dragArea', value)} />
             <Field label="Drag coefficient" value={component.dragCoefficient} step="0.01" onChange={(value) => set('dragCoefficient', value)} />
+            <Field label="Drogue area" value={component.drogueDragArea ?? 0.04} unit="m2" step="0.005" onChange={(value) => set('drogueDragArea', value)} />
+            <Field label="Drogue Cd" value={component.drogueDragCoefficient ?? 1.25} step="0.01" onChange={(value) => set('drogueDragCoefficient', value)} />
             <Field label="Safe touchdown" value={component.maxSafeVelocity} unit="m/s" step="0.1" onChange={(value) => set('maxSafeVelocity', value)} />
           </>
         )}
@@ -1319,6 +1325,11 @@ function ActiveSetup({ config, setConfig, syncAirbrake }) {
 function LandingSetup({ config, setConfig, syncLanding, metrics }) {
   const landing = config.landingSystem;
   const sizing = getLandingSizing(metrics, config);
+  const drogueSizing = getLandingSizing(metrics, config, {
+    dragArea: landing.drogueDragArea,
+    dragCoefficient: landing.drogueDragCoefficient,
+    maxSafeVelocity: 25
+  });
   const setLanding = (key, value) => {
     setConfig((current) => ({
       ...current,
@@ -1351,9 +1362,15 @@ function LandingSetup({ config, setConfig, syncLanding, metrics }) {
             { value: 'active_drag_landing', label: 'Active drag landing' }
           ]}
         />
-        <Field label="Deploy altitude" value={landing.deployAltitude} unit="m" onChange={(value) => setLanding('deployAltitude', value)} />
-        <Field label="Drag area" value={landing.dragArea} unit="m2" step="0.01" onChange={(value) => setLanding('dragArea', value)} />
-        <Field label="Drag coefficient" value={landing.dragCoefficient} step="0.01" onChange={(value) => setLanding('dragCoefficient', value)} />
+        <Field label={landing.type === 'drogue_main' ? 'Main altitude' : 'Deploy altitude'} value={landing.deployAltitude} unit="m" onChange={(value) => setLanding('deployAltitude', value)} />
+        <Field label={landing.type === 'drogue_main' ? 'Main area' : 'Drag area'} value={landing.dragArea} unit="m2" step="0.01" onChange={(value) => setLanding('dragArea', value)} />
+        <Field label={landing.type === 'drogue_main' ? 'Main Cd' : 'Drag coefficient'} value={landing.dragCoefficient} step="0.01" onChange={(value) => setLanding('dragCoefficient', value)} />
+        {landing.type === 'drogue_main' && (
+          <>
+            <Field label="Drogue area" value={landing.drogueDragArea} unit="m2" step="0.005" onChange={(value) => setLanding('drogueDragArea', value)} />
+            <Field label="Drogue Cd" value={landing.drogueDragCoefficient} step="0.01" onChange={(value) => setLanding('drogueDragCoefficient', value)} />
+          </>
+        )}
         <Field label="Safe touchdown" value={landing.maxSafeVelocity} unit="m/s" step="0.1" onChange={(value) => setLanding('maxSafeVelocity', value)} />
       </div>
       <div className="sizing-card">
@@ -1363,6 +1380,12 @@ function LandingSetup({ config, setConfig, syncLanding, metrics }) {
           <div><span>Current terminal</span><strong>{formatNumber(sizing.estimatedTerminalVelocity, 2)} m/s</strong></div>
           <div><span>Area margin</span><strong>{sizing.areaMargin >= 0 ? '+' : ''}{formatNumber(sizing.areaMargin, 3)} m2</strong></div>
           <div><span>Air density</span><strong>{formatNumber(sizing.density, 2)} kg/m3</strong></div>
+          {landing.type === 'drogue_main' && (
+            <>
+              <div><span>Drogue descent</span><strong>{formatNumber(drogueSizing.estimatedTerminalVelocity, 2)} m/s</strong></div>
+              <div><span>Drogue drag area</span><strong>{formatNumber(landing.drogueDragArea, 3)} m2</strong></div>
+            </>
+          )}
         </div>
         <div className="sizing-actions">
           <button type="button" onClick={() => applyLandingSizing(numberValue(landing.maxSafeVelocity, 7.5))}>
@@ -1382,6 +1405,7 @@ function LandingSetup({ config, setConfig, syncLanding, metrics }) {
         <button type="button" onClick={() => {
           setLanding('dragArea', 0.24);
           setLanding('deployAltitude', 120);
+          setLanding('drogueDragArea', 0.04);
           setLanding('maxSafeVelocity', 7.5);
         }}>Balanced</button>
         <button type="button" onClick={() => {
@@ -1569,7 +1593,9 @@ function ResultsPanel({
         yUnit="%"
         series={[
           { label: 'Airbrake', color: '#f2a541', points: activeHistory.map((row) => ({ x: row.time, y: row.surface_deployment * 100 })) },
-          { label: 'Landing', color: '#7b61ff', points: landingHistory.map((row) => ({ x: row.time, y: row.deployment * 100 })) }
+          { label: 'Landing', color: '#7b61ff', points: landingHistory.map((row) => ({ x: row.time, y: row.deployment * 100 })) },
+          { label: 'Drogue', color: '#4d908e', points: landingHistory.map((row) => ({ x: row.time, y: (row.drogue_deployment || 0) * 100 })) },
+          { label: 'Main', color: '#d9514e', points: landingHistory.map((row) => ({ x: row.time, y: (row.main_deployment || 0) * 100 })) }
         ]}
       />
       <div className="result-actions">
@@ -1676,6 +1702,8 @@ function App() {
         deployAltitude: numberValue(landing.deployAltitude, current.landingSystem.deployAltitude),
         dragArea: numberValue(landing.dragArea, current.landingSystem.dragArea),
         dragCoefficient: numberValue(landing.dragCoefficient, current.landingSystem.dragCoefficient),
+        drogueDragArea: numberValue(landing.drogueDragArea, current.landingSystem.drogueDragArea),
+        drogueDragCoefficient: numberValue(landing.drogueDragCoefficient, current.landingSystem.drogueDragCoefficient),
         maxSafeVelocity: numberValue(landing.maxSafeVelocity, current.landingSystem.maxSafeVelocity)
       } : current.landingSystem
     }));
@@ -1948,7 +1976,7 @@ function App() {
     let type = 'application/json';
     let filename = 'active-rocket-results.json';
     if (format === 'csv') {
-      const headers = ['time', 'altitude', 'velocity_z', 'speed', 'dynamic_pressure', 'surface_deployment', 'landing_deployment'];
+      const headers = ['time', 'altitude', 'velocity_z', 'speed', 'dynamic_pressure', 'surface_deployment', 'landing_deployment', 'drogue_deployment', 'main_deployment'];
       content = [
         headers.join(','),
         ...(result.results.trajectory || []).map((row) => headers.map((key) => row[key] ?? '').join(','))

@@ -197,10 +197,13 @@ class ActiveSimulationManager:
         landing = config.get("landingSystem") or config.get("recoverySystem") or {}
         landing_enabled = self._as_bool(landing.get("enabled"), True)
         if landing_enabled:
+            system_type = landing.get("type") or landing.get("systemType") or "main_parachute"
             deploy_altitude = self._as_float(landing.get("deployAltitude"), 120.0)
             drag_area = self._as_float(landing.get("dragArea"), 0.18)
             drag_coefficient = self._as_float(landing.get("dragCoefficient"), 1.55)
             max_safe_velocity = self._as_float(landing.get("maxSafeVelocity"), 7.5)
+            drogue_drag_area = self._as_float(landing.get("drogueDragArea"), 0.04)
+            drogue_drag_coefficient = self._as_float(landing.get("drogueDragCoefficient"), 1.25)
             if deploy_altitude <= 0:
                 errors.append("Landing deploy altitude must be positive.")
             if drag_area <= 0:
@@ -209,6 +212,11 @@ class ActiveSimulationManager:
                 errors.append("Landing drag coefficient must be positive.")
             if max_safe_velocity <= 0:
                 errors.append("Landing safe touchdown velocity must be positive.")
+            if system_type == "drogue_main":
+                if drogue_drag_area <= 0:
+                    errors.append("Drogue drag area must be positive.")
+                if drogue_drag_coefficient <= 0:
+                    errors.append("Drogue drag coefficient must be positive.")
 
         return {"errors": errors, "warnings": warnings}
 
@@ -304,6 +312,9 @@ class ActiveSimulationManager:
         landing_deployed = False
         landing_deploy_time = None
         landing_deploy_altitude = None
+        drogue_deployed = False
+        drogue_deploy_time = None
+        drogue_deploy_altitude = None
 
         max_altitude = altitude
         max_velocity = 0.0
@@ -343,11 +354,15 @@ class ActiveSimulationManager:
                 landing["enabled"]
                 and not landing_deployed
                 and velocity_z < -0.5
-                and altitude <= landing["deploy_altitude_m"]
             ):
-                landing_deployed = True
-                landing_deploy_time = t
-                landing_deploy_altitude = altitude
+                if landing["system_type"] == "drogue_main" and not drogue_deployed:
+                    drogue_deployed = True
+                    drogue_deploy_time = t
+                    drogue_deploy_altitude = altitude
+                if altitude <= landing["deploy_altitude_m"]:
+                    landing_deployed = True
+                    landing_deploy_time = t
+                    landing_deploy_altitude = altitude
 
             sensor = {
                 "timestamp": t,
@@ -408,8 +423,10 @@ class ActiveSimulationManager:
                 aero,
                 frontal_area_m2,
             )
-            landing_deployment = 1.0 if landing_deployed else 0.0
-            landing_cd = self._landing_drag_coefficient(landing, landing_deployment, frontal_area_m2)
+            drogue_deployment = 1.0 if drogue_deployed else 0.0
+            main_deployment = 1.0 if landing_deployed else 0.0
+            landing_deployment = 1.0 if landing_deployed else (0.35 if drogue_deployed else 0.0)
+            landing_cd = self._landing_drag_coefficient(landing, drogue_deployment, main_deployment, frontal_area_m2)
             cd += landing_cd
             drag_force = dynamic_pressure * cd * frontal_area_m2
             drag_z = drag_force * (velocity_z / max(speed_air, 0.1))
@@ -496,6 +513,8 @@ class ActiveSimulationManager:
                     "dynamic_pressure": round(dynamic_pressure, 4),
                     "drag_coefficient": round(cd, 5),
                     "landing_deployment": round(landing_deployment, 4),
+                    "drogue_deployment": round(drogue_deployment, 4),
+                    "main_deployment": round(main_deployment, 4),
                     "drag_force": round(drag_force, 4),
                     "drag_force_x": round(-drag_x, 4),
                     "drag_force_y": round(-drag_y, 4),
@@ -531,6 +550,11 @@ class ActiveSimulationManager:
                     "time": sample["time"],
                     "deployed": landing_deployed,
                     "deployment": sample["landing_deployment"],
+                    "drogue_deployed": drogue_deployed,
+                    "drogue_deployment": sample["drogue_deployment"],
+                    "main_deployed": landing_deployed,
+                    "main_deployment": sample["main_deployment"],
+                    "phase": "main" if landing_deployed else "drogue" if drogue_deployed else "stowed",
                     "altitude": sample["altitude"],
                     "velocity_z": sample["velocity_z"],
                 })
@@ -598,6 +622,9 @@ class ActiveSimulationManager:
             landing_deployed=landing_deployed,
             landing_deploy_time=landing_deploy_time,
             landing_deploy_altitude=landing_deploy_altitude,
+            drogue_deployed=drogue_deployed,
+            drogue_deploy_time=drogue_deploy_time,
+            drogue_deploy_altitude=drogue_deploy_altitude,
             touchdown_time=touchdown_time,
             landing_velocity=landing_velocity,
         )
@@ -657,11 +684,17 @@ class ActiveSimulationManager:
                 "enabled": landing["enabled"],
                 "type": landing["system_type"],
                 "deployed": landing_deployed,
+                "main_deployed": landing_deployed,
+                "drogue_deployed": drogue_deployed,
                 "deploy_altitude_m": landing["deploy_altitude_m"],
                 "deploy_time": landing_deploy_time,
                 "deploy_actual_altitude_m": landing_deploy_altitude,
+                "drogue_deploy_time": drogue_deploy_time,
+                "drogue_deploy_altitude_m": drogue_deploy_altitude,
                 "drag_area_m2": landing["drag_area_m2"],
                 "drag_coefficient": landing["drag_coefficient"],
+                "drogue_drag_area_m2": landing["drogue_drag_area_m2"],
+                "drogue_drag_coefficient": landing["drogue_drag_coefficient"],
                 "max_safe_velocity_mps": landing["max_safe_velocity_mps"],
                 "touchdown_velocity_mps": landing_velocity,
                 "touchdown_time": touchdown_time,
@@ -854,11 +887,19 @@ class ActiveSimulationManager:
         return aero["base_cd"] + airbrake_cd
 
     @staticmethod
-    def _landing_drag_coefficient(landing: Dict, deployment_fraction: float, frontal_area_m2: float) -> float:
-        if not landing["enabled"] or deployment_fraction <= 0:
+    def _landing_drag_coefficient(
+        landing: Dict,
+        drogue_deployment: float,
+        main_deployment: float,
+        frontal_area_m2: float,
+    ) -> float:
+        if not landing["enabled"] or (drogue_deployment <= 0 and main_deployment <= 0):
             return 0.0
-        landing_area = landing["drag_area_m2"] * deployment_fraction
-        return landing["drag_coefficient"] * landing_area / max(frontal_area_m2, 1e-6)
+        drogue_area = 0.0
+        if landing["system_type"] == "drogue_main":
+            drogue_area = landing["drogue_drag_coefficient"] * landing["drogue_drag_area_m2"] * drogue_deployment
+        main_area = landing["drag_coefficient"] * landing["drag_area_m2"] * main_deployment
+        return (drogue_area + main_area) / max(frontal_area_m2, 1e-6)
 
     def _build_flight_events(
         self,
@@ -872,6 +913,9 @@ class ActiveSimulationManager:
         landing_deployed: bool,
         landing_deploy_time: Optional[float],
         landing_deploy_altitude: Optional[float],
+        drogue_deployed: bool,
+        drogue_deploy_time: Optional[float],
+        drogue_deploy_altitude: Optional[float],
         touchdown_time: Optional[float],
         landing_velocity: float,
     ) -> List[Dict[str, float]]:
@@ -906,9 +950,18 @@ class ActiveSimulationManager:
                 "value": round(max_deployment * 100.0, 2),
                 "unit": "%",
             })
-        if landing["enabled"] and landing_deployed:
+        if landing["enabled"] and drogue_deployed:
             events.append({
-                "name": "Landing deploy",
+                "name": "Drogue deploy",
+                "time": round(drogue_deploy_time or 0.0, 3),
+                "type": "landing",
+                "value": round(drogue_deploy_altitude or 0.0, 3),
+                "unit": "m",
+            })
+        if landing["enabled"] and landing_deployed:
+            event_name = "Main deploy" if landing["system_type"] == "drogue_main" else "Landing deploy"
+            events.append({
+                "name": event_name,
                 "time": round(landing_deploy_time or 0.0, 3),
                 "type": "landing",
                 "value": round(landing_deploy_altitude or 0.0, 3),
@@ -973,6 +1026,8 @@ class ActiveSimulationManager:
             "deploy_altitude_m": self._as_float(landing.get("deployAltitude"), 120.0),
             "drag_area_m2": self._as_float(landing.get("dragArea"), 0.18),
             "drag_coefficient": self._as_float(landing.get("dragCoefficient"), 1.55),
+            "drogue_drag_area_m2": self._as_float(landing.get("drogueDragArea"), 0.04),
+            "drogue_drag_coefficient": self._as_float(landing.get("drogueDragCoefficient"), 1.25),
             "max_safe_velocity_mps": self._as_float(landing.get("maxSafeVelocity"), 7.5),
         }
 
