@@ -166,6 +166,11 @@ ControlOutput control_function(SensorData sensor_data) {
     require(active_system.get("tank_pressure_final", 0) < active_system.get("tank_pressure_start", 0), f"Tank pressure did not decrease: {active_system}")
     require(len(active_system.get("history", [])) > 5, "Active-system history is missing or too short.")
     require(len(results.get("trajectory", [])) > 5, "Trajectory history is missing or too short.")
+    require(len(results.get("force_history", [])) > 5, "Force history is missing or too short.")
+    require(len(results.get("moment_history", [])) > 5, "Moment history is missing or too short.")
+    first_sample = results["trajectory"][0]
+    for key in ("net_force_z", "thrust_force", "pitch_moment", "angular_velocity_y_deg_s", "drag_coefficient"):
+        require(key in first_sample, f"Trajectory sample missing {key}: {first_sample}")
     require((results.get("controller") or {}).get("compiled_cpp") is True, "C++ controller was not compiled into the simulation.")
 
     string_values = " ".join(str(value).lower() for value in results.values() if isinstance(value, str))
@@ -182,6 +187,8 @@ ControlOutput control_function(SensorData sensor_data) {
         "max_velocity": round(results["max_velocity"], 2),
         "max_deployment": round(active_system["max_surface_deployment"], 3),
         "final_tank_kpa": round(active_system["tank_pressure_final"] / 1000, 1),
+        "force_samples": len(results["force_history"]),
+        "moment_samples": len(results["moment_history"]),
         "source": results["source"],
     }
     print(json.dumps(summary, indent=2, sort_keys=True))

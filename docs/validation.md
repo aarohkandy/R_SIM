@@ -12,6 +12,7 @@ The active scenario matrix uses importable files in `examples/scenarios/`:
 
 - `passive_baseline.json`
 - `active_target_apogee.json`
+- `calibrated_thrust_curve.json`
 - `descent_airbrake.json`
 - `low_pressure_warning.json`
 - `invalid_no_motor.json`
@@ -20,7 +21,7 @@ The active scenario matrix uses importable files in `examples/scenarios/`:
 
 - Python syntax compile succeeds over the repo.
 - Active simulation unit tests pass.
-- Active scenario matrix passes for passive, target-apogee, descent-brake, low-pressure, and invalid-input cases.
+- Active scenario matrix passes for passive, target-apogee, calibrated thrust-curve/aero-table, descent-brake, low-pressure, and invalid-input cases.
 - Backend dependencies install in a clean Python 3.9 environment.
 - Backend smoke tests pass:
   - `/api/health`
@@ -48,6 +49,8 @@ The sample simulation must include:
 - `results.source`
 - `results.is_placeholder: false`
 - `results.trajectory`
+- `results.force_history`
+- `results.moment_history`
 - `results.active_system`
 - `results.controller`
 

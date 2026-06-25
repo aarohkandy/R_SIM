@@ -27,3 +27,8 @@
 - Ran `bash scripts/run_pre_goal_checks.sh`: passed with 6 active simulation unit tests, scenario matrix, backend API smoke, frontend production build, and frontend lint.
 - Scenario matrix result highlights: passive baseline max altitude about 55.75 m with 0% deployment; active target-apogee max altitude about 45.51 m with about 41.5% deployment; descent airbrake max deployment 100%; low-pressure scenario produced the expected minimum-pressure warnings; invalid no-motor scenario failed honestly with `Rocket must include a motor.`
 - Browser-checked local app at `http://127.0.0.1:5001/`: loaded the built-in active demo, launched it through the UI, reached results, showed active pneumatic fields, and produced no new browser console errors.
+- Added thrust-curve interpolation for motor components and optional deployment-to-drag aerodynamic coefficient tables.
+- Added `force_history`, `moment_history`, angular-rate samples, net forces, thrust/weight forces, drag coefficient samples, and moment summaries to active simulation output and CSV export.
+- Added `examples/scenarios/calibrated_thrust_curve.json` to prove a thrust curve and aero table affect the model.
+- Ran `bash scripts/run_pre_goal_checks.sh`: passed with 9 active simulation unit tests, 6 scenario fixtures, backend API smoke, frontend production build, and frontend lint. The smoke output included 78 force samples and 78 moment samples.
+- Browser-checked local app at `http://127.0.0.1:5001/`: loaded the built-in active demo, launched it against a freshly restarted local backend, reached results, showed Max Net Force, Max Drag Coefficient, Attitude & Forces, Force Samples, and Moment Samples, with no new browser console errors.

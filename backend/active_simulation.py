@@ -215,6 +215,14 @@ class ActiveSimulationManager:
         )
         if total_impulse_ns > 0 and burn_time_s > 0:
             thrust_n = max(thrust_n, total_impulse_ns / burn_time_s)
+        thrust_curve = self._parse_thrust_curve(motor)
+        curve_total_impulse_ns = None
+        if thrust_curve:
+            burn_time_s = max(burn_time_s, thrust_curve[-1][0])
+            curve_total_impulse_ns = self._integrate_curve(thrust_curve)
+            if total_impulse_ns <= 0:
+                total_impulse_ns = curve_total_impulse_ns
+            thrust_n = max(thrust_n, curve_total_impulse_ns / max(burn_time_s, 0.001))
 
         pressure_pa = self._as_float(config.get("pressure"), 101325.0)
         temp_c = self._as_float(config.get("temperature"), 15.0)
@@ -228,6 +236,9 @@ class ActiveSimulationManager:
         dt = self._clamp(self._as_float(config.get("timeStep") or config.get("time_step"), 0.02), 0.005, 0.1)
         max_time = self._clamp(self._as_float(config.get("maxTime") or config.get("max_time"), 45.0), 3.0, 180.0)
         gravity = 9.80665
+        aero = self._build_aero_config(config, base_cd)
+        inertia_pitch = max(mass_kg * total_length_m**2 / 12.0, 1e-5)
+        inertia_roll = max(0.5 * mass_kg * (diameter_m / 2.0) ** 2, 1e-6)
 
         altitude = max(0.0, launch_altitude_m)
         velocity_z = 0.0
@@ -252,15 +263,21 @@ class ActiveSimulationManager:
         max_altitude = altitude
         max_velocity = 0.0
         max_drag_force = 0.0
+        max_net_force = 0.0
         max_dynamic_pressure = 0.0
         max_deployment = 0.0
         max_surface_angle = 0.0
+        max_drag_coefficient = base_cd
+        max_attitude_deg = 0.0
+        max_angular_rate_deg_s = 0.0
         min_tank_pressure = tank_pressure
         apogee_time = 0.0
         landing_velocity = 0.0
         trajectory = []
         active_history = []
         controller_history = []
+        force_history = []
+        moment_history = []
 
         prev_accel_z = 0.0
         t = 0.0
@@ -325,25 +342,36 @@ class ActiveSimulationManager:
             deployment_fraction = self._clamp((stroke / active["cylinder_stroke_m"]) * active["linkage_ratio"], 0.0, 1.0)
             surface_angle_deg = deployment_fraction * active["surface_max_angle_deg"]
 
-            airbrake_area = active["surface_area_m2"] * active["surface_count"] * deployment_fraction
-            airbrake_cd = active["surface_cd"] * airbrake_area / max(frontal_area_m2, 1e-6)
-            cd = base_cd + airbrake_cd
+            cd = self._effective_drag_coefficient(
+                deployment_fraction,
+                active,
+                aero,
+                frontal_area_m2,
+            )
             drag_force = dynamic_pressure * cd * frontal_area_m2
             drag_z = drag_force * (velocity_z / max(speed_air, 0.1))
             drag_x = drag_force * (speed_air_x / max(speed_air, 0.1))
             drag_y = drag_force * (speed_air_y / max(speed_air, 0.1))
-            thrust = thrust_n if t <= burn_time_s else 0.0
+            thrust = self._thrust_at_time(t, thrust_curve, thrust_n, burn_time_s)
+            weight_force = mass_kg * gravity
             accel_z = (thrust - mass_kg * gravity - drag_z) / mass_kg
             accel_x = -drag_x / mass_kg
             accel_y = -drag_y / mass_kg
+            net_force_x = accel_x * mass_kg
+            net_force_y = accel_y * mass_kg
+            net_force_z = accel_z * mass_kg
 
-            pitch_moment = -0.45 * pitch - 0.16 * pitch_rate + deployment_fraction * 0.015 * math.sin(wind_direction_rad)
-            yaw_moment = -0.45 * yaw - 0.16 * yaw_rate + deployment_fraction * 0.015 * math.cos(wind_direction_rad)
-            pitch_rate += pitch_moment * dt
-            yaw_rate += yaw_moment * dt
+            pitch_angular_accel = -0.45 * pitch - 0.16 * pitch_rate + deployment_fraction * 0.015 * math.sin(wind_direction_rad)
+            yaw_angular_accel = -0.45 * yaw - 0.16 * yaw_rate + deployment_fraction * 0.015 * math.cos(wind_direction_rad)
+            roll_angular_accel = -0.08 * roll_rate
+            pitch_moment_nm = pitch_angular_accel * inertia_pitch
+            yaw_moment_nm = yaw_angular_accel * inertia_pitch
+            roll_moment_nm = roll_angular_accel * inertia_roll
+            pitch_rate += pitch_angular_accel * dt
+            yaw_rate += yaw_angular_accel * dt
+            roll_rate += roll_angular_accel * dt
             pitch += pitch_rate * dt
             yaw += yaw_rate * dt
-            roll_rate *= 0.995
             roll += roll_rate * dt
 
             velocity_z += accel_z * dt
@@ -359,9 +387,18 @@ class ActiveSimulationManager:
                 apogee_time = t
             max_velocity = max(max_velocity, math.sqrt(vx**2 + vy**2 + velocity_z**2))
             max_drag_force = max(max_drag_force, abs(drag_force))
+            max_net_force = max(max_net_force, math.sqrt(net_force_x**2 + net_force_y**2 + net_force_z**2))
             max_dynamic_pressure = max(max_dynamic_pressure, dynamic_pressure)
             max_deployment = max(max_deployment, deployment_fraction)
             max_surface_angle = max(max_surface_angle, surface_angle_deg)
+            max_drag_coefficient = max(max_drag_coefficient, cd)
+            max_attitude_deg = max(max_attitude_deg, abs(math.degrees(pitch)), abs(math.degrees(yaw)), abs(math.degrees(roll)))
+            max_angular_rate_deg_s = max(
+                max_angular_rate_deg_s,
+                abs(math.degrees(pitch_rate)),
+                abs(math.degrees(yaw_rate)),
+                abs(math.degrees(roll_rate)),
+            )
 
             if len(trajectory) == 0 or t - trajectory[-1]["time"] >= 0.1:
                 sample = {
@@ -375,8 +412,23 @@ class ActiveSimulationManager:
                     "pitch_deg": round(math.degrees(pitch), 4),
                     "yaw_deg": round(math.degrees(yaw), 4),
                     "roll_deg": round(math.degrees(roll), 4),
+                    "angular_velocity_x_deg_s": round(math.degrees(roll_rate), 4),
+                    "angular_velocity_y_deg_s": round(math.degrees(pitch_rate), 4),
+                    "angular_velocity_z_deg_s": round(math.degrees(yaw_rate), 4),
                     "dynamic_pressure": round(dynamic_pressure, 4),
+                    "drag_coefficient": round(cd, 5),
                     "drag_force": round(drag_force, 4),
+                    "drag_force_x": round(-drag_x, 4),
+                    "drag_force_y": round(-drag_y, 4),
+                    "drag_force_z": round(-drag_z, 4),
+                    "thrust_force": round(thrust, 4),
+                    "weight_force": round(weight_force, 4),
+                    "net_force_x": round(net_force_x, 4),
+                    "net_force_y": round(net_force_y, 4),
+                    "net_force_z": round(net_force_z, 4),
+                    "pitch_moment": round(pitch_moment_nm, 6),
+                    "yaw_moment": round(yaw_moment_nm, 6),
+                    "roll_moment": round(roll_moment_nm, 6),
                     "valve_command": round(valve_command, 4),
                     "surface_deployment": round(deployment_fraction, 4),
                     "surface_angle_deg": round(surface_angle_deg, 4),
@@ -399,6 +451,26 @@ class ActiveSimulationManager:
                     "predicted_apogee": round(sensor["predicted_apogee"], 4),
                     "command": sample["valve_command"],
                     "surface_target": round(surface_target, 4),
+                })
+                force_history.append({
+                    "time": sample["time"],
+                    "thrust_force": sample["thrust_force"],
+                    "drag_force": sample["drag_force"],
+                    "weight_force": sample["weight_force"],
+                    "net_force_x": sample["net_force_x"],
+                    "net_force_y": sample["net_force_y"],
+                    "net_force_z": sample["net_force_z"],
+                    "dynamic_pressure": sample["dynamic_pressure"],
+                    "drag_coefficient": sample["drag_coefficient"],
+                })
+                moment_history.append({
+                    "time": sample["time"],
+                    "pitch_moment": sample["pitch_moment"],
+                    "yaw_moment": sample["yaw_moment"],
+                    "roll_moment": sample["roll_moment"],
+                    "pitch_rate_deg_s": sample["angular_velocity_y_deg_s"],
+                    "yaw_rate_deg_s": sample["angular_velocity_z_deg_s"],
+                    "roll_rate_deg_s": sample["angular_velocity_x_deg_s"],
                 })
 
             t += dt
@@ -434,14 +506,20 @@ class ActiveSimulationManager:
             "motor_burn_time": burn_time_s,
             "total_impulse": total_impulse_ns,
             "stability_margin": stability_margin,
-            "drag_coefficient": base_cd,
+            "drag_coefficient": aero["base_cd"],
+            "max_drag_coefficient": max_drag_coefficient,
             "lift_coefficient": 0.0,
             "max_drag_force": max_drag_force,
+            "max_net_force": max_net_force,
             "max_dynamic_pressure": max_dynamic_pressure,
+            "max_attitude_deg": max_attitude_deg,
+            "max_angular_rate_deg_s": max_angular_rate_deg_s,
             "pressure_distribution": "local_dynamic_pressure_estimate",
             "velocity_field": "local_trajectory_air_relative_profile",
             "trajectory_data": "time_history_included",
             "trajectory": trajectory,
+            "force_history": force_history,
+            "moment_history": moment_history,
             "active_system": {
                 "enabled": active["enabled"],
                 "type": "pneumatic_airbrake",
@@ -468,9 +546,159 @@ class ActiveSimulationManager:
                 "velocity_std_mps": noise["velocity_std_mps"],
                 "pressure_std_pa": noise["pneumatic_pressure_std_pa"],
             },
+            "aerodynamics": {
+                "base_drag_coefficient": aero["base_cd"],
+                "active_drag_model": aero["active_drag_model"],
+                "active_drag_table": aero["active_drag_table"],
+                "max_drag_coefficient": max_drag_coefficient,
+            },
+            "thrust_profile": {
+                "source": "curve" if thrust_curve else "average",
+                "points": [{"time": t_point, "thrust": thrust_point} for t_point, thrust_point in thrust_curve],
+                "integrated_impulse": curve_total_impulse_ns,
+            },
             "warnings": warnings,
             "notes": "Local dynamic model with pneumatic actuator coupling; optional CFD/table calibration remains future work.",
         }
+
+    def _parse_thrust_curve(self, motor: Dict) -> List[tuple]:
+        raw_curve = (
+            motor.get("thrustCurve")
+            or motor.get("thrust_curve")
+            or motor.get("thrustCurvePoints")
+            or []
+        )
+        points = []
+        if not isinstance(raw_curve, list):
+            return points
+
+        for point in raw_curve:
+            if isinstance(point, dict):
+                time_s = self._as_float(
+                    self._first_value(point, ["time", "time_s", "t"], None),
+                    math.nan,
+                )
+                thrust_n = self._as_float(
+                    self._first_value(point, ["thrust", "thrust_n", "force", "force_n"], None),
+                    math.nan,
+                )
+            elif isinstance(point, (list, tuple)) and len(point) >= 2:
+                time_s = self._as_float(point[0], math.nan)
+                thrust_n = self._as_float(point[1], math.nan)
+            else:
+                continue
+            if math.isfinite(time_s) and math.isfinite(thrust_n) and time_s >= 0 and thrust_n >= 0:
+                points.append((time_s, thrust_n))
+
+        points = sorted(points, key=lambda item: item[0])
+        deduped = []
+        for time_s, thrust_n in points:
+            if deduped and abs(deduped[-1][0] - time_s) < 1e-9:
+                deduped[-1] = (time_s, thrust_n)
+            else:
+                deduped.append((time_s, thrust_n))
+        return deduped if len(deduped) >= 2 and deduped[-1][0] > deduped[0][0] else []
+
+    @staticmethod
+    def _integrate_curve(points: List[tuple]) -> float:
+        impulse = 0.0
+        for (t0, f0), (t1, f1) in zip(points, points[1:]):
+            impulse += max(t1 - t0, 0.0) * (f0 + f1) * 0.5
+        return impulse
+
+    def _thrust_at_time(
+        self,
+        time_s: float,
+        thrust_curve: List[tuple],
+        average_thrust: float,
+        burn_time_s: float,
+    ) -> float:
+        if not thrust_curve:
+            return average_thrust if time_s <= burn_time_s else 0.0
+        if time_s < thrust_curve[0][0] or time_s > thrust_curve[-1][0]:
+            return 0.0
+        for (t0, f0), (t1, f1) in zip(thrust_curve, thrust_curve[1:]):
+            if t0 <= time_s <= t1:
+                if abs(t1 - t0) < 1e-9:
+                    return f1
+                fraction = (time_s - t0) / (t1 - t0)
+                return f0 + (f1 - f0) * fraction
+        return 0.0
+
+    def _build_aero_config(self, config: Dict, base_cd: float) -> Dict:
+        aero = config.get("aerodynamics") or config.get("aero") or {}
+        table = self._parse_active_drag_table(
+            aero.get("activeDragCoefficientTable")
+            or aero.get("dragCoefficientTable")
+            or []
+        )
+        return {
+            "base_cd": self._as_float(aero.get("baseDragCoefficient"), base_cd),
+            "active_drag_table": table,
+            "active_drag_model": "table" if table else "surface_area",
+        }
+
+    def _parse_active_drag_table(self, raw_table) -> List[Dict[str, float]]:
+        if not isinstance(raw_table, list):
+            return []
+        points = []
+        for point in raw_table:
+            if isinstance(point, dict):
+                deployment = self._as_float(
+                    self._first_value(point, ["deployment", "surfaceDeployment", "surface_deployment"], None),
+                    math.nan,
+                )
+                cd_increment = self._as_float(
+                    self._first_value(point, ["cdIncrement", "dragCoefficientIncrement", "activeCd", "cd"], None),
+                    math.nan,
+                )
+            elif isinstance(point, (list, tuple)) and len(point) >= 2:
+                deployment = self._as_float(point[0], math.nan)
+                cd_increment = self._as_float(point[1], math.nan)
+            else:
+                continue
+            if math.isfinite(deployment) and math.isfinite(cd_increment) and cd_increment >= 0:
+                points.append({
+                    "deployment": self._clamp(deployment, 0.0, 1.0),
+                    "cd_increment": cd_increment,
+                })
+
+        points = sorted(points, key=lambda item: item["deployment"])
+        deduped = []
+        for point in points:
+            if deduped and abs(deduped[-1]["deployment"] - point["deployment"]) < 1e-9:
+                deduped[-1] = point
+            else:
+                deduped.append(point)
+        return deduped if len(deduped) >= 2 else []
+
+    def _effective_drag_coefficient(
+        self,
+        deployment_fraction: float,
+        active: Dict,
+        aero: Dict,
+        frontal_area_m2: float,
+    ) -> float:
+        if aero["active_drag_table"]:
+            return aero["base_cd"] + self._interpolate_drag_increment(deployment_fraction, aero["active_drag_table"])
+        airbrake_area = active["surface_area_m2"] * active["surface_count"] * deployment_fraction
+        airbrake_cd = active["surface_cd"] * airbrake_area / max(frontal_area_m2, 1e-6)
+        return aero["base_cd"] + airbrake_cd
+
+    @staticmethod
+    def _interpolate_drag_increment(deployment_fraction: float, table: List[Dict[str, float]]) -> float:
+        if deployment_fraction <= table[0]["deployment"]:
+            return table[0]["cd_increment"]
+        if deployment_fraction >= table[-1]["deployment"]:
+            return table[-1]["cd_increment"]
+        for left, right in zip(table, table[1:]):
+            if left["deployment"] <= deployment_fraction <= right["deployment"]:
+                span = right["deployment"] - left["deployment"]
+                if span <= 1e-9:
+                    return right["cd_increment"]
+                fraction = (deployment_fraction - left["deployment"]) / span
+                return left["cd_increment"] + (right["cd_increment"] - left["cd_increment"]) * fraction
+        return table[-1]["cd_increment"]
 
     def _build_active_config(self, config: Dict) -> Dict:
         active = config.get("activeSystem") or {}

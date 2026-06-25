@@ -46,11 +46,17 @@ def run_scenario(manager: ActiveSimulationManager, scenario: Dict[str, Any]) -> 
     require(results.get("source") == "active_pneumatic_local_dynamics", f"{scenario['id']}: unexpected source")
     require(results.get("is_placeholder") is False, f"{scenario['id']}: placeholder result")
     require(len(results.get("trajectory", [])) > 5, f"{scenario['id']}: trajectory too short")
+    require(len(results.get("force_history", [])) > 5, f"{scenario['id']}: force history too short")
+    require(len(results.get("moment_history", [])) > 5, f"{scenario['id']}: moment history too short")
 
     for path, bounds in expectations.get("ranges", {}).items():
         value = get_path(results, path)
         low, high = bounds
         require(low <= value <= high, f"{scenario['id']}: {path}={value} outside [{low}, {high}]")
+
+    for path, expected in expectations.get("equals", {}).items():
+        value = get_path(results, path)
+        require(value == expected, f"{scenario['id']}: {path}={value!r}, expected {expected!r}")
 
     warnings = " ".join(results.get("warnings", []))
     for expected in expectations.get("warningsContain", []):
@@ -103,4 +109,3 @@ def main() -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
-

@@ -1788,8 +1788,23 @@ function App() {
         'velocity_z',
         'speed',
         'acceleration_z',
+        'angular_velocity_x_deg_s',
+        'angular_velocity_y_deg_s',
+        'angular_velocity_z_deg_s',
         'dynamic_pressure',
+        'drag_coefficient',
         'drag_force',
+        'drag_force_x',
+        'drag_force_y',
+        'drag_force_z',
+        'thrust_force',
+        'weight_force',
+        'net_force_x',
+        'net_force_y',
+        'net_force_z',
+        'pitch_moment',
+        'yaw_moment',
+        'roll_moment',
         'valve_command',
         'surface_deployment',
         'tank_pressure',
@@ -4617,19 +4632,19 @@ function App() {
                   <div className="analysis-stats">
                     <div className="stat-item">
                       <span className="stat-label">Max Drag Force</span>
-                      <span className="stat-value">-- N</span>
+                      <span className="stat-value">{simulationResults?.results ? `${Math.round(simulationResults.results.max_drag_force || 0)} N` : '-- N'}</span>
                     </div>
                     <div className="stat-item">
-                      <span className="stat-label">Max Lift Force</span>
-                      <span className="stat-value">-- N</span>
+                      <span className="stat-label">Max Net Force</span>
+                      <span className="stat-value">{simulationResults?.results ? `${Math.round(simulationResults.results.max_net_force || 0)} N` : '-- N'}</span>
                     </div>
                     <div className="stat-item">
-                      <span className="stat-label">Drag Coefficient</span>
-                      <span className="stat-value">--</span>
+                      <span className="stat-label">Max Drag Coefficient</span>
+                      <span className="stat-value">{simulationResults?.results ? (simulationResults.results.max_drag_coefficient || 0).toFixed(3) : '--'}</span>
                     </div>
                     <div className="stat-item">
-                      <span className="stat-label">Lift Coefficient</span>
-                      <span className="stat-value">--</span>
+                      <span className="stat-label">Max Dynamic Pressure</span>
+                      <span className="stat-value">{simulationResults?.results ? `${Math.round(simulationResults.results.max_dynamic_pressure || 0)} Pa` : '-- Pa'}</span>
                     </div>
                   </div>
                 </div>
@@ -4800,6 +4815,27 @@ function App() {
                         <div className="data-item">
                           <span>Apogee Time</span>
                           <span>{simulationResults?.results ? `${Math.round(simulationResults.results.apogee_time || 0)} s` : '-- s'}</span>
+                        </div>
+                      </div>
+                    </div>
+                    <div className="data-section">
+                      <h4>Attitude & Forces</h4>
+                      <div className="data-grid">
+                        <div className="data-item">
+                          <span>Max Attitude</span>
+                          <span>{simulationResults?.results ? `${(simulationResults.results.max_attitude_deg || 0).toFixed(2)}°` : '--°'}</span>
+                        </div>
+                        <div className="data-item">
+                          <span>Max Angular Rate</span>
+                          <span>{simulationResults?.results ? `${(simulationResults.results.max_angular_rate_deg_s || 0).toFixed(2)} °/s` : '-- °/s'}</span>
+                        </div>
+                        <div className="data-item">
+                          <span>Force Samples</span>
+                          <span>{simulationResults?.results?.force_history?.length ?? '--'}</span>
+                        </div>
+                        <div className="data-item">
+                          <span>Moment Samples</span>
+                          <span>{simulationResults?.results?.moment_history?.length ?? '--'}</span>
                         </div>
                       </div>
                     </div>

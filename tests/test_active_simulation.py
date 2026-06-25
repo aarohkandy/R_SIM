@@ -138,6 +138,54 @@ class ActiveSimulationTests(unittest.TestCase):
         self.assertFalse(result["success"])
         self.assertIn("Active tank pressure must be above ambient pressure.", result["validation_errors"])
 
+    def test_force_and_moment_histories_are_exported(self):
+        manager = ActiveSimulationManager()
+        result = manager.submit_cfd_simulation(sample_rocket(), base_config())["results"]
+        sample = result["trajectory"][0]
+
+        self.assertGreater(len(result["force_history"]), 5)
+        self.assertGreater(len(result["moment_history"]), 5)
+        self.assertIn("net_force_z", sample)
+        self.assertIn("pitch_moment", sample)
+        self.assertIn("angular_velocity_y_deg_s", sample)
+        self.assertGreater(result["max_net_force"], 0)
+
+    def test_motor_thrust_curve_is_interpolated(self):
+        rocket = sample_rocket()
+        motor = next(component for component in rocket["components"] if component["type"] == "Motor")
+        motor["thrustCurve"] = [
+            {"time": 0.0, "thrust": 0.0},
+            {"time": 0.08, "thrust": 18.0},
+            {"time": 0.35, "thrust": 12.0},
+            {"time": 1.25, "thrust": 4.0},
+            {"time": 1.65, "thrust": 0.0},
+        ]
+        manager = ActiveSimulationManager()
+        result = manager.submit_cfd_simulation(rocket, base_config())["results"]
+        thrust_values = {row["thrust_force"] for row in result["force_history"][:10]}
+
+        self.assertEqual(result["thrust_profile"]["source"], "curve")
+        self.assertGreater(result["thrust_profile"]["integrated_impulse"], 0)
+        self.assertGreater(len(thrust_values), 2)
+
+    def test_aero_drag_table_changes_effective_drag(self):
+        manager = ActiveSimulationManager()
+        baseline = manager.submit_cfd_simulation(sample_rocket(), base_config(target_apogee=35))["results"]
+        config = base_config(target_apogee=35)
+        config["aerodynamics"] = {
+            "baseDragCoefficient": 0.5,
+            "activeDragCoefficientTable": [
+                {"deployment": 0.0, "cdIncrement": 0.0},
+                {"deployment": 0.5, "cdIncrement": 4.0},
+                {"deployment": 1.0, "cdIncrement": 7.5},
+            ],
+        }
+        calibrated = manager.submit_cfd_simulation(sample_rocket(), config)["results"]
+
+        self.assertEqual(calibrated["aerodynamics"]["active_drag_model"], "table")
+        self.assertGreater(calibrated["max_drag_coefficient"], baseline["max_drag_coefficient"])
+        self.assertGreater(calibrated["max_drag_force"], baseline["max_drag_force"])
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -14,6 +14,7 @@
 - Validation must fail loudly when a dependency, endpoint, or result shape is wrong.
 - Local simulation must be deterministic and labeled as active pneumatic local dynamics.
 - Fake/random placeholder output must not be accepted as a passing main workflow result.
+- Motor thrust curves and optional aerodynamic coefficient tables must affect local simulation output when supplied.
 - C++ controller code must compile before it is used by an active simulation.
 - Pneumatic outputs must show pressure use, actuator movement, and surface deployment when active control commands it.
 - Importable scenario files in `examples/scenarios/` must keep passive, active, warning, and invalid-input behavior reproducible.
