@@ -24,6 +24,8 @@ class ActiveSimulationManager:
     """Runs deterministic local active pneumatic rocket simulations."""
 
     model_version = "active_pneumatic_local_dynamics_v1"
+    attachment_child_types = {"fins", "motor", "rail button"}
+    attachment_host_types = {"body tube", "transition", "electronics bay", "recovery bay", "active airbrake"}
 
     def __init__(self):
         self.simulations: Dict[str, Dict] = {}
@@ -177,6 +179,37 @@ class ActiveSimulationManager:
 
         if self._rocket_diameter_m(components) <= 0.01 and components:
             warnings.append("Rocket diameter is very small; check units.")
+
+        components_by_id = {
+            str(component.get("id")): component
+            for component in components
+            if isinstance(component, dict) and component.get("id") is not None
+        }
+        attachment_hosts = [
+            component for component in components
+            if str(component.get("type", "")).lower() in self.attachment_host_types
+        ]
+        for component in components:
+            if not isinstance(component, dict):
+                continue
+            component_type = str(component.get("type", "")).lower()
+            if component_type not in self.attachment_child_types:
+                continue
+            attached_to = self._first_value(
+                component,
+                ["attachedToComponent", "attached_to_component", "attached_to"],
+                None,
+            )
+            name = component.get("name") or component.get("type") or "Subpart"
+            if attached_to in (None, ""):
+                if attachment_hosts:
+                    warnings.append(f"{name} is not attached to a structural airframe host.")
+                else:
+                    errors.append(f"{name} needs a body tube, transition, or bay attachment host.")
+                continue
+            host = components_by_id.get(str(attached_to))
+            if host is None or str(host.get("type", "")).lower() not in self.attachment_host_types:
+                errors.append(f"{name} attachment must reference a body tube, transition, electronics bay, recovery bay, or active airbrake.")
 
         dt_raw = self._as_float(config.get("timeStep") or config.get("time_step"), 0.02)
         max_time_raw = self._as_float(config.get("maxTime") or config.get("max_time"), 45.0)

@@ -16,6 +16,7 @@ This local model is not CFD and is not flight certification. Its output is marke
 - Output includes `recovery_analysis` with an event sequence and phase summaries for drogue/main/total descent timing, descent rate, and drift.
 - Output includes `recovery_safety` with required main drag area, estimated terminal velocity, area margin, opening load in newtons and g, and safety statuses.
 - Output includes `stage_splits` as structural split/stage marker metadata derived from builder boundaries; the current local model does not separate stages in flight.
+- Input validation treats fins, motors, and rail buttons as attached subparts. Missing host references warn, while references to non-airframe hosts block the run.
 
 ## Target Model Direction
 

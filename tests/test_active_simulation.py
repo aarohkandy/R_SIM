@@ -125,6 +125,25 @@ class ActiveSimulationTests(unittest.TestCase):
         self.assertEqual(stage_splits[0]["before_component_name"], "Body Tube")
         self.assertAlmostEqual(stage_splits[0]["position_mm"], 120.0)
 
+    def test_missing_subpart_attachment_warns_without_blocking_simulation(self):
+        manager = ActiveSimulationManager()
+        result = manager.submit_cfd_simulation(sample_rocket(), base_config())
+
+        self.assertTrue(result["success"])
+        warnings = result["results"]["input_validation"]["warnings"]
+        self.assertTrue(any("not attached to a structural airframe host" in warning for warning in warnings))
+
+    def test_subpart_attachment_to_subpart_is_rejected(self):
+        manager = ActiveSimulationManager()
+        rocket = sample_rocket()
+        rocket["components"][2]["attachedToComponent"] = 4
+        rocket["components"][3]["attachedToComponent"] = 2
+
+        result = manager.submit_cfd_simulation(rocket, base_config())
+
+        self.assertFalse(result["success"])
+        self.assertTrue(any("attachment must reference" in error for error in result["validation_errors"]))
+
     def test_active_drag_changes_flight_profile(self):
         manager = ActiveSimulationManager()
         passive_config = base_config(enabled=False)

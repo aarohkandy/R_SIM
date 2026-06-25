@@ -89,8 +89,12 @@ def main() -> int:
     require("setup-row" in frontend_style, "Frontend simulation setup manager is missing list styling.")
     require("getComponentAxialPosition" in frontend_source, "Frontend does not model editable component axial placement.")
     require("Axial position" in frontend_source, "Component inspector is missing axial position editing.")
+    require("attachmentHostTypes" in frontend_source, "Frontend is missing valid subpart attachment hosts.")
+    require("Attached to" in frontend_source, "Component inspector is missing subpart attachment editing.")
+    require("getAttachmentHost(component, components)" in frontend_source, "Component table is missing subpart attachment visibility.")
     require("rail-button-dot" in frontend_style, "Rocket drawing does not render rail button placement.")
     require("position_m" in active_sim_source, "Backend CP contributions do not expose fin axial placement.")
+    require("attachment must reference" in active_sim_source, "Backend does not reject invalid subpart attachment references.")
     require("Airbrake station" in frontend_source, "Frontend is missing active airbrake station controls.")
     require("active.locationFromNose" in frontend_source, "Frontend design checks do not target active airbrake station.")
     require("moment_arm_m" in active_sim_source, "Backend active system does not report active airbrake moment arm.")
@@ -187,7 +191,7 @@ ControlOutput control_function(SensorData sensor_data) {
         "rocketComponents": [
             {"id": 1, "type": "Nose Cone", "name": "Prep Nose", "length": 120, "diameter": 40, "weight": 35},
             {"id": 2, "type": "Body Tube", "name": "Prep Body", "length": 560, "diameter": 40, "weight": 135},
-            {"id": 3, "type": "Fins", "name": "Prep Fins", "finCount": 3, "finHeight": 55, "finWidth": 90, "weight": 45},
+            {"id": 3, "type": "Fins", "name": "Prep Fins", "finCount": 3, "finHeight": 55, "finWidth": 90, "weight": 45, "attachedToComponent": 2},
             {
                 "id": 4,
                 "type": "Motor",
@@ -204,6 +208,7 @@ ControlOutput control_function(SensorData sensor_data) {
                 "motorWeight": database_motor["total_mass"],
                 "weight": database_motor["total_mass"],
                 "thrustCurve": database_thrust_curve,
+                "attachedToComponent": 2,
             },
         ],
         "rocketSplitPoints": [

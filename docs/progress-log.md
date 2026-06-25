@@ -81,3 +81,7 @@
 - Added builder split/stage markers between structural parts, with red markers in the design tree and rocket side view, persistence through save/export/import, simulation payload inclusion, and `stage_splits` result metadata.
 - Ran `bash scripts/run_pre_goal_checks.sh`: passed with 50 unit tests, split-marker smoke gates, frontend production build, and frontend lint.
 - Browser-checked local app at `http://localhost:5001/`: added Split 1 between the nose cone and recovery bay, saw one red tree marker and one red side-view marker, ran a simulation to completion, and produced no browser warnings/errors.
+- Added OpenRocket-style subpart attachment hierarchy for fins, motors, and rail buttons, including automatic aft-host attachment, inspector host selection, component-table host visibility, and backend rejection of invalid subpart-to-subpart references.
+- Updated scenario fixtures and pre-goal smoke payloads to carry valid fin/motor attachment hosts.
+- Ran `bash scripts/run_pre_goal_checks.sh`: passed with 52 unit tests, attachment smoke gates, scenario matrix, backend API smoke, frontend production build, and frontend lint.
+- Browser-checked local app at `http://localhost:5001/`: selected the fin set, changed its host from Aft airframe to Forward airframe, saw the table update, added a rail button with automatic Aft airframe attachment, and produced no browser warnings/errors.

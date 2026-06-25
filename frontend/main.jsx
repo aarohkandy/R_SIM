@@ -339,6 +339,20 @@ const getStructuralLength = (components) => components
   .reduce((sum, component) => sum + Math.max(0, numberValue(component.length)), 0);
 
 const positionalTypes = new Set(['Fins', 'Motor', 'Rail Button']);
+const attachmentChildTypes = new Set(['Fins', 'Motor', 'Rail Button']);
+const attachmentHostTypes = new Set(['Body Tube', 'Transition', 'Electronics Bay', 'Recovery Bay', 'Active Airbrake']);
+
+const normalizeAttachmentId = (value) => (value === null || value === undefined ? '' : String(value));
+
+const getAttachmentHosts = (components) => components.filter((component) => attachmentHostTypes.has(component.type));
+
+const getAttachmentHost = (component, components) => {
+  const attachedId = normalizeAttachmentId(component?.attachedToComponent ?? component?.attached_to_component);
+  if (!attachedId) return null;
+  return getAttachmentHosts(components).find((host) => String(host.id) === attachedId) || null;
+};
+
+const getDefaultAttachmentHost = (components) => [...getAttachmentHosts(components)].reverse()[0] || null;
 
 const getComponentAxialPosition = (component, totalLength) => {
   const rawPosition = numberValue(
@@ -755,6 +769,7 @@ const getDesignChecks = ({ components, splitPoints = [], metrics, config, landin
   const ambientPressure = numberValue(config.pressure, 101325);
   const targetApogee = numberValue(controller.targetApogee, 0);
   const motorDelay = numberValue(motor?.motorDelay, 0);
+  const attachmentHosts = getAttachmentHosts(components);
 
   if (!motor) {
     add('error', 'Motor missing', 'Add a motor before simulation.', 'component.motor');
@@ -797,6 +812,19 @@ const getDesignChecks = ({ components, splitPoints = [], metrics, config, landin
       }
       if (component.type === 'Fins' && axialPosition + numberValue(component.finWidth, 0) > metrics.totalLength + 0.1) {
         add('warn', 'Fin position', 'Fin root chord extends past the aft end.', positionTarget);
+      }
+    }
+
+    if (attachmentChildTypes.has(component.type)) {
+      const attachedId = normalizeAttachmentId(component.attachedToComponent ?? component.attached_to_component);
+      const host = getAttachmentHost(component, components);
+      const target = componentTarget(component, 'attachedToComponent');
+      if (!attachmentHosts.length) {
+        add('error', 'Attachment host missing', 'Add a body tube, transition, or bay before placing subparts.', target);
+      } else if (!attachedId) {
+        add('warn', 'Attachment missing', `${component.name} should be attached to an airframe host.`, target);
+      } else if (!host) {
+        add('error', 'Attachment invalid', `${component.name} must attach to a body tube, transition, electronics bay, recovery bay, or active airbrake.`, target);
       }
     }
 
@@ -1844,8 +1872,8 @@ function DesignTree({
   removeSplitPoint
 }) {
   const groups = [
-    ['Airframe', components.filter((component) => structuralTypes.has(component.type) && component.type !== 'Landing System')],
-    ['Motor and fins', components.filter((component) => ['Motor', 'Fins'].includes(component.type))],
+    ['Airframe', components.filter((component) => structuralTypes.has(component.type) && !['Landing System', 'Rail Button'].includes(component.type))],
+    ['Attached subparts', components.filter((component) => attachmentChildTypes.has(component.type))],
     ['Recovery and landing', components.filter((component) => component.type === 'Landing System')]
   ];
   const splitViews = getSplitPointViews(splitPoints, components);
@@ -1952,6 +1980,7 @@ function ComponentTable({ components, selectedId, setSelectedId }) {
               <th>Length</th>
               <th>Diameter</th>
               <th>Position</th>
+              <th>Host</th>
               <th>Mass</th>
               <th>Details</th>
             </tr>
@@ -1968,6 +1997,7 @@ function ComponentTable({ components, selectedId, setSelectedId }) {
                 <td>{formatNumber(component.length, 0)} mm</td>
                 <td>{formatNumber(getDiameter(component), 0)} mm</td>
                 <td>{positionalTypes.has(component.type) ? `${formatNumber(getComponentAxialPosition(component, getStructuralLength(components)), 0)} mm` : '--'}</td>
+                <td>{attachmentChildTypes.has(component.type) ? getAttachmentHost(component, components)?.name || 'Unattached' : '--'}</td>
                 <td>{formatNumber(componentMass(component), 0)} g</td>
                 <td>{component.type === 'Motor'
                   ? `${formatNumber(component.motorThrust, 1)} N, ${formatNumber(component.motorTotalImpulse, 1)} Ns`
@@ -2198,7 +2228,7 @@ function MotorCurvePanel({ component, updateComponent, fieldChecks = {} }) {
   );
 }
 
-function ComponentInspector({ component, updateComponent, metrics, fieldChecks = {} }) {
+function ComponentInspector({ component, components = [], updateComponent, metrics, fieldChecks = {} }) {
   if (!component) {
     return (
       <div className="empty-state">
@@ -2212,6 +2242,7 @@ function ComponentInspector({ component, updateComponent, metrics, fieldChecks =
   const axialPosition = component
     ? getComponentAxialPosition(component, metrics?.totalLength || numberValue(component.axialPosition, 0))
     : 0;
+  const attachmentHosts = getAttachmentHosts(components);
   const commonFields = (
     <>
       <Field label="Name" type="text" value={component.name} onChange={(value) => set('name', value)} />
@@ -2239,6 +2270,21 @@ function ComponentInspector({ component, updateComponent, metrics, fieldChecks =
             unit="mm"
             checks={checks('axialPosition')}
             onChange={(value) => set('axialPosition', value)}
+          />
+        )}
+        {attachmentChildTypes.has(component.type) && (
+          <Field
+            label="Attached to"
+            value={normalizeAttachmentId(component.attachedToComponent ?? component.attached_to_component)}
+            checks={checks('attachedToComponent')}
+            onChange={(value) => set('attachedToComponent', value || null)}
+            options={[
+              { value: '', label: 'Unattached' },
+              ...attachmentHosts.map((host) => ({
+                value: String(host.id),
+                label: `${host.name} (${host.type})`
+              }))
+            ]}
           />
         )}
         {component.type === 'Transition' && (
@@ -3350,9 +3396,9 @@ function App() {
 
   const addComponent = (type) => {
     const next = cloneComponent(type);
-    if (type === 'Fins' || type === 'Motor') {
-      const aftTube = [...components].reverse().find((component) => ['Body Tube', 'Transition'].includes(component.type));
-      if (aftTube) next.attachedToComponent = aftTube.id;
+    if (attachmentChildTypes.has(type)) {
+      const host = getDefaultAttachmentHost(components);
+      if (host) next.attachedToComponent = host.id;
     }
     if (positionalTypes.has(type)) {
       next.axialPosition = getComponentAxialPosition(next, componentMetrics.totalLength);
@@ -3405,7 +3451,7 @@ function App() {
   };
 
   const addMotor = (motor) => {
-    const aftTube = [...components].reverse().find((component) => ['Body Tube', 'Transition'].includes(component.type));
+    const host = getDefaultAttachmentHost(components);
     const motorComponent = {
       ...componentDefaults.Motor,
       id: makeId('motor'),
@@ -3426,7 +3472,7 @@ function App() {
         { ...componentDefaults.Motor, length: motor.length || componentDefaults.Motor.length },
         componentMetrics.totalLength
       ),
-      attachedToComponent: aftTube?.id || null
+      attachedToComponent: host?.id || null
     };
     setComponents((current) => [
       ...current.filter((component) => component.type !== 'Motor'),
@@ -3979,7 +4025,7 @@ function App() {
     }];
 
   const inspector = {
-    component: <ComponentInspector component={selectedComponent} updateComponent={updateComponent} metrics={metrics} fieldChecks={fieldChecks} />,
+    component: <ComponentInspector component={selectedComponent} components={components} updateComponent={updateComponent} metrics={metrics} fieldChecks={fieldChecks} />,
     motors: (
       <MotorBrowser
         motors={motors}
