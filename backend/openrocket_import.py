@@ -39,6 +39,10 @@ RECOVERY_COMPONENT_TAGS = {
     "streamer",
 }
 
+RECOVERY_HARDWARE_COMPONENT_TAGS = {
+    "shockcord",
+}
+
 
 @dataclass
 class ImportedOpenRocket:
@@ -75,6 +79,10 @@ def parse_openrocket_design(payload: bytes, filename: str = "design.ork") -> Imp
             next_id += 1
         elif tag in RECOVERY_COMPONENT_TAGS:
             component = _parse_recovery_component(element, next_id, last_body_id, tag)
+            components.append(component)
+            next_id += 1
+        elif tag in RECOVERY_HARDWARE_COMPONENT_TAGS:
+            component = _parse_shock_cord_component(element, next_id, last_body_id)
             components.append(component)
             next_id += 1
 
@@ -263,6 +271,29 @@ def _parse_recovery_component(element: ET.Element, component_id: int, attached_t
         "dragArea": round(area or 0.18, 4),
         "dragCoefficient": cd,
         "maxOpeningLoadG": _numeric_child(element, ["maxopeningloadg", "openingloadlimitg"]) or 15.0,
+        "attachedToComponent": attached_to,
+        "importSource": "openrocket",
+    }
+
+
+def _parse_shock_cord_component(element: ET.Element, component_id: int, attached_to: Optional[int]) -> Dict:
+    name = _first_text(element, ["name"]) or "Imported Shock Cord"
+    mass = _mass_g(_numeric_child(element, ["mass", "massoverride", "componentmass"]))
+    cord_length = _length_m(_numeric_child(element, ["length", "cordlength", "shockcordlength"]))
+    cord_diameter = _length_mm(_numeric_child(element, ["diameter", "corddiameter", "shockcorddiameter"]))
+    max_tension = _numeric_child(element, ["maxtensionn", "maxtension", "maxloadn", "maxload", "strengthn", "strength"])
+
+    return {
+        "id": component_id,
+        "type": "Shock Cord",
+        "name": name,
+        "length": 0,
+        "diameter": 0,
+        "weight": mass,
+        "cordLength": cord_length or 3.0,
+        "cordDiameter": cord_diameter or 3.0,
+        "maxTensionN": max_tension or 450.0,
+        "material": _first_text(element, ["material"]) or "nylon",
         "attachedToComponent": attached_to,
         "importSource": "openrocket",
     }

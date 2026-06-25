@@ -273,6 +273,65 @@ class ActiveSimulationTests(unittest.TestCase):
         self.assertTrue(any("Broken streamer streamer length" in error for error in result["validation_errors"]))
         self.assertTrue(any("Broken streamer drag area" in error for error in result["validation_errors"]))
 
+    def test_shock_cord_component_sets_harness_opening_limit(self):
+        manager = ActiveSimulationManager()
+        rocket = sample_rocket()
+        rocket["components"].extend([
+            {
+                "id": 5,
+                "type": "Parachute",
+                "name": "Main chute",
+                "weight": 35,
+                "recoveryRole": "main",
+                "deployEvent": "altitude",
+                "deployAltitude": 60,
+                "dragArea": 0.22,
+                "dragCoefficient": 1.6,
+                "maxOpeningLoadG": 15,
+                "attachedToComponent": 2,
+            },
+            {
+                "id": 6,
+                "type": "Shock Cord",
+                "name": "Harness",
+                "weight": 24,
+                "cordLength": 3.0,
+                "cordDiameter": 3.0,
+                "maxTensionN": 20.0,
+                "attachedToComponent": 2,
+            },
+        ])
+
+        result = manager.submit_cfd_simulation(rocket, base_config())["results"]
+        safety = result["recovery_safety"]
+        landing = result["landing_system"]
+
+        self.assertAlmostEqual(landing["harness_limit_n"], 20.0)
+        self.assertAlmostEqual(landing["harness_length_m"], 3.0)
+        self.assertAlmostEqual(safety["harness_load_limit_n"], 20.0)
+        self.assertAlmostEqual(safety["harness_load_limit_g"], 20.0 / (0.232 * 9.80665))
+        self.assertAlmostEqual(safety["effective_opening_load_limit_g"], safety["harness_load_limit_g"])
+
+    def test_invalid_shock_cord_component_is_rejected(self):
+        manager = ActiveSimulationManager()
+        rocket = sample_rocket()
+        rocket["components"].append({
+            "id": 5,
+            "type": "Shock Cord",
+            "name": "Broken harness",
+            "weight": 10,
+            "cordLength": 0,
+            "cordDiameter": 0,
+            "maxTensionN": 0,
+            "attachedToComponent": 2,
+        })
+
+        result = manager.submit_cfd_simulation(rocket, base_config())
+
+        self.assertFalse(result["success"])
+        self.assertTrue(any("Broken harness cord length" in error for error in result["validation_errors"]))
+        self.assertTrue(any("Broken harness rated strength" in error for error in result["validation_errors"]))
+
     def test_invalid_parachute_component_is_rejected(self):
         manager = ActiveSimulationManager()
         rocket = sample_rocket()

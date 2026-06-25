@@ -44,7 +44,8 @@ const componentColor = {
   'Rail Button': '#6c757d',
   'Mass Component': '#b56576',
   Parachute: '#ef476f',
-  Streamer: '#ff9f1c'
+  Streamer: '#ff9f1c',
+  'Shock Cord': '#118ab2'
 };
 
 const componentDefaults = {
@@ -191,6 +192,17 @@ const componentDefaults = {
     dragCoefficient: 1.05,
     maxOpeningLoadG: 12,
     material: 'mylar'
+  },
+  'Shock Cord': {
+    type: 'Shock Cord',
+    name: 'Nylon shock cord',
+    length: 0,
+    diameter: 0,
+    weight: 24,
+    cordLength: 3.0,
+    cordDiameter: 3,
+    maxTensionN: 450,
+    material: 'nylon'
   }
 };
 
@@ -214,6 +226,7 @@ const defaultComponents = [
   { ...componentDefaults['Recovery Bay'], id: 'recovery-1' },
   { ...componentDefaults.Parachute, id: 'parachute-1', attachedToComponent: 'recovery-1', axialPosition: 210 },
   { ...componentDefaults.Streamer, id: 'streamer-1', attachedToComponent: 'recovery-1', axialPosition: 225 },
+  { ...componentDefaults['Shock Cord'], id: 'shock-cord-1', attachedToComponent: 'recovery-1', axialPosition: 230 },
   { ...componentDefaults['Landing System'], id: 'landing-1' },
   { ...componentDefaults['Body Tube'], id: 'tube-1', name: 'Forward airframe', length: 360, weight: 110 },
   { ...componentDefaults['Electronics Bay'], id: 'avbay-1' },
@@ -380,14 +393,16 @@ const componentMass = (component) => {
 const getDiameter = (component) => numberValue(component.diameter ?? component.bottomDiameter ?? component.topDiameter, 0);
 
 const recoveryDeviceTypes = new Set(['Parachute', 'Streamer']);
-const internalMassTypes = new Set(['Mass Component', ...recoveryDeviceTypes]);
+const recoveryHardwareTypes = new Set(['Shock Cord']);
+const recoverySubpartTypes = new Set([...recoveryDeviceTypes, ...recoveryHardwareTypes]);
+const internalMassTypes = new Set(['Mass Component', ...recoverySubpartTypes]);
 
 const getStructuralLength = (components) => components
   .filter((component) => structuralTypes.has(component.type) && component.type !== 'Rail Button')
   .reduce((sum, component) => sum + Math.max(0, numberValue(component.length)), 0);
 
-const positionalTypes = new Set(['Fins', 'Motor', 'Rail Button', 'Mass Component', ...recoveryDeviceTypes]);
-const attachmentChildTypes = new Set(['Fins', 'Motor', 'Rail Button', 'Mass Component', ...recoveryDeviceTypes]);
+const positionalTypes = new Set(['Fins', 'Motor', 'Rail Button', 'Mass Component', ...recoverySubpartTypes]);
+const attachmentChildTypes = new Set(['Fins', 'Motor', 'Rail Button', 'Mass Component', ...recoverySubpartTypes]);
 const attachmentHostTypes = new Set(['Body Tube', 'Transition', 'Electronics Bay', 'Recovery Bay', 'Active Airbrake']);
 
 const normalizeAttachmentId = (value) => (value === null || value === undefined ? '' : String(value));
@@ -427,7 +442,7 @@ const getComponentAxialPosition = (component, totalLength) => {
   if (component.type === 'Mass Component') {
     return clamp(totalLength * 0.45, 0, totalLength);
   }
-  if (recoveryDeviceTypes.has(component.type)) {
+  if (recoverySubpartTypes.has(component.type)) {
     return clamp(totalLength * 0.2, 0, totalLength);
   }
   return 0;
@@ -615,7 +630,7 @@ const getMetrics = (components) => {
       position = getComponentAxialPosition(component, totalLength);
     } else if (component.type === 'Mass Component') {
       position = getComponentAxialPosition(component, totalLength);
-    } else if (recoveryDeviceTypes.has(component.type)) {
+    } else if (recoverySubpartTypes.has(component.type)) {
       position = getComponentAxialPosition(component, totalLength);
     } else {
       const segment = structural.find((item) => item.id === component.id);
@@ -657,7 +672,7 @@ const massGroups = [
   { key: 'motor', label: 'Motor', color: '#343a40', types: ['Motor'] },
   { key: 'payload', label: 'Payload and ballast', color: '#b56576', types: ['Mass Component'] },
   { key: 'active', label: 'Active control', color: '#f2a541', types: ['Active Airbrake'] },
-  { key: 'landing', label: 'Landing', color: '#7b61ff', types: ['Landing System', 'Parachute', 'Streamer'] }
+  { key: 'landing', label: 'Landing', color: '#7b61ff', types: ['Landing System', 'Parachute', 'Streamer', 'Shock Cord'] }
 ];
 
 const getMassBreakdown = (components) => {
@@ -793,10 +808,25 @@ const recoveryDragAreaOrFallback = (component, fallback) => {
 };
 
 const getRecoveryDevices = (components) => components.filter((component) => recoveryDeviceTypes.has(component.type));
+const getRecoveryHardware = (components) => components.filter((component) => recoveryHardwareTypes.has(component.type));
+
+const getHarnessLimitN = (hardware) => {
+  const limits = hardware
+    .map((component) => numberValue(component.maxTensionN ?? component.strengthN ?? component.maxLoadN, 0))
+    .filter((value) => value > 0);
+  return limits.length ? Math.min(...limits) : 0;
+};
+
+const getHarnessLengthM = (hardware) => hardware.reduce((sum, component) => (
+  sum + Math.max(0, numberValue(component.cordLength ?? component.lengthM, 0))
+), 0);
 
 const buildLandingSystemFromRecoveryDevices = (components, currentLanding) => {
   const devices = getRecoveryDevices(components);
   if (!devices.length) return currentLanding;
+  const hardware = getRecoveryHardware(components);
+  const harnessLimitN = getHarnessLimitN(hardware);
+  const harnessLengthM = getHarnessLengthM(hardware);
   const main = devices.find((component) => getRecoveryRole(component) === 'main') || devices[0];
   const drogue = devices.find((component) => component !== main && getRecoveryRole(component) === 'drogue');
   const next = {
@@ -807,7 +837,9 @@ const buildLandingSystemFromRecoveryDevices = (components, currentLanding) => {
     deployAltitude: numberValue(main.deployAltitude, currentLanding.deployAltitude),
     dragArea: recoveryDragAreaOrFallback(main, currentLanding.dragArea),
     dragCoefficient: numberValue(main.dragCoefficient, currentLanding.dragCoefficient),
-    maxOpeningLoadG: numberValue(main.maxOpeningLoadG, currentLanding.maxOpeningLoadG)
+    maxOpeningLoadG: numberValue(main.maxOpeningLoadG, currentLanding.maxOpeningLoadG),
+    harnessLimitN,
+    harnessLengthM
   };
   if (drogue) {
     next.drogueDeployEvent = drogue.deployEvent || currentLanding.drogueDeployEvent || 'apogee';
@@ -997,6 +1029,18 @@ const getDesignChecks = ({ components, splitPoints = [], metrics, config, landin
       }
       if (numberValue(component.maxOpeningLoadG, 0) <= 0) {
         add('error', 'Opening load', 'Recovery opening-load limit must be positive.', componentTarget(component, 'maxOpeningLoadG'));
+      }
+    }
+
+    if (component.type === 'Shock Cord') {
+      if (numberValue(component.cordLength, 0) <= 0) {
+        add('error', 'Cord length', 'Shock cord length must be positive.', componentTarget(component, 'cordLength'));
+      }
+      if (numberValue(component.cordDiameter, 0) <= 0) {
+        add('error', 'Cord diameter', 'Shock cord diameter must be positive.', componentTarget(component, 'cordDiameter'));
+      }
+      if (numberValue(component.maxTensionN, 0) <= 0) {
+        add('error', 'Cord strength', 'Shock cord rated strength must be positive.', componentTarget(component, 'maxTensionN'));
       }
     }
 
@@ -1802,7 +1846,9 @@ function RecoverySafetyPanel({ safety = {} }) {
     ['Required main area', `${formatNumber(safety.required_main_drag_area_m2, 3)} m2`],
     ['Main area margin', `${safety.main_area_margin_m2 >= 0 ? '+' : ''}${formatNumber(safety.main_area_margin_m2, 3)} m2`],
     ['Main opening', `${formatNumber(safety.main_opening_load_g, 2)} g`],
-    ['Opening limit', `${formatNumber(safety.max_opening_load_g, 1)} g`],
+    ['Opening limit', `${formatNumber(safety.effective_opening_load_limit_g ?? safety.max_opening_load_g, 1)} g`],
+    ['Harness limit', safety.harness_load_limit_n ? `${formatNumber(safety.harness_load_limit_n, 0)} N` : '--'],
+    ['Harness length', safety.harness_length_m ? `${formatNumber(safety.harness_length_m, 1)} m` : '--'],
     ['Drogue terminal', safety.drogue_terminal_velocity_mps === null || safety.drogue_terminal_velocity_mps === undefined ? '--' : `${formatNumber(safety.drogue_terminal_velocity_mps, 2)} m/s`],
     ['Drogue opening', safety.drogue_opening_load_g === null || safety.drogue_opening_load_g === undefined ? '--' : `${formatNumber(safety.drogue_opening_load_g, 2)} g`]
   ];
@@ -1996,6 +2042,21 @@ function RocketDrawing({ components, splitPoints, selectedId, setSelectedId, met
             </g>
           );
         })}
+        {components.filter((component) => component.type === 'Shock Cord').map((cord, index) => {
+          const x = xFor(getComponentAxialPosition(cord, length));
+          const selected = selectedId === cord.id;
+          const cordY = centerY + heightFor(maxDiameter) / 2 + 28 + (index % 2) * 12;
+          return (
+            <g key={cord.id} onClick={() => setSelectedId(cord.id)}>
+              <path
+                className={`shock-cord-marker ${selected ? 'selected' : ''}`}
+                d={`M ${x - 30} ${cordY} q 8 -12 16 0 t 16 0 t 16 0 t 16 0`}
+              />
+              <line x1={x} x2={x} y1={cordY - 2} y2={centerY} className="shock-cord-tether" />
+              <title>{cord.name}</title>
+            </g>
+          );
+        })}
         {getRecoveryDevices(components).map((device, index) => {
           const x = xFor(getComponentAxialPosition(device, length));
           const selected = selectedId === device.id;
@@ -2180,7 +2241,7 @@ function ComponentPalette({ addComponent }) {
     ['Airframe', ['Nose Cone', 'Body Tube', 'Transition', 'Electronics Bay', 'Recovery Bay']],
     ['Payload', ['Mass Component']],
     ['Control', ['Active Airbrake', 'Fins', 'Rail Button']],
-    ['Propulsion and landing', ['Motor', 'Parachute', 'Streamer', 'Landing System']]
+    ['Propulsion and landing', ['Motor', 'Parachute', 'Streamer', 'Shock Cord', 'Landing System']]
   ];
 
   return (
@@ -2215,6 +2276,9 @@ const getComponentDetailText = (component) => {
   }
   if (recoveryDeviceTypes.has(component.type)) {
     return `${getRecoveryRole(component)} ${component.type.toLowerCase()} ${formatNumber(getRecoveryDragArea(component), 3)} m2`;
+  }
+  if (component.type === 'Shock Cord') {
+    return `${formatNumber(component.cordLength, 1)} m, ${formatNumber(component.maxTensionN, 0)} N`;
   }
   return component.material || 'configured';
 };
@@ -2592,6 +2656,14 @@ function ComponentInspector({ component, components = [], updateComponent, metri
               { value: 'recovery', label: 'Recovery hardware' }
             ]}
           />
+        )}
+        {component.type === 'Shock Cord' && (
+          <>
+            <Field label="Cord length" value={component.cordLength ?? 3} unit="m" step="0.1" checks={checks('cordLength')} onChange={(value) => set('cordLength', value)} />
+            <Field label="Cord diameter" value={component.cordDiameter ?? 3} unit="mm" step="0.1" checks={checks('cordDiameter')} onChange={(value) => set('cordDiameter', value)} />
+            <Field label="Rated strength" value={component.maxTensionN ?? 450} unit="N" step="10" checks={checks('maxTensionN')} onChange={(value) => set('maxTensionN', value)} />
+            <Field label="Material" type="text" value={component.material || ''} onChange={(value) => set('material', value)} />
+          </>
         )}
         {isRecoveryDevice && (
           <>
@@ -3740,12 +3812,12 @@ function App() {
       next.weight = 18;
     }
     if (attachmentChildTypes.has(type)) {
-      const host = recoveryDeviceTypes.has(type)
+      const host = recoverySubpartTypes.has(type)
         ? components.find((component) => component.type === 'Recovery Bay') || getDefaultAttachmentHost(components)
         : getDefaultAttachmentHost(components);
       if (host) {
         next.attachedToComponent = host.id;
-        if (type === 'Mass Component' || recoveryDeviceTypes.has(type)) {
+        if (type === 'Mass Component' || recoverySubpartTypes.has(type)) {
           next.axialPosition = getAttachmentHostCenter(host, components, componentMetrics.totalLength * 0.45);
         }
       }
@@ -4287,7 +4359,11 @@ function App() {
             main_area_margin_m2: safety.main_area_margin_m2,
             main_opening_load_g: safety.main_opening_load_g,
             drogue_opening_load_g: safety.drogue_opening_load_g,
-            max_opening_load_g: safety.max_opening_load_g
+            max_opening_load_g: safety.max_opening_load_g,
+            effective_opening_load_limit_g: safety.effective_opening_load_limit_g,
+            harness_load_limit_n: safety.harness_load_limit_n,
+            harness_load_limit_g: safety.harness_load_limit_g,
+            harness_length_m: safety.harness_length_m
           }
         ];
         const headers = [
@@ -4312,7 +4388,11 @@ function App() {
           'main_area_margin_m2',
           'main_opening_load_g',
           'drogue_opening_load_g',
-          'max_opening_load_g'
+          'max_opening_load_g',
+          'effective_opening_load_limit_g',
+          'harness_load_limit_n',
+          'harness_load_limit_g',
+          'harness_length_m'
         ];
         content = rowsToCsv(rows, headers);
         filename = 'active-rocket-recovery-summary.csv';

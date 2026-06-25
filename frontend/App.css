@@ -598,6 +598,25 @@ button:focus-visible {
   pointer-events: none;
 }
 
+.shock-cord-marker {
+  fill: none;
+  stroke: #118ab2;
+  stroke-width: 2.6;
+  stroke-linecap: round;
+  cursor: pointer;
+}
+
+.shock-cord-marker.selected {
+  stroke: var(--accent);
+}
+
+.shock-cord-tether {
+  stroke: #0b5d78;
+  stroke-width: 1;
+  stroke-dasharray: 3 3;
+  pointer-events: none;
+}
+
 .parachute-marker {
   fill: #ef476f;
   stroke: #8f1f3f;

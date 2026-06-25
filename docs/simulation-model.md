@@ -15,11 +15,11 @@ This local model is not CFD and is not flight certification. Its output is marke
 - Output includes `trajectory`, `force_history`, and `moment_history` samples so the UI/export path can inspect net forces, thrust, drag, angular rates, and pitch/yaw/roll moments.
 - Output includes `landing_footprint` and recovery history ground-track fields so the UI/export path can inspect touchdown range, bearing, deployment points, descent time, and drift after recovery deployment.
 - Output includes `recovery_analysis` with an event sequence and phase summaries for drogue/main/total descent timing, descent rate, and drift.
-- Output includes `recovery_safety` with required main drag area, estimated terminal velocity, area margin, opening load in newtons and g, and safety statuses.
+- Output includes `recovery_safety` with required main drag area, estimated terminal velocity, area margin, opening load in newtons and g, shock-cord harness limit, effective opening-load limit, and safety statuses.
 - Output includes `stage_splits` as structural split/stage marker metadata derived from builder boundaries; the current local model does not separate stages in flight.
 - Input validation treats fins, motors, and rail buttons as attached subparts. Missing host references warn, while references to non-airframe hosts block the run.
 - Internal mass components are accepted as payload/avionics/battery/ballast/recovery mass inputs. They are validated as attached subparts, included in frontend mass/CG, and ignored by backend external geometry and aerodynamic-center calculations.
-- Parachute and streamer components are accepted as attached recovery devices. Main and drogue recovery parts are translated into the landing-system config before validation and simulation, while remaining internal to external geometry and aerodynamic-center calculations. Streamer drag area can come from explicit area or strip length multiplied by strip width.
+- Parachute and streamer components are accepted as attached recovery devices. Shock cords are accepted as attached recovery hardware. Main and drogue recovery parts are translated into the landing-system config before validation and simulation, while remaining internal to external geometry and aerodynamic-center calculations. Streamer drag area can come from explicit area or strip length multiplied by strip width. Shock-cord rated strength becomes the harness load limit used by recovery safety.
 
 ## Target Model Direction
 

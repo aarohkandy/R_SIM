@@ -154,6 +154,23 @@ class OpenRocketImportTests(unittest.TestCase):
         self.assertAlmostEqual(streamer["dragCoefficient"], 1.05)
         self.assertEqual(streamer["attachedToComponent"], body["id"])
 
+    def test_parse_openrocket_shock_cord_component(self):
+        xml = SAMPLE_OPENROCKET_XML.replace(
+            b"<trapezoidfinset>",
+            b"<shockcord><name>Nylon Harness</name><mass>0.024</mass><length>3.000</length><diameter>0.003</diameter><maxTensionN>450</maxTensionN><material>nylon</material></shockcord><trapezoidfinset>",
+        )
+        imported = parse_openrocket_design(xml, "shock-cord.ork")
+        shock_cord = next(component for component in imported.rocket_data["components"] if component["type"] == "Shock Cord")
+        body = next(component for component in imported.rocket_data["components"] if component["type"] == "Body Tube")
+
+        self.assertEqual(shock_cord["name"], "Nylon Harness")
+        self.assertAlmostEqual(shock_cord["weight"], 24.0)
+        self.assertAlmostEqual(shock_cord["cordLength"], 3.0)
+        self.assertAlmostEqual(shock_cord["cordDiameter"], 3.0)
+        self.assertAlmostEqual(shock_cord["maxTensionN"], 450.0)
+        self.assertEqual(shock_cord["material"], "nylon")
+        self.assertEqual(shock_cord["attachedToComponent"], body["id"])
+
     def test_import_endpoint_rejects_non_openrocket_extension(self):
         client = app.test_client()
         response = client.post(

@@ -48,7 +48,8 @@ The active scenario matrix uses importable files in `examples/scenarios/`:
 - Frontend inspector/table expose subpart attachment hosts for fins, motors, and rail buttons.
 - Frontend design tree nests attached subparts beneath their host airframe part and separates unattached subparts.
 - Frontend palette, inspector, table, mass breakdown, and side-view drawing expose internal mass components.
-- Frontend palette, inspector, table, side-view drawing, OpenRocket import, and backend simulation config expose parachute and streamer recovery components.
+- Frontend palette, inspector, table, side-view drawing, OpenRocket import, and backend simulation config expose parachute, streamer, and shock-cord recovery components.
+- Recovery safety output applies shock-cord rated strength as a harness opening-load limit and reports the effective opening-load limit.
 - Frontend results view renders live charts from trajectory, force, pressure, and active-system histories.
 - Frontend export actions include trajectory CSV, force/moment CSV, active-system CSV, and full JSON.
 - Frontend API configuration does not default to hardcoded cloud/GCP services for the local workflow.

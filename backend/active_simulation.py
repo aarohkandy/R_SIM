@@ -25,9 +25,10 @@ class ActiveSimulationManager:
 
     model_version = "active_pneumatic_local_dynamics_v1"
     recovery_component_types = {"parachute", "streamer"}
-    attachment_child_types = {"fins", "motor", "rail button", "mass component"} | recovery_component_types
+    recovery_hardware_types = {"shock cord"}
+    attachment_child_types = {"fins", "motor", "rail button", "mass component"} | recovery_component_types | recovery_hardware_types
     attachment_host_types = {"body tube", "transition", "electronics bay", "recovery bay", "active airbrake"}
-    internal_component_types = {"fins", "motor", "rail button", "mass component"} | recovery_component_types
+    internal_component_types = {"fins", "motor", "rail button", "mass component"} | recovery_component_types | recovery_hardware_types
 
     def __init__(self):
         self.simulations: Dict[str, Dict] = {}
@@ -78,6 +79,31 @@ class ActiveSimulationManager:
             )
             return max(0.0, streamer_length * streamer_width)
         return self._as_float(default, 0.0)
+
+    def _recovery_harness(self, components: List[Dict]) -> Dict[str, float]:
+        hardware = [
+            component for component in components
+            if isinstance(component, dict) and str(component.get("type", "")).lower() in self.recovery_hardware_types
+        ]
+        strength_values = [
+            self._as_float(
+                self._first_value(component, ["maxTensionN", "strengthN", "maxLoadN", "maxTension", "strength"], 0.0),
+                0.0,
+            )
+            for component in hardware
+        ]
+        length_values = [
+            self._as_float(
+                self._first_value(component, ["cordLength", "lengthM", "shockCordLength"], 0.0),
+                0.0,
+            )
+            for component in hardware
+        ]
+        positive_strengths = [value for value in strength_values if value > 0]
+        return {
+            "limit_n": min(positive_strengths) if positive_strengths else 0.0,
+            "length_m": sum(value for value in length_values if value > 0),
+        }
 
     @staticmethod
     def _clamp(value: float, low: float, high: float) -> float:
@@ -166,6 +192,7 @@ class ActiveSimulationManager:
             return "drogue" if str(raw).lower() == "drogue" else "main"
 
         landing = dict(config.get("landingSystem") or config.get("recoverySystem") or {})
+        harness = self._recovery_harness(components)
         main = next((component for component in recovery_devices if role(component) == "main"), recovery_devices[0])
         drogue = next((component for component in recovery_devices if component is not main and role(component) == "drogue"), None)
         landing.update({
@@ -176,6 +203,8 @@ class ActiveSimulationManager:
             "dragArea": self._recovery_drag_area(main, landing.get("dragArea", 0.18)),
             "dragCoefficient": self._first_value(main, ["dragCoefficient", "cd"], landing.get("dragCoefficient", 1.55)),
             "maxOpeningLoadG": self._first_value(main, ["maxOpeningLoadG", "openingLoadLimitG"], landing.get("maxOpeningLoadG", 15.0)),
+            "harnessLimitN": harness["limit_n"],
+            "harnessLengthM": harness["length_m"],
         })
         if drogue:
             landing.update({
@@ -298,6 +327,25 @@ class ActiveSimulationManager:
                     errors.append(f"{name} drag coefficient must be positive.")
                 if self._as_float(self._first_value(component, ["maxOpeningLoadG", "openingLoadLimitG"], 15.0), 15.0) <= 0:
                     errors.append(f"{name} opening load limit must be positive.")
+            if component_type in self.recovery_hardware_types:
+                cord_length = self._as_float(
+                    self._first_value(component, ["cordLength", "lengthM", "shockCordLength"], 0.0),
+                    0.0,
+                )
+                cord_diameter = self._as_float(
+                    self._first_value(component, ["cordDiameter", "diameterMm", "shockCordDiameter"], 0.0),
+                    0.0,
+                )
+                max_tension = self._as_float(
+                    self._first_value(component, ["maxTensionN", "strengthN", "maxLoadN", "maxTension", "strength"], 0.0),
+                    0.0,
+                )
+                if cord_length <= 0:
+                    errors.append(f"{name} cord length must be positive.")
+                if cord_diameter <= 0:
+                    errors.append(f"{name} cord diameter must be positive.")
+                if max_tension <= 0:
+                    errors.append(f"{name} rated strength must be positive.")
 
         dt_raw = self._as_float(config.get("timeStep") or config.get("time_step"), 0.02)
         max_time_raw = self._as_float(config.get("maxTime") or config.get("max_time"), 45.0)
@@ -380,6 +428,8 @@ class ActiveSimulationManager:
             drag_coefficient = self._as_float(landing.get("dragCoefficient"), 1.55)
             max_safe_velocity = self._as_float(landing.get("maxSafeVelocity"), 7.5)
             max_opening_load_g = self._as_float(landing.get("maxOpeningLoadG"), 15.0)
+            harness_limit_n = self._as_float(landing.get("harnessLimitN"), 0.0)
+            harness_length_m = self._as_float(landing.get("harnessLengthM"), 0.0)
             drogue_drag_area = self._as_float(landing.get("drogueDragArea"), 0.04)
             drogue_drag_coefficient = self._as_float(landing.get("drogueDragCoefficient"), 1.25)
             valid_events = {"apogee", "altitude", "motor_ejection"}
@@ -401,6 +451,10 @@ class ActiveSimulationManager:
                 errors.append("Landing safe touchdown velocity must be positive.")
             if max_opening_load_g <= 0:
                 errors.append("Landing maximum opening load must be positive.")
+            if harness_limit_n < 0:
+                errors.append("Landing harness load limit cannot be negative.")
+            if harness_length_m < 0:
+                errors.append("Landing harness length cannot be negative.")
             if main_event not in valid_events:
                 errors.append("Main recovery deploy event must be apogee, altitude, or motor_ejection.")
             if main_event == "motor_ejection" and motor_delay <= 0:
@@ -1072,6 +1126,8 @@ class ActiveSimulationManager:
                 "drogue_drag_coefficient": landing["drogue_drag_coefficient"],
                 "max_safe_velocity_mps": landing["max_safe_velocity_mps"],
                 "max_opening_load_g": landing["max_opening_load_g"],
+                "harness_limit_n": landing["harness_limit_n"],
+                "harness_length_m": landing["harness_length_m"],
                 "required_drag_area_m2": recovery_safety["required_main_drag_area_m2"],
                 "area_margin_m2": recovery_safety["main_area_margin_m2"],
                 "estimated_terminal_velocity_mps": recovery_safety["main_terminal_velocity_mps"],
@@ -1550,6 +1606,10 @@ class ActiveSimulationManager:
                 "drogue_opening_load_n": None,
                 "drogue_opening_load_g": None,
                 "drogue_opening_load_status": "disabled",
+                "harness_load_limit_n": None,
+                "harness_load_limit_g": None,
+                "effective_opening_load_limit_g": None,
+                "harness_length_m": None,
                 "touchdown_status": "disabled",
                 "overall_status": "disabled",
             }
@@ -1590,8 +1650,18 @@ class ActiveSimulationManager:
             gravity=gravity,
         ) if landing["system_type"] == "drogue_main" else {"load_n": None, "load_g": None}
 
-        main_load_status = self._load_status(main_opening["load_g"], landing["max_opening_load_g"])
-        drogue_load_status = self._load_status(drogue_opening["load_g"], landing["max_opening_load_g"])
+        harness_limit_n = landing.get("harness_limit_n", 0.0)
+        harness_limit_g = (
+            harness_limit_n / max(mass_kg * gravity, 1e-9)
+            if harness_limit_n and harness_limit_n > 0
+            else None
+        )
+        effective_limit_g = min(
+            [value for value in (landing["max_opening_load_g"], harness_limit_g) if value is not None]
+        )
+
+        main_load_status = self._load_status(main_opening["load_g"], effective_limit_g)
+        drogue_load_status = self._load_status(drogue_opening["load_g"], effective_limit_g)
         touchdown_status = "safe" if touchdown_velocity <= safe_velocity else "hard"
         statuses = {main_load_status, drogue_load_status, touchdown_status}
         if "hard" in statuses:
@@ -1610,6 +1680,10 @@ class ActiveSimulationManager:
             "drogue_terminal_velocity_mps": drogue_terminal,
             "max_safe_velocity_mps": safe_velocity,
             "max_opening_load_g": landing["max_opening_load_g"],
+            "harness_load_limit_n": harness_limit_n if harness_limit_n > 0 else None,
+            "harness_load_limit_g": harness_limit_g,
+            "effective_opening_load_limit_g": effective_limit_g,
+            "harness_length_m": landing.get("harness_length_m", 0.0) or None,
             "main_deploy_speed_mps": main_deploy_speed_air,
             "main_opening_load_n": main_opening["load_n"],
             "main_opening_load_g": main_opening["load_g"],
@@ -1798,6 +1872,8 @@ class ActiveSimulationManager:
             "drogue_drag_coefficient": self._as_float(landing.get("drogueDragCoefficient"), 1.25),
             "max_safe_velocity_mps": self._as_float(landing.get("maxSafeVelocity"), 7.5),
             "max_opening_load_g": self._as_float(landing.get("maxOpeningLoadG"), 15.0),
+            "harness_limit_n": self._as_float(landing.get("harnessLimitN"), 0.0),
+            "harness_length_m": self._as_float(landing.get("harnessLengthM"), 0.0),
         }
 
     def _build_controller_config(self, config: Dict, active: Dict) -> Dict:
