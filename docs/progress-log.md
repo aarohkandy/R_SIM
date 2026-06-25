@@ -62,3 +62,4 @@
 - Browser-checked the built app at `http://127.0.0.1:5011/`: the setup panel loaded launch sites from `/api/environment/launch-sites`, showed Black Rock Desert, Estes Field, and NAR TARC Finals, selected Estes Field, updated launch altitude to 1609 m, and showed the explicit pneumatic pressure noise control.
 - Added live OpenRocket-style design checks that surface stability, motor, guide, active pneumatic, and recovery issues in the main workbench and beside the specific inputs that caused them.
 - Added named simulation setups so users can save current flight settings, restore them, duplicate cases, and run or compare a selected setup against the current rocket.
+- Added editable axial placement for fins, motors, and rail buttons so drawing, mass properties, frontend CP analysis, and backend CP exports honor component location along the rocket.

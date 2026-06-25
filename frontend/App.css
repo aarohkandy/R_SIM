@@ -485,6 +485,18 @@ button:focus-visible {
   fill: #111827;
 }
 
+.rail-button-dot {
+  fill: #6c757d;
+  stroke: #2f3740;
+  stroke-width: 1.4;
+  cursor: pointer;
+}
+
+.rail-button-dot.selected {
+  stroke: var(--accent);
+  stroke-width: 3;
+}
+
 .cg-line,
 .cp-line,
 .landing-line {

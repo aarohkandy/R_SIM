@@ -1308,6 +1308,18 @@ class ActiveSimulationManager:
             )
             return raw / 1000.0 if raw > 1 else raw
 
+        def axial_position_m(component: Dict, default_m: float) -> float:
+            raw = self._first_value(
+                component,
+                ["axialPosition", "positionFromNose", "position", "axial_position", "position_from_nose"],
+                None,
+            )
+            if raw in (None, ""):
+                return self._clamp(default_m, 0.0, total_length_m)
+            position = self._as_float(raw, default_m)
+            position_m = position / 1000.0 if abs(position) > 5 else position
+            return self._clamp(position_m, 0.0, total_length_m)
+
         structural = []
         cursor = 0.0
         for component in components:
@@ -1367,7 +1379,7 @@ class ActiveSimulationManager:
             mid_chord = math.sqrt(span**2 + (sweep + (root - tip) / 2.0) ** 2)
             denominator = 1.0 + math.sqrt(1.0 + ((2.0 * mid_chord) / max(root + tip, 1e-6)) ** 2)
             normal_force = 1.8 * fin_count * ((span / reference_diameter) ** 2) / denominator
-            leading_edge = max(0.0, total_length_m - root)
+            leading_edge = axial_position_m(component, max(0.0, total_length_m - root))
             cp_m = (
                 leading_edge
                 + (sweep * (root + 2.0 * tip)) / (3.0 * max(root + tip, 1e-6))
@@ -1377,6 +1389,7 @@ class ActiveSimulationManager:
                 "name": component.get("name", "Fins"),
                 "type": component.get("type", "Fins"),
                 "normal_force": normal_force,
+                "position_m": leading_edge,
                 "cp_m": self._clamp(cp_m, 0.0, total_length_m),
             })
 

@@ -44,6 +44,7 @@ def main() -> int:
     frontend_source = (ROOT / "frontend" / "main.jsx").read_text(encoding="utf-8")
     frontend_style = (ROOT / "frontend" / "App.css").read_text(encoding="utf-8")
     backend_source = (ROOT / "backend" / "f_backend.py").read_text(encoding="utf-8")
+    active_sim_source = (ROOT / "backend" / "active_simulation.py").read_text(encoding="utf-8")
     gcp_client_source = (ROOT / "backend" / "gcp_cfd_client.py").read_text(encoding="utf-8")
     heavy_cfd_source = (ROOT / "backend" / "openfoam_integration.py").read_text(encoding="utf-8")
     require("GCP_FUNCTION_URL" not in frontend_source, "Frontend still defaults to a hardcoded cloud function.")
@@ -70,6 +71,10 @@ def main() -> int:
     require("simulationSetups" in frontend_source, "Frontend does not persist named simulation setups.")
     require("runSetup" in frontend_source, "Frontend cannot run a selected simulation setup.")
     require("setup-row" in frontend_style, "Frontend simulation setup manager is missing list styling.")
+    require("getComponentAxialPosition" in frontend_source, "Frontend does not model editable component axial placement.")
+    require("Axial position" in frontend_source, "Component inspector is missing axial position editing.")
+    require("rail-button-dot" in frontend_style, "Rocket drawing does not render rail button placement.")
+    require("position_m" in active_sim_source, "Backend CP contributions do not expose fin axial placement.")
     database_motor = next(
         (motor for motor in motors.get("motors", []) if motor.get("designation") == "Estes C6-5"),
         motors["motors"][0],

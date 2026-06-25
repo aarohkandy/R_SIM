@@ -336,6 +336,28 @@ const getStructuralLength = (components) => components
   .filter((component) => structuralTypes.has(component.type) && component.type !== 'Rail Button')
   .reduce((sum, component) => sum + Math.max(0, numberValue(component.length)), 0);
 
+const positionalTypes = new Set(['Fins', 'Motor', 'Rail Button']);
+
+const getComponentAxialPosition = (component, totalLength) => {
+  const rawPosition = numberValue(
+    component.axialPosition ?? component.positionFromNose ?? component.position,
+    NaN
+  );
+  if (Number.isFinite(rawPosition)) {
+    return clamp(rawPosition, 0, totalLength);
+  }
+  if (component.type === 'Fins') {
+    return clamp(totalLength - numberValue(component.finWidth, 100), 0, totalLength);
+  }
+  if (component.type === 'Motor') {
+    return clamp(totalLength - numberValue(component.length, 80), 0, totalLength);
+  }
+  if (component.type === 'Rail Button') {
+    return clamp(totalLength * 0.38 + numberValue(component.railOffset, 0), 0, totalLength);
+  }
+  return 0;
+};
+
 const getMaxDiameter = (components) => Math.max(
   1,
   ...components.map((component) => getDiameter(component)).filter((value) => value > 0)
@@ -414,7 +436,7 @@ const getCpAnalysis = (components) => {
       const midChord = Math.sqrt(span ** 2 + (sweep + (rootChord - tipChord) / 2) ** 2);
       const denominator = 1 + Math.sqrt(1 + ((2 * midChord) / (rootChord + tipChord)) ** 2);
       const normalForce = 1.8 * finCount * ((span / referenceDiameter) ** 2) / denominator;
-      const leadingEdge = Math.max(0, totalLength - rootChord);
+      const leadingEdge = getComponentAxialPosition(component, totalLength);
       const cp = leadingEdge
         + (sweep * (rootChord + 2 * tipChord)) / (3 * (rootChord + tipChord))
         + (rootChord + tipChord - (rootChord * tipChord) / (rootChord + tipChord)) / 6;
@@ -457,13 +479,16 @@ const getMetrics = (components) => {
     if (!weight) return;
     let position = totalLength / 2;
     if (component.type === 'Fins') {
-      position = Math.max(0, totalLength - numberValue(component.finWidth, 100) / 2);
+      position = getComponentAxialPosition(component, totalLength) + numberValue(component.finWidth, 100) / 2;
     } else if (component.type === 'Motor') {
-      position = Math.max(0, totalLength - numberValue(component.length, 80) / 2);
+      position = getComponentAxialPosition(component, totalLength) + numberValue(component.length, 80) / 2;
+    } else if (component.type === 'Rail Button') {
+      position = getComponentAxialPosition(component, totalLength);
     } else {
       const segment = structural.find((item) => item.id === component.id);
       if (segment) position = segment.start + segment.length / 2;
     }
+    position = clamp(position, 0, totalLength);
     moment += weight * position;
     weightedMass += weight;
   });
@@ -691,6 +716,24 @@ const getDesignChecks = ({ components, metrics, config, landingSizing, activeEnv
         add('error', 'Diameter missing', `${component.name} needs a positive diameter.`, componentTarget(component, 'diameter'));
       } else if (diameter < 10) {
         add('warn', 'Diameter looks small', `${component.name} may be using meters instead of millimeters.`, componentTarget(component, 'diameter'));
+      }
+    }
+
+    if (positionalTypes.has(component.type)) {
+      const explicitPosition = numberValue(
+        component.axialPosition ?? component.positionFromNose ?? component.position,
+        NaN
+      );
+      const axialPosition = getComponentAxialPosition(component, metrics.totalLength);
+      const positionTarget = componentTarget(component, 'axialPosition');
+      if (Number.isFinite(explicitPosition) && (explicitPosition < 0 || explicitPosition > metrics.totalLength)) {
+        add('error', 'Component position', `${component.name} position must stay inside the rocket length.`, positionTarget);
+      }
+      if (component.type === 'Motor' && axialPosition + numberValue(component.length, 0) > metrics.totalLength + 0.1) {
+        add('warn', 'Motor overhang', 'Motor extends past the aft end; move it forward or check length.', positionTarget);
+      }
+      if (component.type === 'Fins' && axialPosition + numberValue(component.finWidth, 0) > metrics.totalLength + 0.1) {
+        add('warn', 'Fin position', 'Fin root chord extends past the aft end.', positionTarget);
       }
     }
 
@@ -1333,8 +1376,10 @@ function RocketDrawing({ components, selectedId, setSelectedId, metrics, results
         {finSet && (
           <g onClick={() => setSelectedId(finSet.id)}>
             {[-1, 1].map((side) => {
-              const baseX = xFor(length - numberValue(finSet.finWidth, 100));
-              const tailX = xFor(length - 6);
+              const finStart = getComponentAxialPosition(finSet, length);
+              const rootChord = numberValue(finSet.finWidth, 100);
+              const baseX = xFor(finStart);
+              const tailX = xFor(clamp(finStart + rootChord, 0, length));
               const rootY = centerY + side * heightFor(maxDiameter) / 2;
               const tipY = rootY + side * clamp(numberValue(finSet.finHeight, 60), 22, 90);
               return (
@@ -1351,21 +1396,40 @@ function RocketDrawing({ components, selectedId, setSelectedId, metrics, results
         )}
         {motor && (
           <g onClick={() => setSelectedId(motor.id)}>
-            <rect
-              x={xFor(length - numberValue(motor.length, 85))}
-              y={centerY - heightFor(numberValue(motor.diameter, 29)) / 2}
-              width={numberValue(motor.length, 85) * pxPerMm}
-              height={heightFor(numberValue(motor.diameter, 29))}
-              rx="4"
-              className={`motor-core ${selectedId === motor.id ? 'selected' : ''}`}
-            />
-            <path
-              d={`M ${xFor(length)} ${centerY - 14} L ${xFor(length) + 30} ${centerY} L ${xFor(length)} ${centerY + 14} Z`}
-              className="motor-nozzle"
-            />
+            {(() => {
+              const motorStart = getComponentAxialPosition(motor, length);
+              const motorLength = Math.max(6, Math.min(numberValue(motor.length, 85), length - motorStart));
+              return (
+                <>
+                  <rect
+                    x={xFor(motorStart)}
+                    y={centerY - heightFor(numberValue(motor.diameter, 29)) / 2}
+                    width={motorLength * pxPerMm}
+                    height={heightFor(numberValue(motor.diameter, 29))}
+                    rx="4"
+                    className={`motor-core ${selectedId === motor.id ? 'selected' : ''}`}
+                  />
+                  <path
+                    d={`M ${xFor(motorStart + motorLength)} ${centerY - 14} L ${xFor(motorStart + motorLength) + 30} ${centerY} L ${xFor(motorStart + motorLength)} ${centerY + 14} Z`}
+                    className="motor-nozzle"
+                  />
+                </>
+              );
+            })()}
             <title>{motor.name}</title>
           </g>
         )}
+        {components.filter((component) => component.type === 'Rail Button').map((button) => {
+          const x = xFor(getComponentAxialPosition(button, length));
+          const selected = selectedId === button.id;
+          return (
+            <g key={button.id} onClick={() => setSelectedId(button.id)}>
+              <circle cx={x} cy={centerY - heightFor(maxDiameter) / 2 - 12} r="6" className={`rail-button-dot ${selected ? 'selected' : ''}`} />
+              <circle cx={x + 22} cy={centerY - heightFor(maxDiameter) / 2 - 12} r="6" className={`rail-button-dot ${selected ? 'selected' : ''}`} />
+              <title>{button.name}</title>
+            </g>
+          );
+        })}
         <line x1={cgX} x2={cgX} y1="58" y2="226" className="cg-line" />
         <text x={cgX + 6} y="72" className="marker-label">CG</text>
         <line x1={cpX} x2={cpX} y1="58" y2="226" className="cp-line" />
@@ -1456,6 +1520,7 @@ function ComponentTable({ components, selectedId, setSelectedId }) {
               <th>Type</th>
               <th>Length</th>
               <th>Diameter</th>
+              <th>Position</th>
               <th>Mass</th>
               <th>Details</th>
             </tr>
@@ -1471,6 +1536,7 @@ function ComponentTable({ components, selectedId, setSelectedId }) {
                 <td>{component.type}</td>
                 <td>{formatNumber(component.length, 0)} mm</td>
                 <td>{formatNumber(getDiameter(component), 0)} mm</td>
+                <td>{positionalTypes.has(component.type) ? `${formatNumber(getComponentAxialPosition(component, getStructuralLength(components)), 0)} mm` : '--'}</td>
                 <td>{formatNumber(componentMass(component), 0)} g</td>
                 <td>{component.type === 'Motor'
                   ? `${formatNumber(component.motorThrust, 1)} N, ${formatNumber(component.motorTotalImpulse, 1)} Ns`
@@ -1592,7 +1658,7 @@ function DesignAnalysis({ metrics, massBreakdown, config }) {
   );
 }
 
-function ComponentInspector({ component, updateComponent, fieldChecks = {} }) {
+function ComponentInspector({ component, updateComponent, metrics, fieldChecks = {} }) {
   if (!component) {
     return (
       <div className="empty-state">
@@ -1603,6 +1669,9 @@ function ComponentInspector({ component, updateComponent, fieldChecks = {} }) {
 
   const set = (key, value) => updateComponent(component.id, { [key]: value });
   const checks = (field) => fieldChecks[componentTarget(component, field)] || [];
+  const axialPosition = component
+    ? getComponentAxialPosition(component, metrics?.totalLength || numberValue(component.axialPosition, 0))
+    : 0;
   const commonFields = (
     <>
       <Field label="Name" type="text" value={component.name} onChange={(value) => set('name', value)} />
@@ -1623,6 +1692,15 @@ function ComponentInspector({ component, updateComponent, fieldChecks = {} }) {
       </div>
       <div className="field-grid single">
         {commonFields}
+        {positionalTypes.has(component.type) && (
+          <Field
+            label="Axial position"
+            value={component.axialPosition ?? axialPosition}
+            unit="mm"
+            checks={checks('axialPosition')}
+            onChange={(value) => set('axialPosition', value)}
+          />
+        )}
         {component.type === 'Transition' && (
           <>
             <Field label="Top diameter" value={component.topDiameter} unit="mm" checks={checks('topDiameter')} onChange={(value) => set('topDiameter', value)} />
@@ -2550,6 +2628,9 @@ function App() {
       const aftTube = [...components].reverse().find((component) => ['Body Tube', 'Transition'].includes(component.type));
       if (aftTube) next.attachedToComponent = aftTube.id;
     }
+    if (positionalTypes.has(type)) {
+      next.axialPosition = getComponentAxialPosition(next, componentMetrics.totalLength);
+    }
     setComponents((current) => [...current, next]);
     setSelectedId(next.id);
     setInspectorTab('component');
@@ -2615,6 +2696,10 @@ function App() {
       motorTotalImpulse: motor.totalImpulse,
       motorDelay: motor.delay,
       thrustCurve: motor.thrustCurve,
+      axialPosition: getComponentAxialPosition(
+        { ...componentDefaults.Motor, length: motor.length || componentDefaults.Motor.length },
+        componentMetrics.totalLength
+      ),
       attachedToComponent: aftTube?.id || null
     };
     setComponents((current) => [
@@ -3089,7 +3174,7 @@ function App() {
     }];
 
   const inspector = {
-    component: <ComponentInspector component={selectedComponent} updateComponent={updateComponent} fieldChecks={fieldChecks} />,
+    component: <ComponentInspector component={selectedComponent} updateComponent={updateComponent} metrics={metrics} fieldChecks={fieldChecks} />,
     motors: (
       <MotorBrowser
         motors={motors}

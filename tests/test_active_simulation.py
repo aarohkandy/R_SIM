@@ -239,6 +239,21 @@ class ActiveSimulationTests(unittest.TestCase):
         self.assertGreater(larger_fins["center_of_pressure_m"], baseline["center_of_pressure_m"])
         self.assertGreater(larger_fins["stability_margin"], baseline["stability_margin"])
 
+    def test_fin_axial_position_changes_center_of_pressure(self):
+        manager = ActiveSimulationManager()
+        forward_fin_rocket = sample_rocket()
+        aft_fin_rocket = sample_rocket()
+        next(component for component in forward_fin_rocket["components"] if component["type"] == "Fins")["axialPosition"] = 360
+        next(component for component in aft_fin_rocket["components"] if component["type"] == "Fins")["axialPosition"] = 590
+
+        forward = manager.submit_cfd_simulation(forward_fin_rocket, base_config())["results"]
+        aft = manager.submit_cfd_simulation(aft_fin_rocket, base_config())["results"]
+        aft_fin_contribution = next(item for item in aft["cp_contributions"] if item["type"] == "Fins")
+
+        self.assertAlmostEqual(aft_fin_contribution["position_m"], 0.59, places=3)
+        self.assertGreater(aft["center_of_pressure_m"], forward["center_of_pressure_m"])
+        self.assertGreater(aft["stability_margin"], forward["stability_margin"])
+
     def test_landing_system_reduces_touchdown_velocity(self):
         manager = ActiveSimulationManager()
         with_landing = manager.submit_cfd_simulation(sample_rocket(), base_config())["results"]
