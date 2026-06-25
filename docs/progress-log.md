@@ -63,3 +63,4 @@
 - Added live OpenRocket-style design checks that surface stability, motor, guide, active pneumatic, and recovery issues in the main workbench and beside the specific inputs that caused them.
 - Added named simulation setups so users can save current flight settings, restore them, duplicate cases, and run or compare a selected setup against the current rocket.
 - Added editable axial placement for fins, motors, and rail buttons so drawing, mass properties, frontend CP analysis, and backend CP exports honor component location along the rocket.
+- Added active airbrake force-station controls and backend moment-arm reporting so airbrake placement affects moment histories and result exports.

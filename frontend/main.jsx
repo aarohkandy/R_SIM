@@ -215,7 +215,7 @@ const defaultConfig = {
     surfaceArea: 0.0024,
     surfaceCount: 3,
     surfaceCd: 1.35,
-    locationFromNose: 0.52,
+    locationFromNose: 0.78,
     maxDynamicPressure: 85000
   },
   controller: {
@@ -581,6 +581,9 @@ const getActiveEnvelope = (metrics, config) => {
   const diameterM = Math.max(metrics.maxDiameter / 1000, 0.001);
   const frontalArea = Math.PI * (diameterM / 2) ** 2;
   const active = config.activeSystem;
+  const locationFromNoseM = numberValue(active.locationFromNose, 0);
+  const locationFromNoseMm = locationFromNoseM * 1000;
+  const momentArmMm = locationFromNoseMm - metrics.cg;
   const surfaceArea = Math.max(numberValue(active.surfaceArea, 0), 0);
   const surfaceCount = Math.max(numberValue(active.surfaceCount, 0), 0);
   const deployedArea = surfaceArea * surfaceCount;
@@ -591,6 +594,10 @@ const getActiveEnvelope = (metrics, config) => {
     frontalArea,
     deployedArea,
     cdIncrement,
+    locationFromNoseM,
+    locationFromNoseMm,
+    momentArmMm,
+    momentArmM: momentArmMm / 1000,
     maxDynamicPressure: numberValue(active.maxDynamicPressure, 0)
   };
 };
@@ -870,6 +877,11 @@ const getDesignChecks = ({ components, metrics, config, landingSizing, activeEnv
         'active.surfaceMaxAngle',
         componentTarget(activeComponent, 'surfaceMaxAngle')
       ]);
+    }
+    if (activeEnvelope.locationFromNoseM < 0 || activeEnvelope.locationFromNoseMm > metrics.totalLength) {
+      add('error', 'Airbrake station', 'Airbrake force station must stay inside the rocket length.', 'active.locationFromNose');
+    } else if (Math.abs(activeEnvelope.momentArmMm) < metrics.maxDiameter * 0.5) {
+      add('info', 'Airbrake moment arm', 'Airbrake station is close to CG; pitch/yaw authority will be limited.', 'active.locationFromNose');
     }
   }
 
@@ -1617,6 +1629,14 @@ function DesignAnalysis({ metrics, massBreakdown, config }) {
           <strong>{formatNumber(activeEnvelope.deployedArea, 4)} m2</strong>
         </div>
         <div>
+          <span>Airbrake station</span>
+          <strong>{formatNumber(activeEnvelope.locationFromNoseMm, 0)} mm</strong>
+        </div>
+        <div>
+          <span>Airbrake moment arm</span>
+          <strong>{activeEnvelope.momentArmMm >= 0 ? '+' : ''}{formatNumber(activeEnvelope.momentArmMm, 0)} mm</strong>
+        </div>
+        <div>
           <span>Guide exit velocity</span>
           <strong>{formatNumber(guideAnalysis.exitVelocity, 2)} m/s</strong>
         </div>
@@ -1896,11 +1916,21 @@ function FlightSetup({
   );
 }
 
-function ActiveSetup({ config, setConfig, syncAirbrake, compileController, controllerCompileState, fieldChecks = {} }) {
+function ActiveSetup({
+  config,
+  setConfig,
+  syncAirbrake,
+  compileController,
+  controllerCompileState,
+  metrics,
+  activeComponentStation,
+  fieldChecks = {}
+}) {
   const active = config.activeSystem;
   const controller = config.controller;
   const controllerLanguage = config.controllerLanguage || 'builtin';
   const checks = (target) => fieldChecks[target] || [];
+  const activeEnvelope = getActiveEnvelope(metrics, config);
   const setActive = (key, value) => setConfig((current) => ({
     ...current,
     activePneumaticEnabled: key === 'enabled' ? value : current.activePneumaticEnabled,
@@ -1932,6 +1962,7 @@ function ActiveSetup({ config, setConfig, syncAirbrake, compileController, contr
         <Field label="Valve flow" value={active.valveFlowRate} step="0.1" checks={checks('active.valveFlowRate')} onChange={(value) => setActive('valveFlowRate', value)} />
         <Field label="Cylinder bore" value={active.cylinderBore} unit="m" step="0.001" checks={checks('active.cylinderBore')} onChange={(value) => setActive('cylinderBore', value)} />
         <Field label="Cylinder stroke" value={active.cylinderStroke} unit="m" step="0.001" checks={checks('active.cylinderStroke')} onChange={(value) => setActive('cylinderStroke', value)} />
+        <Field label="Airbrake station" value={active.locationFromNose} unit="m" step="0.01" checks={checks('active.locationFromNose')} onChange={(value) => setActive('locationFromNose', value)} />
         <Field
           label="Controller source"
           value={controllerLanguage}
@@ -1947,6 +1978,27 @@ function ActiveSetup({ config, setConfig, syncAirbrake, compileController, contr
         <Field label="Deploy altitude" value={controller.deployAltitude} unit="m" checks={checks('controller.deployAltitude')} onChange={(value) => setController('deployAltitude', value)} />
         <Field label="Kp" value={controller.kp} step="0.001" onChange={(value) => setController('kp', value)} />
         <Field label="Kd" value={controller.kd} step="0.001" onChange={(value) => setController('kd', value)} />
+      </div>
+      <div className="sizing-card">
+        <div className="comparison-title">Airbrake placement</div>
+        <div className="sizing-grid">
+          <div><span>Force station</span><strong>{formatNumber(activeEnvelope.locationFromNoseMm, 0)} mm</strong></div>
+          <div><span>Moment arm</span><strong>{activeEnvelope.momentArmMm >= 0 ? '+' : ''}{formatNumber(activeEnvelope.momentArmMm, 0)} mm</strong></div>
+          <div><span>Component center</span><strong>{activeComponentStation === null ? '--' : `${formatNumber(activeComponentStation, 0)} mm`}</strong></div>
+          <div><span>CG reference</span><strong>{formatNumber(metrics.cg, 0)} mm</strong></div>
+        </div>
+        <div className="sizing-actions">
+          <button
+            type="button"
+            onClick={() => setActive('locationFromNose', Number((activeComponentStation / 1000).toFixed(3)))}
+            disabled={activeComponentStation === null}
+          >
+            Use component center
+          </button>
+          <button type="button" onClick={() => setActive('locationFromNose', Number((metrics.cg / 1000).toFixed(3)))}>
+            Set at CG
+          </button>
+        </div>
       </div>
       {controllerLanguage === 'cpp' && (
         <div className="code-panel">
@@ -2306,6 +2358,8 @@ function ResultsPanel({
         <div className="metric-box"><span>Motor delay</span><strong>{formatNumber(recoveryTiming?.motor_delay_s, 1)} s</strong></div>
         <div className="metric-box"><span>Controller</span><strong>{controllerLabel}</strong></div>
         <div className="metric-box"><span>Stability</span><strong>{formatNumber(metrics.stability, 2)} cal</strong></div>
+        <div className="metric-box"><span>Airbrake station</span><strong>{formatNumber((data.active_system?.location_from_nose_m || 0) * 1000, 0)} mm</strong></div>
+        <div className="metric-box"><span>Airbrake arm</span><strong>{formatNumber((data.active_system?.moment_arm_m || 0) * 1000, 0)} mm</strong></div>
       </div>
       {comparisonData && (
         <div className="comparison-panel">
@@ -2450,6 +2504,7 @@ function ResultsPanel({
         series={[
           { label: 'Pitch', color: '#d9514e', points: momentHistory.map((row) => ({ x: row.time, y: row.pitch_moment })) },
           { label: 'Yaw', color: '#4d908e', points: momentHistory.map((row) => ({ x: row.time, y: row.yaw_moment })) },
+          { label: 'Active pitch', color: '#f2a541', points: momentHistory.map((row) => ({ x: row.time, y: row.active_pitch_moment })) },
           { label: 'Roll', color: '#343a40', points: momentHistory.map((row) => ({ x: row.time, y: row.roll_moment })) }
         ]}
       />
@@ -2494,6 +2549,12 @@ function App() {
   const componentMetrics = useMemo(() => getMetrics(components), [components]);
   const metrics = useMemo(() => applyRocketOverrides(componentMetrics, rocketOverrides), [componentMetrics, rocketOverrides]);
   const massBreakdown = useMemo(() => getMassBreakdown(components), [components]);
+  const activeComponentStation = useMemo(() => {
+    const activeComponent = components.find((component) => component.type === 'Active Airbrake');
+    if (!activeComponent) return null;
+    const segment = layoutComponents(components).find((component) => component.id === activeComponent.id);
+    return segment ? segment.start + segment.length / 2 : null;
+  }, [components]);
   const landingSizing = useMemo(() => getLandingSizing(metrics, config), [metrics, config]);
   const activeEnvelope = useMemo(() => getActiveEnvelope(metrics, config), [metrics, config]);
   const guideAnalysis = useMemo(() => getLaunchGuideAnalysis(metrics, config), [metrics, config]);
@@ -3032,6 +3093,7 @@ function App() {
           'time',
           'thrust_force',
           'drag_force',
+          'active_drag_force',
           'weight_force',
           'net_force_x',
           'net_force_y',
@@ -3041,6 +3103,8 @@ function App() {
           'pitch_moment',
           'yaw_moment',
           'roll_moment',
+          'active_pitch_moment',
+          'active_yaw_moment',
           'pitch_rate_deg_s',
           'yaw_rate_deg_s',
           'roll_rate_deg_s'
@@ -3204,6 +3268,8 @@ function App() {
         syncAirbrake={syncAirbrake}
         compileController={compileController}
         controllerCompileState={controllerCompileState}
+        metrics={metrics}
+        activeComponentStation={activeComponentStation}
         fieldChecks={fieldChecks}
       />
     ),

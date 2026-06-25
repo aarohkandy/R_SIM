@@ -75,6 +75,10 @@ def main() -> int:
     require("Axial position" in frontend_source, "Component inspector is missing axial position editing.")
     require("rail-button-dot" in frontend_style, "Rocket drawing does not render rail button placement.")
     require("position_m" in active_sim_source, "Backend CP contributions do not expose fin axial placement.")
+    require("Airbrake station" in frontend_source, "Frontend is missing active airbrake station controls.")
+    require("active.locationFromNose" in frontend_source, "Frontend design checks do not target active airbrake station.")
+    require("moment_arm_m" in active_sim_source, "Backend active system does not report active airbrake moment arm.")
+    require("active_drag_force" in active_sim_source, "Backend force history is missing active drag force.")
     database_motor = next(
         (motor for motor in motors.get("motors", []) if motor.get("designation") == "Estes C6-5"),
         motors["motors"][0],

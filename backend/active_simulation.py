@@ -48,6 +48,10 @@ class ActiveSimulationManager:
             return default
         return bool(value)
 
+    def _distance_m(self, value, default: float) -> float:
+        distance = self._as_float(value, default)
+        return distance / 1000.0 if abs(distance) > 5 else distance
+
     @staticmethod
     def _first_value(component: Dict, keys: List[str], default):
         for key in keys:
@@ -186,6 +190,10 @@ class ActiveSimulationManager:
                 errors.append("Active surface count must be at least 1.")
             if valve_flow <= 0:
                 errors.append("Valve flow rate must be positive.")
+            active_location = self._distance_m(active.get("locationFromNose"), 0.42)
+            total_length_m = self._rocket_length_m(rocket_data, components)
+            if active_location < 0 or active_location > total_length_m:
+                errors.append("Active airbrake location must be inside the rocket length.")
 
         controller = config.get("controller") or {}
         if controller.get("mode", "target_apogee") == "target_apogee":
@@ -279,6 +287,9 @@ class ActiveSimulationManager:
         total_length_m = self._rocket_length_m(rocket_data, components)
         diameter_m = self._rocket_diameter_m(components)
         frontal_area_m2 = math.pi * (diameter_m / 2.0) ** 2
+        cg_m = self._distance_m(rocket_data.get("cg"), total_length_m * 0.47)
+        active["location_from_nose_m"] = self._clamp(active["location_from_nose_m"], 0.0, total_length_m)
+        active["moment_arm_m"] = active["location_from_nose_m"] - cg_m
         fin_count = self._fin_count(components)
         base_cd = 0.48 + 0.025 * max(fin_count, 3)
 
@@ -367,6 +378,7 @@ class ActiveSimulationManager:
         max_deployment_time = 0.0
         max_surface_angle = 0.0
         max_drag_coefficient = base_cd
+        max_active_drag_force = 0.0
         max_attitude_deg = 0.0
         max_angular_rate_deg_s = 0.0
         min_tank_pressure = tank_pressure
@@ -487,6 +499,8 @@ class ActiveSimulationManager:
                 aero,
                 frontal_area_m2,
             )
+            active_cd_increment = max(0.0, cd - aero["base_cd"])
+            active_drag_force = dynamic_pressure * active_cd_increment * frontal_area_m2
             drogue_deployment = 1.0 if drogue_deployed else 0.0
             main_deployment = 1.0 if landing_deployed else 0.0
             landing_deployment = 1.0 if landing_deployed else (0.35 if drogue_deployed else 0.0)
@@ -508,8 +522,20 @@ class ActiveSimulationManager:
             net_force_y = accel_y * mass_kg
             net_force_z = accel_z * mass_kg
 
-            pitch_angular_accel = -0.45 * pitch - 0.16 * pitch_rate + deployment_fraction * 0.015 * math.sin(wind_direction_rad)
-            yaw_angular_accel = -0.45 * yaw - 0.16 * yaw_rate + deployment_fraction * 0.015 * math.cos(wind_direction_rad)
+            active_pitch_moment_nm = active_drag_force * active["moment_arm_m"] * 0.006 * math.sin(wind_direction_rad)
+            active_yaw_moment_nm = active_drag_force * active["moment_arm_m"] * 0.006 * math.cos(wind_direction_rad)
+            pitch_angular_accel = (
+                -0.45 * pitch
+                - 0.16 * pitch_rate
+                + deployment_fraction * 0.015 * math.sin(wind_direction_rad)
+                + active_pitch_moment_nm / inertia_pitch
+            )
+            yaw_angular_accel = (
+                -0.45 * yaw
+                - 0.16 * yaw_rate
+                + deployment_fraction * 0.015 * math.cos(wind_direction_rad)
+                + active_yaw_moment_nm / inertia_pitch
+            )
             roll_angular_accel = -0.08 * roll_rate
             pitch_moment_nm = pitch_angular_accel * inertia_pitch
             yaw_moment_nm = yaw_angular_accel * inertia_pitch
@@ -551,6 +577,7 @@ class ActiveSimulationManager:
                 max_deployment_time = t
             max_surface_angle = max(max_surface_angle, surface_angle_deg)
             max_drag_coefficient = max(max_drag_coefficient, cd)
+            max_active_drag_force = max(max_active_drag_force, active_drag_force)
             max_attitude_deg = max(max_attitude_deg, abs(math.degrees(pitch)), abs(math.degrees(yaw)), abs(math.degrees(roll)))
             max_angular_rate_deg_s = max(
                 max_angular_rate_deg_s,
@@ -580,6 +607,7 @@ class ActiveSimulationManager:
                     "drogue_deployment": round(drogue_deployment, 4),
                     "main_deployment": round(main_deployment, 4),
                     "drag_force": round(drag_force, 4),
+                    "active_drag_force": round(active_drag_force, 4),
                     "drag_force_x": round(-drag_x, 4),
                     "drag_force_y": round(-drag_y, 4),
                     "drag_force_z": round(-drag_z, 4),
@@ -594,6 +622,8 @@ class ActiveSimulationManager:
                     "pitch_moment": round(pitch_moment_nm, 6),
                     "yaw_moment": round(yaw_moment_nm, 6),
                     "roll_moment": round(roll_moment_nm, 6),
+                    "active_pitch_moment": round(active_pitch_moment_nm, 6),
+                    "active_yaw_moment": round(active_yaw_moment_nm, 6),
                     "valve_command": round(valve_command, 4),
                     "surface_deployment": round(deployment_fraction, 4),
                     "surface_angle_deg": round(surface_angle_deg, 4),
@@ -633,6 +663,7 @@ class ActiveSimulationManager:
                     "time": sample["time"],
                     "thrust_force": sample["thrust_force"],
                     "drag_force": sample["drag_force"],
+                    "active_drag_force": sample["active_drag_force"],
                     "weight_force": sample["weight_force"],
                     "net_force_x": sample["net_force_x"],
                     "net_force_y": sample["net_force_y"],
@@ -645,6 +676,8 @@ class ActiveSimulationManager:
                     "pitch_moment": sample["pitch_moment"],
                     "yaw_moment": sample["yaw_moment"],
                     "roll_moment": sample["roll_moment"],
+                    "active_pitch_moment": sample["active_pitch_moment"],
+                    "active_yaw_moment": sample["active_yaw_moment"],
                     "pitch_rate_deg_s": sample["angular_velocity_y_deg_s"],
                     "yaw_rate_deg_s": sample["angular_velocity_z_deg_s"],
                     "roll_rate_deg_s": sample["angular_velocity_x_deg_s"],
@@ -671,8 +704,6 @@ class ActiveSimulationManager:
         if touchdown_time is None and altitude <= 0.0:
             touchdown_time = total_time
         downrange = math.sqrt(x**2 + y**2)
-        cg_m = self._as_float(rocket_data.get("cg"), total_length_m * 470.0)
-        cg_m = cg_m / 1000.0 if cg_m > 5 else cg_m
         aero_center = self._aerodynamic_center_m(components, total_length_m, diameter_m)
         cp_m = aero_center["cp_m"]
         stability_margin = (cp_m - cg_m) / diameter_m
@@ -724,6 +755,7 @@ class ActiveSimulationManager:
             "max_drag_coefficient": max_drag_coefficient,
             "lift_coefficient": 0.0,
             "max_drag_force": max_drag_force,
+            "max_active_drag_force": max_active_drag_force,
             "max_net_force": max_net_force,
             "max_dynamic_pressure": max_dynamic_pressure,
             "max_attitude_deg": max_attitude_deg,
@@ -752,6 +784,9 @@ class ActiveSimulationManager:
                 "max_surface_deployment": max_deployment,
                 "max_surface_angle_deg": max_surface_angle,
                 "max_surface_area_m2": active["surface_area_m2"] * active["surface_count"],
+                "location_from_nose_m": active["location_from_nose_m"],
+                "moment_arm_m": active["moment_arm_m"],
+                "max_active_drag_force": max_active_drag_force,
                 "valve_cycles": valve_cycles,
                 "history": active_history,
             },
@@ -1147,7 +1182,7 @@ class ActiveSimulationManager:
             "surface_area_m2": self._as_float(active.get("surfaceArea"), 0.0024),
             "surface_count": surface_count,
             "surface_cd": self._as_float(active.get("surfaceCd"), 1.35),
-            "location_from_nose_m": self._as_float(active.get("locationFromNose"), 0.42),
+            "location_from_nose_m": self._distance_m(active.get("locationFromNose"), 0.42),
             "max_dynamic_pressure_pa": self._as_float(active.get("maxDynamicPressure"), 85000.0),
         }
 

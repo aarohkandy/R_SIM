@@ -123,6 +123,25 @@ class ActiveSimulationTests(unittest.TestCase):
         self.assertLess(active["max_altitude"], passive["max_altitude"])
         self.assertGreater(active["max_drag_force"], passive["max_drag_force"])
 
+    def test_active_airbrake_location_is_reported_and_changes_moments(self):
+        manager = ActiveSimulationManager()
+        forward_config = base_config(enabled=True, target_apogee=35)
+        aft_config = base_config(enabled=True, target_apogee=35)
+        forward_config["landingSystem"]["enabled"] = False
+        aft_config["landingSystem"]["enabled"] = False
+        forward_config["activeSystem"]["locationFromNose"] = 0.18
+        aft_config["activeSystem"]["locationFromNose"] = 0.62
+
+        forward = manager.submit_cfd_simulation(sample_rocket(), forward_config)["results"]
+        aft = manager.submit_cfd_simulation(sample_rocket(), aft_config)["results"]
+        forward_moment = max(abs(row["pitch_moment"]) + abs(row["yaw_moment"]) for row in forward["moment_history"])
+        aft_moment = max(abs(row["pitch_moment"]) + abs(row["yaw_moment"]) for row in aft["moment_history"])
+
+        self.assertAlmostEqual(aft["active_system"]["location_from_nose_m"], 0.62, places=3)
+        self.assertGreater(aft["active_system"]["moment_arm_m"], forward["active_system"]["moment_arm_m"])
+        self.assertGreater(aft["active_system"]["max_active_drag_force"], 0)
+        self.assertGreater(abs(aft_moment - forward_moment), 1e-5)
+
     def test_pressure_warning_when_tank_is_too_small(self):
         config = base_config()
         config["activeSystem"]["tankPressure"] = 175000
@@ -149,6 +168,15 @@ class ActiveSimulationTests(unittest.TestCase):
 
         self.assertFalse(result["success"])
         self.assertIn("Active tank pressure must be above ambient pressure.", result["validation_errors"])
+
+    def test_invalid_active_airbrake_location_is_rejected(self):
+        config = base_config()
+        config["activeSystem"]["locationFromNose"] = 2.5
+        manager = ActiveSimulationManager()
+        result = manager.submit_cfd_simulation(sample_rocket(), config)
+
+        self.assertFalse(result["success"])
+        self.assertIn("Active airbrake location must be inside the rocket length.", result["validation_errors"])
 
     def test_force_and_moment_histories_are_exported(self):
         manager = ActiveSimulationManager()

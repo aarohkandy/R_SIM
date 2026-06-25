@@ -7,7 +7,7 @@
 - Define an active air system with pressure source, valves, actuator geometry, deployment location, and surface limits.
 - Write controller code that receives simulated sensor data and commands the active system.
 - Add deterministic or seeded noise for sensors, atmosphere, actuator response, and pressure behavior.
-- Run a simulation and inspect trajectory, stability, controller, actuator, and pressure outputs.
+- Run a simulation and inspect trajectory, stability, controller, actuator, pressure, active-drag, moment, and landing outputs.
 
 ## Current Requirements
 
@@ -21,4 +21,5 @@
 - Frontend motor search must use the local backend motor database, not hardcoded placeholder motor data.
 - C++ controller code must compile before it is used by an active simulation.
 - Pneumatic outputs must show pressure use, actuator movement, and surface deployment when active control commands it.
+- Active airbrake location must be editable, validated against rocket length, and reflected in moment outputs.
 - Importable scenario files in `examples/scenarios/` must keep passive, active, warning, and invalid-input behavior reproducible.
