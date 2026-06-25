@@ -78,6 +78,39 @@ const activeDemoConfig = {
   }
 };
 
+const normalizeBackendMotor = (motor) => {
+  const manufacturer = motor.manufacturer || 'Unknown';
+  const designation = motor.designation || motor.model || 'Motor';
+  const model = designation.startsWith(`${manufacturer} `)
+    ? designation.slice(manufacturer.length + 1)
+    : designation;
+  const thrustCurve = (motor.thrust_curve || motor.thrustCurve || []).map((point) => (
+    Array.isArray(point)
+      ? { time: Number(point[0]), thrust: Number(point[1]) }
+      : { time: Number(point.time), thrust: Number(point.thrust) }
+  )).filter((point) => Number.isFinite(point.time) && Number.isFinite(point.thrust));
+
+  return {
+    id: `${manufacturer}-${designation}`.toLowerCase().replace(/[^a-z0-9]+/g, '-'),
+    designation,
+    manufacturer,
+    model,
+    displayName: `${manufacturer} ${model}`.trim(),
+    impulse: motor.impulse_class || motor.impulse || '',
+    thrust: Number(motor.average_thrust ?? motor.thrust ?? 0),
+    maxThrust: Number(motor.max_thrust ?? motor.maxThrust ?? 0),
+    burnTime: Number(motor.burn_time ?? motor.burnTime ?? 0),
+    totalImpulse: Number(motor.total_impulse ?? motor.totalImpulse ?? 0),
+    delay: Number(motor.delay_time ?? motor.delay ?? 0),
+    weight: Number(motor.total_mass ?? motor.weight ?? 0),
+    propellantMass: Number(motor.propellant_mass ?? 0),
+    diameter: Number(motor.diameter ?? 0),
+    length: Number(motor.length ?? 0),
+    approvedForTarc: Boolean(motor.approved_for_tarc),
+    thrustCurve
+  };
+};
+
 function App() {
   // API Configuration - works for both local development and Netlify production
   const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://127.0.0.1:5011';
@@ -508,65 +541,53 @@ function App() {
   const [motorSearchResults, setMotorSearchResults] = useState([]);
   const [motorSearchQuery, setMotorSearchQuery] = useState('');
   const [selectedMotor, setSelectedMotor] = useState(null);
+  const [availableMotors, setAvailableMotors] = useState([]);
+  const [motorSearchLoading, setMotorSearchLoading] = useState(false);
+  const [motorSearchError, setMotorSearchError] = useState('');
   
-  // Motor search function (mock for now - will integrate with ThrustCurve API)
+  const loadAvailableMotors = async () => {
+    if (availableMotors.length) {
+      return availableMotors;
+    }
+
+    setMotorSearchLoading(true);
+    setMotorSearchError('');
+    try {
+      const response = await fetch(`${SIMULATION_API_URL}/api/environment/motors`);
+      const result = await response.json();
+      if (!response.ok || !Array.isArray(result.motors)) {
+        throw new Error(result.message || 'Motor database did not return a motor list.');
+      }
+      const motors = result.motors.map(normalizeBackendMotor);
+      setAvailableMotors(motors);
+      return motors;
+    } catch (error) {
+      setMotorSearchError(error.message);
+      setAvailableMotors([]);
+      return [];
+    } finally {
+      setMotorSearchLoading(false);
+    }
+  };
+
   const searchMotors = async (query) => {
     console.log('🔍 Searching for motors:', query);
     
-    if (!query.trim()) {
+    const trimmedQuery = query.trim();
+    if (!trimmedQuery) {
       setMotorSearchResults([]);
+      setMotorSearchError('');
       return;
     }
-    
-    // Mock motor data - in production this would come from ThrustCurve API
-    const mockMotors = [
-      {
-        id: 'estes-c6-5',
-        manufacturer: 'Estes',
-        model: 'C6-5',
-        impulse: 'C',
-        thrust: 6.0,
-        burnTime: 1.6,
-        totalImpulse: 10.0,
-        delay: 5,
-        weight: 16.8,
-        diameter: 18,
-        length: 70
-      },
-      {
-        id: 'aerotech-e30-4',
-        manufacturer: 'AeroTech',
-        model: 'E30-4',
-        impulse: 'E',
-        thrust: 30.0,
-        burnTime: 0.8,
-        totalImpulse: 24.0,
-        delay: 4,
-        weight: 62.0,
-        diameter: 18,
-        length: 70
-      },
-      {
-        id: 'estes-d12-5',
-        manufacturer: 'Estes',
-        model: 'D12-5',
-        impulse: 'D',
-        thrust: 12.0,
-        burnTime: 1.2,
-        totalImpulse: 14.4,
-        delay: 5,
-        weight: 24.0,
-        diameter: 18,
-        length: 70
-      }
-    ];
-    
-    // Filter motors based on query
-    const filtered = mockMotors.filter(motor => 
-      motor.manufacturer.toLowerCase().includes(query.toLowerCase()) ||
-      motor.model.toLowerCase().includes(query.toLowerCase()) ||
-      motor.impulse.toLowerCase().includes(query.toLowerCase())
-    );
+
+    const motors = await loadAvailableMotors();
+    const lowerQuery = trimmedQuery.toLowerCase();
+    const filtered = motors.filter(motor =>
+      motor.manufacturer.toLowerCase().includes(lowerQuery) ||
+      motor.model.toLowerCase().includes(lowerQuery) ||
+      motor.designation.toLowerCase().includes(lowerQuery) ||
+      motor.impulse.toLowerCase().includes(lowerQuery)
+    ).slice(0, 20);
     
     setMotorSearchResults(filtered);
   };
@@ -829,7 +850,7 @@ function App() {
     const newMotor = {
       id: Date.now(),
       type: 'Motor',
-      name: `${motorData.manufacturer} ${motorData.model}`,
+      name: motorData.displayName || `${motorData.manufacturer} ${motorData.model}`,
       length: motorData.length,
       diameter: motorData.diameter,
       topDiameter: motorData.diameter,
@@ -840,7 +861,7 @@ function App() {
       bottomDiameterInput: motorData.diameter.toString(),
       // Motor properties from search
       motorType: motorData.manufacturer,
-      motorModel: motorData.model,
+      motorModel: motorData.designation || motorData.model,
       motorImpulse: motorData.impulse,
       motorThrust: motorData.thrust,
       motorBurnTime: motorData.burnTime,
@@ -851,6 +872,7 @@ function App() {
       motorCertification: motorData.certification,
       motorPrice: motorData.price,
       motorId: motorData.id,
+      thrustCurve: motorData.thrustCurve,
       // Motor attachment
       attachedToComponent: attachedToComponent
     };
@@ -863,7 +885,7 @@ function App() {
       const attachedComponent = rocketComponents.find(comp => comp.id === attachedToComponent);
       showNotification(`Motor added and attached to ${attachedComponent?.name}`, 'success');
     } else {
-      showNotification(`Motor added: ${motorData.manufacturer} ${motorData.model}`, 'success');
+      showNotification(`Motor added: ${motorData.displayName || `${motorData.manufacturer} ${motorData.model}`}`, 'success');
     }
   };
 
@@ -5088,6 +5110,10 @@ function App() {
                             <span>{motor.thrust} N</span>
                           </div>
                           <div className="spec-row">
+                            <span>Max Thrust:</span>
+                            <span>{motor.maxThrust} N</span>
+                          </div>
+                          <div className="spec-row">
                             <span>Burn Time:</span>
                             <span>{motor.burnTime} s</span>
                           </div>
@@ -5108,12 +5134,16 @@ function App() {
                             <span>{motor.length} mm</span>
                           </div>
                           <div className="spec-row">
-                            <span>Propellant:</span>
-                            <span>{motor.propellant}</span>
+                            <span>Delay:</span>
+                            <span>{motor.delay} s</span>
                           </div>
                           <div className="spec-row">
-                            <span>Price:</span>
-                            <span>${motor.price}</span>
+                            <span>Curve Points:</span>
+                            <span>{motor.thrustCurve.length}</span>
+                          </div>
+                          <div className="spec-row">
+                            <span>TARC:</span>
+                            <span>{motor.approvedForTarc ? 'Approved' : 'Check rules'}</span>
                           </div>
                         </div>
                         <button 
@@ -5125,15 +5155,24 @@ function App() {
                       </div>
                     ))}
                   </div>
+                ) : motorSearchLoading ? (
+                  <div className="search-prompt">
+                    <p>Loading local motor database...</p>
+                  </div>
+                ) : motorSearchError ? (
+                  <div className="no-results">
+                    <p>Motor database unavailable.</p>
+                    <p>{motorSearchError}</p>
+                  </div>
                 ) : motorSearchQuery ? (
                   <div className="no-results">
                     <p>No motors found for "{motorSearchQuery}"</p>
-                    <p>Try searching for: Estes, AeroTech, C, D, E</p>
+                    <p>Try searching for: Estes, A8, B6, C6, D12</p>
                   </div>
                 ) : (
                   <div className="search-prompt">
                     <p>Enter a search term to find motors</p>
-                    <p>Examples: "Estes C6", "AeroTech E30", "D12"</p>
+                    <p>Examples: "Estes C6", "B6", "D12"</p>
                   </div>
                 )}
               </div>

@@ -39,3 +39,8 @@
 - Wired the builder import button to accept `.ork`, `.xml`, and `.stl` files; OpenRocket imports replace the current component list and preserve imported weight/CG.
 - Ran `bash scripts/run_pre_goal_checks.sh`: passed with 19 unit tests, 6 scenario fixtures, backend API smoke including `openrocket_import: 4`, frontend production build, and frontend lint.
 - Browser-checked local app at `http://127.0.0.1:5001/`: Import Design is visible, accepts `.ork`, `.xml`, and `.stl`, and produced no fresh browser console errors.
+- Replaced the frontend motor search mock list with the backend motor database endpoint and preserved thrust-curve points when adding motors from the UI.
+- Added `/health` as a local backend alias for `/api/health` so the frontend development status check succeeds without noisy 404s.
+- Added an inline frontend favicon to avoid missing-asset console errors during browser validation.
+- Browser-checked local app at `http://127.0.0.1:5001/`: searching `C6` in the motor modal called `/api/environment/motors`, rendered `Estes C6-5`, showed `Curve Points: 100`, and produced no bad responses or console errors.
+- Ran `bash scripts/run_pre_goal_checks.sh`: passed with 19 unit tests, 6 scenario fixtures, root and API health smoke, backend-motor thrust-curve smoke with `motor_curve_points: 100`, OpenRocket import smoke, frontend production build, and frontend lint.

@@ -36,9 +36,23 @@ def main() -> int:
 
     health = json_body(client.get("/api/health"))
     require(health.get("status") == "healthy", "Health endpoint is not healthy.")
+    root_health = json_body(client.get("/health"))
+    require(root_health.get("status") == "healthy", "Root health endpoint is not healthy.")
 
     motors = json_body(client.get("/api/environment/motors"))
     require(len(motors.get("motors", [])) >= 1, "Motor database returned no motors.")
+    frontend_source = (ROOT / "frontend" / "main.jsx").read_text(encoding="utf-8")
+    require("/api/environment/motors" in frontend_source, "Frontend motor picker is not wired to the backend motor database.")
+    require("mockMotors" not in frontend_source, "Frontend motor picker still contains a mock motor list.")
+    database_motor = next(
+        (motor for motor in motors.get("motors", []) if motor.get("designation") == "Estes C6-5"),
+        motors["motors"][0],
+    )
+    database_thrust_curve = [
+        {"time": time_point, "thrust": thrust_value}
+        for time_point, thrust_value in database_motor.get("thrust_curve", [])
+    ]
+    require(len(database_thrust_curve) > 5, f"Backend motor database did not provide a usable thrust curve: {database_motor}")
 
     sites = json_body(client.get("/api/environment/launch-sites"))
     require(len(sites.get("launch_sites", {})) >= 1, "Launch-site endpoint returned no sites.")
@@ -111,14 +125,19 @@ ControlOutput control_function(SensorData sensor_data) {
             {
                 "id": 4,
                 "type": "Motor",
-                "name": "Estes C6-5",
-                "length": 70,
-                "diameter": 18,
-                "motorThrust": 6.0,
-                "motorBurnTime": 1.6,
-                "motorTotalImpulse": 10.0,
-                "motorWeight": 17,
-                "weight": 17,
+                "name": f"{database_motor['manufacturer']} {database_motor['designation']}",
+                "length": database_motor["length"],
+                "diameter": database_motor["diameter"],
+                "motorType": database_motor["manufacturer"],
+                "motorModel": database_motor["designation"],
+                "motorImpulse": database_motor["impulse_class"],
+                "motorThrust": database_motor["average_thrust"],
+                "motorBurnTime": database_motor["burn_time"],
+                "motorTotalImpulse": database_motor["total_impulse"],
+                "motorDelay": database_motor["delay_time"],
+                "motorWeight": database_motor["total_mass"],
+                "weight": database_motor["total_mass"],
+                "thrustCurve": database_thrust_curve,
             },
         ],
         "rocketWeight": 232,
@@ -206,6 +225,7 @@ ControlOutput control_function(SensorData sensor_data) {
     for key in ("net_force_z", "thrust_force", "pitch_moment", "angular_velocity_y_deg_s", "drag_coefficient"):
         require(key in first_sample, f"Trajectory sample missing {key}: {first_sample}")
     require((results.get("controller") or {}).get("compiled_cpp") is True, "C++ controller was not compiled into the simulation.")
+    require((results.get("thrust_profile") or {}).get("source") == "curve", f"Sample simulation did not use backend motor thrust curve: {results.get('thrust_profile')}")
 
     string_values = " ".join(str(value).lower() for value in results.values() if isinstance(value, str))
     forbidden = ("simulated_data", "random result", "fake result")
@@ -214,6 +234,7 @@ ControlOutput control_function(SensorData sensor_data) {
     summary = {
         "health": "ok",
         "motors": len(motors.get("motors", [])),
+        "motor_curve_points": len(database_thrust_curve),
         "launch_sites": len(sites.get("launch_sites", {})),
         "openrocket_import": len(imported_components),
         "controller_compile": "ok",

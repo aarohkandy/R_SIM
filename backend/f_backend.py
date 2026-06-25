@@ -1975,6 +1975,7 @@ def stop_simulation():
         result = {"success": False, "error": "No stop provider configured"}
     return jsonify(result)
 
+@app.route("/health", methods=["GET"])
 @app.route("/api/health", methods=["GET"])
 def health_check():
     """Health check endpoint for Render deployment"""

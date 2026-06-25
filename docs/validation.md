@@ -26,6 +26,7 @@ The active scenario matrix uses importable files in `examples/scenarios/`:
 - Backend dependencies install in a clean Python 3.9 environment.
 - Backend smoke tests pass:
   - `/api/health`
+  - `/health`
   - `/api/environment/motors`
   - `/api/environment/launch-sites`
   - `/api/openrocket/import`
@@ -34,6 +35,8 @@ The active scenario matrix uses importable files in `examples/scenarios/`:
   - `/api/simulation/start`
   - `/api/simulation/status`
 - Sample active pneumatic rocket simulation returns structured deterministic output.
+- Sample active pneumatic rocket simulation uses a motor thrust curve from the backend motor database.
+- Frontend motor search is wired to `/api/environment/motors` and must not contain a mock motor list.
 - Frontend dependencies install.
 - Frontend production build succeeds.
 - Frontend lint succeeds.
