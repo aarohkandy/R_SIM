@@ -1,0 +1,125 @@
+import unittest
+
+from backend.active_simulation import ActiveSimulationManager
+
+
+def sample_rocket():
+    return {
+        "components": [
+            {"id": 1, "type": "Nose Cone", "length": 120, "diameter": 40, "weight": 35},
+            {"id": 2, "type": "Body Tube", "length": 560, "diameter": 40, "weight": 135},
+            {"id": 3, "type": "Fins", "finCount": 3, "finHeight": 55, "finWidth": 90, "weight": 45},
+            {
+                "id": 4,
+                "type": "Motor",
+                "length": 70,
+                "diameter": 18,
+                "motorThrust": 6.0,
+                "motorBurnTime": 1.6,
+                "motorTotalImpulse": 10.0,
+                "weight": 17,
+            },
+        ],
+        "weight": 232,
+        "cg": 320,
+        "totalHeight": 680,
+    }
+
+
+def base_config(enabled=True, target_apogee=60):
+    return {
+        "timeStep": 0.02,
+        "maxTime": 20,
+        "windSpeed": 1.5,
+        "windDirection": 25,
+        "temperature": 15,
+        "pressure": 101325,
+        "activeSystem": {
+            "enabled": enabled,
+            "tankPressure": 650000,
+            "tankVolume": 0.18,
+            "regulatorPressure": 450000,
+            "minOperatingPressure": 180000,
+            "valveFlowRate": 14,
+            "ventRate": 2.5,
+            "lineVolume": 0.035,
+            "cylinderBore": 0.012,
+            "cylinderStroke": 0.035,
+            "cylinderFriction": 5,
+            "returnSpring": 18,
+            "linkageRatio": 1,
+            "surfaceMaxAngle": 65,
+            "surfaceArea": 0.0024,
+            "surfaceCount": 3,
+            "surfaceCd": 1.35,
+            "locationFromNose": 0.42,
+            "maxDynamicPressure": 85000,
+        },
+        "controller": {
+            "mode": "target_apogee",
+            "targetApogee": target_apogee,
+            "deployAltitude": 8,
+            "descentDeployAltitude": 70,
+            "kp": 0.02,
+            "kd": 0.01,
+            "minimumCommand": 0.03,
+        },
+        "noise": {
+            "seed": 20260625,
+            "altitudeStd": 0.15,
+            "velocityStd": 0.05,
+            "accelStd": 0.12,
+            "ambientPressureStd": 8,
+            "pneumaticPressureStd": 120,
+            "temperatureStd": 0.05,
+            "initialAttitudeStd": 0.35,
+        },
+    }
+
+
+class ActiveSimulationTests(unittest.TestCase):
+    def test_active_simulation_is_deterministic_for_same_seed(self):
+        manager = ActiveSimulationManager()
+        first = manager.submit_cfd_simulation(sample_rocket(), base_config())
+        second = manager.submit_cfd_simulation(sample_rocket(), base_config())
+
+        first_results = first["results"]
+        second_results = second["results"]
+        self.assertAlmostEqual(first_results["max_altitude"], second_results["max_altitude"], places=9)
+        self.assertAlmostEqual(first_results["max_velocity"], second_results["max_velocity"], places=9)
+        self.assertEqual(first_results["trajectory"], second_results["trajectory"])
+        self.assertEqual(first_results["active_system"]["history"], second_results["active_system"]["history"])
+
+    def test_active_system_deploys_and_consumes_pressure(self):
+        manager = ActiveSimulationManager()
+        result = manager.submit_cfd_simulation(sample_rocket(), base_config())["results"]
+        active = result["active_system"]
+
+        self.assertTrue(active["enabled"])
+        self.assertGreater(active["max_surface_deployment"], 0.1)
+        self.assertLess(active["tank_pressure_final"], active["tank_pressure_start"])
+        self.assertGreater(len(active["history"]), 5)
+        self.assertGreater(len(result["trajectory"]), 5)
+
+    def test_active_drag_changes_flight_profile(self):
+        manager = ActiveSimulationManager()
+        passive = manager.submit_cfd_simulation(sample_rocket(), base_config(enabled=False))["results"]
+        active = manager.submit_cfd_simulation(sample_rocket(), base_config(enabled=True, target_apogee=35))["results"]
+
+        self.assertEqual(passive["active_system"]["max_surface_deployment"], 0)
+        self.assertGreater(active["active_system"]["max_surface_deployment"], 0.1)
+        self.assertLess(active["max_altitude"], passive["max_altitude"])
+        self.assertGreater(active["max_drag_force"], passive["max_drag_force"])
+
+    def test_pressure_warning_when_tank_is_too_small(self):
+        config = base_config()
+        config["activeSystem"]["tankPressure"] = 175000
+        config["activeSystem"]["tankVolume"] = 0.03
+        manager = ActiveSimulationManager()
+        result = manager.submit_cfd_simulation(sample_rocket(), config)["results"]
+
+        self.assertTrue(any("minimum operating pressure" in warning for warning in result["warnings"]))
+
+
+if __name__ == "__main__":
+    unittest.main()

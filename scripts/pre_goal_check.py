@@ -44,11 +44,23 @@ def main() -> int:
 
     controller_code = r"""
 ControlOutput control_function(SensorData sensor_data) {
-    ControlOutput out;
+    ControlOutput out{};
+    double command = 0.0;
+    double error = sensor_data.predicted_apogee - 80.0;
+    if (sensor_data.altitude > 8.0 && sensor_data.velocity_z > 0.0 && error > 0.0) {
+        command = error * 0.02 + sensor_data.velocity_z * 0.01;
+    }
+    if (sensor_data.velocity_z < -2.0 && sensor_data.altitude < 70.0) {
+        command = 1.0;
+    }
+    if (command < 0.0) command = 0.0;
+    if (command > 1.0) command = 1.0;
     out.fin_deflection_1 = 0.0;
     out.fin_deflection_2 = 0.0;
     out.fin_deflection_3 = 0.0;
     out.fin_deflection_4 = 0.0;
+    out.valve_command = command;
+    out.surface_target = command;
     out.recovery_trigger = false;
     out.data_logging["altitude"] = sensor_data.altitude;
     return out;
@@ -84,6 +96,48 @@ ControlOutput control_function(SensorData sensor_data) {
             "windSpeed": 1.5,
             "temperature": 15,
             "pressure": 101325,
+            "controllerLanguage": "cpp",
+            "controlCode": controller_code,
+            "activeSystem": {
+                "enabled": True,
+                "tankPressure": 650000,
+                "tankVolume": 0.18,
+                "regulatorPressure": 450000,
+                "minOperatingPressure": 180000,
+                "valveFlowRate": 14,
+                "ventRate": 2.5,
+                "lineVolume": 0.035,
+                "cylinderBore": 0.012,
+                "cylinderStroke": 0.035,
+                "cylinderFriction": 5,
+                "returnSpring": 18,
+                "linkageRatio": 1,
+                "surfaceMaxAngle": 65,
+                "surfaceArea": 0.0024,
+                "surfaceCount": 3,
+                "surfaceCd": 1.35,
+                "locationFromNose": 0.42,
+                "maxDynamicPressure": 85000,
+            },
+            "controller": {
+                "mode": "target_apogee",
+                "targetApogee": 80,
+                "deployAltitude": 8,
+                "descentDeployAltitude": 70,
+                "kp": 0.02,
+                "kd": 0.01,
+                "minimumCommand": 0.03,
+            },
+            "noise": {
+                "seed": 20260625,
+                "altitudeStd": 0.15,
+                "velocityStd": 0.05,
+                "accelStd": 0.12,
+                "ambientPressureStd": 8,
+                "pneumaticPressureStd": 120,
+                "temperatureStd": 0.05,
+                "initialAttitudeStd": 0.35,
+            },
         },
     }
     start = json_body(client.post("/api/simulation/start", json=payload))
@@ -102,10 +156,17 @@ ControlOutput control_function(SensorData sensor_data) {
     require(status.get("status") == "completed", f"Simulation did not complete: {status}")
     results = status.get("results") or {}
     require(results.get("is_placeholder") is False, f"Simulation result is marked placeholder: {results}")
-    require(results.get("source") == "local_pre_goal_physics", f"Unexpected result source: {results}")
+    require(results.get("source") == "active_pneumatic_local_dynamics", f"Unexpected result source: {results}")
     for key in ("max_altitude", "max_velocity", "total_flight_time", "drag_coefficient", "stability_margin"):
         require(isinstance(results.get(key), (int, float)), f"Missing numeric result: {key}")
         require(results[key] > 0, f"Non-positive result for {key}: {results[key]}")
+    active_system = results.get("active_system") or {}
+    require(active_system.get("enabled") is True, f"Active system did not run: {active_system}")
+    require(active_system.get("max_surface_deployment", 0) > 0, f"Active surface never deployed: {active_system}")
+    require(active_system.get("tank_pressure_final", 0) < active_system.get("tank_pressure_start", 0), f"Tank pressure did not decrease: {active_system}")
+    require(len(active_system.get("history", [])) > 5, "Active-system history is missing or too short.")
+    require(len(results.get("trajectory", [])) > 5, "Trajectory history is missing or too short.")
+    require((results.get("controller") or {}).get("compiled_cpp") is True, "C++ controller was not compiled into the simulation.")
 
     string_values = " ".join(str(value).lower() for value in results.values() if isinstance(value, str))
     forbidden = ("simulated_data", "random result", "fake result")
@@ -119,6 +180,8 @@ ControlOutput control_function(SensorData sensor_data) {
         "simulation_id": simulation_id,
         "max_altitude": round(results["max_altitude"], 2),
         "max_velocity": round(results["max_velocity"], 2),
+        "max_deployment": round(active_system["max_surface_deployment"], 3),
+        "final_tank_kpa": round(active_system["tank_pressure_final"] / 1000, 1),
         "source": results["source"],
     }
     print(json.dumps(summary, indent=2, sort_keys=True))

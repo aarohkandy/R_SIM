@@ -1,10 +1,10 @@
-# R_SIM Active Rocket Goal Prep
+# R_SIM Active Rocket Goal
 
-This repository is being prepared for a later long-running `/goal` session. The prep work is complete when the app can be installed, checked, and smoke-tested locally without relying on fake cloud output or missing environment assumptions.
+This repository is being turned into a ready-to-use active rocket simulator. The current local model supports rocket geometry, motor data, launch conditions, a pneumatic airbrake system, C++ controller code, seeded noise, and structured flight/pressure/actuator results.
 
 ## Future `/goal` Command
 
-Use this only after `docs/validation.md` passes:
+Use this command to continue the long implementation goal:
 
 ```text
 /goal Make this repo a ready-to-use active rocket simulator per ./GOAL.md. The goal is complete only when a user can define a rocket, pneumatic active air system, controller code, noise/environment settings, run a simulation, and view/export realistic flight results that pass ./docs/validation.md.
@@ -20,12 +20,13 @@ Use this only after `docs/validation.md` passes:
 - [Validation](docs/validation.md)
 - [Progress log](docs/progress-log.md)
 
-## Prep Definition Of Done
+## Definition Of Done
 
 - The workspace is based on `aarohkandy/R_SIM`.
 - The frontend installs, builds, and lints from a clean checkout.
 - The backend installs in a clean Python environment and passes smoke tests.
-- A sample rocket with a motor, body, fins, and controller code can run through the main local simulation API.
-- Simulation output is structured and deterministic, with local smoke output clearly labeled instead of presented as CFD.
-- Known cloud/GCP paths are documented as future integrations, not required for pre-goal readiness.
-
+- A user can define rocket structure, motor data, launch weather, pneumatic air-system values, controller code, and noise settings.
+- A sample active pneumatic rocket simulation completes through the main API.
+- Output includes trajectory, attitude, drag, dynamic pressure, tank pressure, actuator pressure, valve command, surface deployment, controller history, warnings, and exportable results.
+- Local simulation output is deterministic, structured, and labeled as `active_pneumatic_local_dynamics`.
+- Cloud/GCP/OpenFOAM paths are future calibration integrations and must not be required for local use.

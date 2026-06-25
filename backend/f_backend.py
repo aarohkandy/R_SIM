@@ -17,6 +17,8 @@ from pathlib import Path
 from flask import Flask, request, jsonify, Blueprint
 from flask_cors import CORS
 
+from active_simulation import ActiveSimulationManager
+
 # Load OpenFOAM environment
 try:
     openfoam_env_path = Path(__file__).parent.parent / "openfoam" / "openfoam_env.py"
@@ -268,6 +270,59 @@ class CPPControlSystem:
             return False, "Compilation timeout"
         except Exception as e:
             return False, f"Compilation error: {str(e)}"
+
+    def run_control_program(self, program_id: str, sensor_data: Dict) -> Dict:
+        program = self.compiled_programs.get(program_id)
+        if not program:
+            raise ValueError(f"Compiled control program not found: {program_id}")
+
+        args = [
+            str(sensor_data.get("timestamp", 0.0)),
+            str(sensor_data.get("altitude", 0.0)),
+            str(sensor_data.get("velocity_x", 0.0)),
+            str(sensor_data.get("velocity_y", 0.0)),
+            str(sensor_data.get("velocity_z", 0.0)),
+            str(sensor_data.get("acceleration_x", 0.0)),
+            str(sensor_data.get("acceleration_y", 0.0)),
+            str(sensor_data.get("acceleration_z", 0.0)),
+            str(sensor_data.get("angular_velocity_x", 0.0)),
+            str(sensor_data.get("angular_velocity_y", 0.0)),
+            str(sensor_data.get("angular_velocity_z", 0.0)),
+            str(sensor_data.get("pressure", 101325.0)),
+            str(sensor_data.get("temperature", 15.0)),
+            str(sensor_data.get("gps_latitude", 0.0)),
+            str(sensor_data.get("gps_longitude", 0.0)),
+            str(sensor_data.get("tank_pressure", 101325.0)),
+            str(sensor_data.get("actuator_pressure", 101325.0)),
+            str(sensor_data.get("surface_deployment", 0.0)),
+            str(sensor_data.get("predicted_apogee", 0.0)),
+            str(sensor_data.get("dynamic_pressure", 0.0)),
+        ]
+        result = subprocess.run(
+            [program["executable_path"], *args],
+            capture_output=True,
+            text=True,
+            timeout=0.35,
+        )
+        if result.returncode != 0:
+            raise RuntimeError(result.stderr.strip() or "Controller exited with an error.")
+
+        values = result.stdout.strip().split()
+        if len(values) < 7:
+            raise RuntimeError(f"Controller returned malformed output: {result.stdout!r}")
+        keys = [
+            "fin_deflection_1",
+            "fin_deflection_2",
+            "fin_deflection_3",
+            "fin_deflection_4",
+            "valve_command",
+            "surface_target",
+            "recovery_trigger",
+        ]
+        parsed = {}
+        for key, value in zip(keys, values):
+            parsed[key] = bool(int(float(value))) if key == "recovery_trigger" else float(value)
+        return parsed
     
     def _generate_header_file(self) -> str:
         return """
@@ -287,6 +342,11 @@ struct SensorData {
     double pressure;
     double temperature;
     double gps_latitude, gps_longitude;
+    double tank_pressure;
+    double actuator_pressure;
+    double surface_deployment;
+    double predicted_apogee;
+    double dynamic_pressure;
 };
 
 struct ControlOutput {
@@ -294,6 +354,8 @@ struct ControlOutput {
     double fin_deflection_2;
     double fin_deflection_3;
     double fin_deflection_4;
+    double valve_command;
+    double surface_target;
     bool recovery_trigger;
     std::map<std::string, double> data_logging;
 };
@@ -316,12 +378,46 @@ extern "C" ControlOutput control_function(SensorData sensor_data);
 {user_cpp_code}
 
 // Main function for testing (not used in simulation, but for compilation)
-int main() {{
+int main(int argc, char** argv) {{
     SensorData test_sensor_data = {{
-        0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 101325.0, 20.0, 0.0, 0.0
+        0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 101325.0, 20.0, 0.0, 0.0,
+        650000.0, 101325.0, 0.0, 0.0, 0.0
     }};
+    if (argc >= 21) {{
+        test_sensor_data.timestamp = std::stod(argv[1]);
+        test_sensor_data.altitude = std::stod(argv[2]);
+        test_sensor_data.velocity_x = std::stod(argv[3]);
+        test_sensor_data.velocity_y = std::stod(argv[4]);
+        test_sensor_data.velocity_z = std::stod(argv[5]);
+        test_sensor_data.acceleration_x = std::stod(argv[6]);
+        test_sensor_data.acceleration_y = std::stod(argv[7]);
+        test_sensor_data.acceleration_z = std::stod(argv[8]);
+        test_sensor_data.angular_velocity_x = std::stod(argv[9]);
+        test_sensor_data.angular_velocity_y = std::stod(argv[10]);
+        test_sensor_data.angular_velocity_z = std::stod(argv[11]);
+        test_sensor_data.pressure = std::stod(argv[12]);
+        test_sensor_data.temperature = std::stod(argv[13]);
+        test_sensor_data.gps_latitude = std::stod(argv[14]);
+        test_sensor_data.gps_longitude = std::stod(argv[15]);
+        test_sensor_data.tank_pressure = std::stod(argv[16]);
+        test_sensor_data.actuator_pressure = std::stod(argv[17]);
+        test_sensor_data.surface_deployment = std::stod(argv[18]);
+        test_sensor_data.predicted_apogee = std::stod(argv[19]);
+        test_sensor_data.dynamic_pressure = std::stod(argv[20]);
+    }}
     ControlOutput output = control_function(test_sensor_data);
-    std::cout << "Fin 1: " << output.fin_deflection_1 << std::endl;
+    auto finite_or_zero = [](double value) {{
+        return std::isfinite(value) ? value : 0.0;
+    }};
+    std::cout
+        << finite_or_zero(output.fin_deflection_1) << " "
+        << finite_or_zero(output.fin_deflection_2) << " "
+        << finite_or_zero(output.fin_deflection_3) << " "
+        << finite_or_zero(output.fin_deflection_4) << " "
+        << finite_or_zero(output.valve_command) << " "
+        << finite_or_zero(output.surface_target) << " "
+        << (output.recovery_trigger ? 1 : 0)
+        << std::endl;
     return 0;
 }}
 """
@@ -1531,8 +1627,8 @@ elif simulation_mode in {'heavy', 'openfoam'} and heavy_cfd_available:
     openfoam_manager = HeavyCFDManager()
     print("🚀 Heavy CFD manager initialized")
 else:
-    openfoam_manager = LocalPreGoalSimulationManager()
-    print("🧪 Local pre-goal simulation manager initialized")
+    openfoam_manager = ActiveSimulationManager()
+    print("🧪 Active pneumatic local simulation manager initialized")
 
 hardware_limits = HardwareLimitations(
     servo_max_speed=180.0,
@@ -1609,9 +1705,37 @@ def start_simulation():
         'totalHeight': data.get('totalHeight')
     }
     
-    if hasattr(openfoam_manager, 'submit_cfd_simulation'):
+    simulation_payload = {
+        **simulation_config_data,
+        **asdict(simulation_config),
+    }
+
+    controller_callback = None
+    control_code = simulation_config_data.get("controlCode")
+    controller_language = simulation_config_data.get("controllerLanguage", "cpp")
+    active_system = simulation_config_data.get("activeSystem") or {}
+    should_compile_controller = (
+        active_system.get("enabled") is True
+        and controller_language == "cpp"
+        and isinstance(control_code, str)
+        and "ControlOutput control_function(SensorData sensor_data)" in control_code
+    )
+    if should_compile_controller:
+        program_id = str(uuid.uuid4())
+        success, message = cpp_control_system.compile_cpp_code(control_code, program_id)
+        if not success:
+            return jsonify({"success": False, "message": message}), 400
+        simulation_payload["compiledControllerId"] = program_id
+        simulation_payload["controllerCompileMessage"] = message
+        controller_callback = lambda sensor: cpp_control_system.run_control_program(program_id, sensor)
+
+    if isinstance(openfoam_manager, ActiveSimulationManager):
         result = openfoam_manager.submit_cfd_simulation(
-            rocket_data, asdict(simulation_config)
+            rocket_data, simulation_payload, controller_callback=controller_callback
+        )
+    elif hasattr(openfoam_manager, 'submit_cfd_simulation'):
+        result = openfoam_manager.submit_cfd_simulation(
+            rocket_data, simulation_payload
         )
     else:
         result = openfoam_manager.start_simulation(
@@ -1666,7 +1790,15 @@ def health_check():
     # Handle different manager types
     if hasattr(openfoam_manager, 'get_status'):
         # HeavyCFDManager has get_status method
-        openfoam_status = openfoam_manager.get_status()
+        manager_status = openfoam_manager.get_status()
+        openfoam_status = {
+            "status": manager_status.get("status"),
+            "progress": manager_status.get("progress"),
+            "message": manager_status.get("message"),
+            "simulation_id": manager_status.get("simulation_id"),
+        }
+        if manager_status.get("results"):
+            openfoam_status["source"] = manager_status["results"].get("source")
     else:
         # GCPCFDClient doesn't have get_status, use a simple status
         openfoam_status = {"status": "cloud_cfd_available", "type": "gcp"}
@@ -1890,4 +2022,3 @@ if __name__ == '__main__':
     debug = os.environ.get('FLASK_DEBUG', 'false').lower() == 'true'
     
     app.run(host='0.0.0.0', port=port, debug=debug)
-

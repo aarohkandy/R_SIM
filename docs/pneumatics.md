@@ -1,10 +1,10 @@
 # Pneumatics
 
-## Prep Scope
+## Current Scope
 
-Pneumatics are documented but not fully implemented in the prep pass. The later `/goal` should make this a first-class model.
+Pneumatics are first-class local simulation inputs. The model couples tank pressure, regulator pressure, valve fill/vent rates, cylinder bore/stroke, spring/friction, linkage ratio, and deployable surface area into flight drag.
 
-## Future Inputs
+## Inputs
 
 - Tank pressure and volume.
 - Gas type or effective gas constant.
@@ -14,11 +14,10 @@ Pneumatics are documented but not fully implemented in the prep pass. The later 
 - Linkage ratio and deployment surface limits.
 - Surface location, area, orientation, and aerodynamic effect.
 
-## Future Outputs
+## Outputs
 
 - Tank and actuator pressure over time.
 - Valve command history.
 - Actuator stroke and speed.
 - Surface deployment angle or extension.
 - Pressure warnings and saturation events.
-

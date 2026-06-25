@@ -12,3 +12,11 @@
 - Refreshed the frontend lockfile and added ESLint config.
 - Ran `bash scripts/run_pre_goal_checks.sh`: passed.
 - Smoke result: 4 motors, 3 launch sites, C++ controller compile ok, sample simulation source `local_pre_goal_physics`, max altitude about 54.46 m, max velocity about 30.72 m.
+- Implemented active pneumatic local dynamics in `backend/active_simulation.py`.
+- Wired local Flask simulation to preserve nested active-system/controller/noise config and execute compiled C++ controller code during the run.
+- Added frontend setup controls for active air system, target apogee, tank pressure, tank volume, cylinder stroke, surface area, noise seed, and controller mode.
+- Added active pneumatic results display for valve command, deployment, tank pressure, trajectory samples, and JSON/CSV export.
+- Added active simulation unit tests for determinism, pressure consumption, active/passive flight differences, and pressure warnings.
+- Ran active backend smoke check: sample source `active_pneumatic_local_dynamics`, max altitude about 55.75 m, max velocity about 26.71 m, max deployment 100%, final tank pressure about 601.6 kPa.
+- Ran `bash scripts/run_pre_goal_checks.sh`: passed with 4 active simulation unit tests, backend API smoke, frontend build, and frontend lint.
+- Browser-checked local app at `http://127.0.0.1:5001/`: active setup controls visible, controller compile button returned no browser errors, active results labels visible.

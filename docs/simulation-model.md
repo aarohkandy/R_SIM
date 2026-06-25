@@ -1,12 +1,12 @@
 # Simulation Model
 
-## Current Prep Model
+## Current Local Model
 
-The prep harness uses a deterministic local vertical-flight model for smoke testing. It estimates thrust, mass, drag, velocity, altitude, flight time, and stability fields so the app can prove its API wiring before the full active rocket model exists.
+The local model estimates thrust, mass, drag, velocity, altitude, lateral drift, pitch/yaw/roll state, dynamic pressure, pneumatic pressure, actuator stroke, and active airbrake deployment. It is deterministic with a seed and is intended for design iteration before heavier CFD/table calibration.
 
-This local model is not CFD and is not flight certification. Its output is marked with `source: local_pre_goal_physics` and `is_placeholder: false`.
+This local model is not CFD and is not flight certification. Its output is marked with `source: active_pneumatic_local_dynamics` and `is_placeholder: false`.
 
-## Future Goal Model
+## Target Model Direction
 
 - 6DOF rigid-body dynamics.
 - Atmosphere, wind, turbulence, and launch-site conditions.
@@ -20,4 +20,3 @@ This local model is not CFD and is not flight certification. Its output is marke
 - Time history of position, velocity, attitude, angular rates, forces, and moments.
 - Apogee, max velocity, flight time, landing/descent summary, and warnings.
 - Active-system state: tank pressure, valve commands, actuator stroke, surface deployment, and controller outputs.
-

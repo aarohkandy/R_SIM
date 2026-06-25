@@ -323,8 +323,50 @@ function App() {
     calculateVelocity: true,
     outputFormat: 'vtk',
     
-    // Active Fin Control Settings (simplified)
-    activeFinControl: 'disabled',
+    // Active pneumatic airbrake system
+    activeFinControl: 'enabled',
+    activePneumaticEnabled: true,
+    controllerLanguage: 'cpp',
+    activeSystem: {
+      enabled: true,
+      tankPressure: 650000,
+      tankVolume: 0.18,
+      regulatorPressure: 450000,
+      minOperatingPressure: 180000,
+      valveFlowRate: 14,
+      ventRate: 2.5,
+      lineVolume: 0.035,
+      cylinderBore: 0.012,
+      cylinderStroke: 0.035,
+      cylinderFriction: 5,
+      returnSpring: 18,
+      linkageRatio: 1,
+      surfaceMaxAngle: 65,
+      surfaceArea: 0.0024,
+      surfaceCount: 3,
+      surfaceCd: 1.35,
+      locationFromNose: 0.42,
+      maxDynamicPressure: 85000
+    },
+    controller: {
+      mode: 'target_apogee',
+      targetApogee: 240,
+      deployAltitude: 40,
+      descentDeployAltitude: 160,
+      kp: 0.018,
+      kd: 0.008,
+      minimumCommand: 0.03
+    },
+    noise: {
+      seed: 20260625,
+      altitudeStd: 0.15,
+      velocityStd: 0.05,
+      accelStd: 0.12,
+      ambientPressureStd: 8,
+      pneumaticPressureStd: 120,
+      temperatureStd: 0.05,
+      initialAttitudeStd: 0.35
+    },
     motorPower: 50, // Watts
     maxAngle: 15, // degrees
     responseSpeed: 10, // Hz
@@ -339,47 +381,37 @@ function App() {
       kd: 0.05  // Derivative gain
     },
     
-    // Control Code
-    controlCode: `// Active Fin Control Algorithm
-// This code runs in real-time during CFD simulation
-// Available variables: attitude, velocity, position, target_trajectory
-// Output: fin_deflections (array of 4 fin angles in degrees)
+    // C++ control code. The backend compiles this and runs it during simulation.
+    controlCode: `ControlOutput control_function(SensorData sensor_data) {
+    ControlOutput out{};
+    const double target_apogee = 240.0;
+    const double deploy_altitude = 40.0;
+    const double descent_deploy_altitude = 160.0;
 
-function calculateFinDeflections(cfdData, targetTrajectory) {
-    // Extract CFD feedback data
-    const attitude = cfdData.attitude;        // [roll, pitch, yaw] in degrees
-    const velocity = cfdData.velocity;        // [vx, vy, vz] in m/s
-    const position = cfdData.position;        // [x, y, z] in meters
-    const angularVelocity = cfdData.angularVelocity; // [wx, wy, wz] in rad/s
-    
-    // Target trajectory
-    const targetPitch = targetTrajectory.pitch;
-    const targetYaw = targetTrajectory.yaw;
-    
-    // Control gains
-    const kp = 1.0;  // Proportional gain
-    const ki = 0.1;  // Integral gain  
-    const kd = 0.05; // Derivative gain
-    
-    // Calculate errors
-    const pitchError = targetPitch - attitude[1];
-    const yawError = targetYaw - attitude[2];
-    
-    // PID control for pitch (fins 1&3)
-    const pitchControl = kp * pitchError + ki * integralError + kd * derivativeError;
-    
-    // PID control for yaw (fins 2&4)  
-    const yawControl = kp * yawError + ki * integralError + kd * derivativeError;
-    
-    // Calculate fin deflections (4 fins)
-    const finDeflections = [
-        pitchControl,  // Fin 1 (top)
-        yawControl,    // Fin 2 (right)
-        -pitchControl, // Fin 3 (bottom) 
-        -yawControl    // Fin 4 (left)
-    ];
-    
-    return finDeflections;
+    double command = 0.0;
+    const double apogee_error = sensor_data.predicted_apogee - target_apogee;
+
+    if (sensor_data.altitude > deploy_altitude && sensor_data.velocity_z > 0.0 && apogee_error > 0.0) {
+        command = apogee_error * 0.018 + sensor_data.velocity_z * 0.008;
+    }
+
+    if (sensor_data.velocity_z < -2.0 && sensor_data.altitude < descent_deploy_altitude) {
+        command = 1.0;
+    }
+
+    if (command < 0.0) command = 0.0;
+    if (command > 1.0) command = 1.0;
+
+    out.fin_deflection_1 = 0.0;
+    out.fin_deflection_2 = 0.0;
+    out.fin_deflection_3 = 0.0;
+    out.fin_deflection_4 = 0.0;
+    out.valve_command = command;
+    out.surface_target = command;
+    out.recovery_trigger = false;
+    out.data_logging["predicted_apogee"] = sensor_data.predicted_apogee;
+    out.data_logging["tank_pressure"] = sensor_data.tank_pressure;
+    return out;
 }`
   });
   
@@ -1207,7 +1239,81 @@ function calculateFinDeflections(cfdData, targetTrajectory) {
         calculateLift: true,
         calculatePressure: true,
         calculateVelocity: true,
-        outputFormat: 'vtk'
+        outputFormat: 'vtk',
+        activeFinControl: 'enabled',
+        activePneumaticEnabled: true,
+        controllerLanguage: 'cpp',
+        activeSystem: {
+          enabled: true,
+          tankPressure: 650000,
+          tankVolume: 0.18,
+          regulatorPressure: 450000,
+          minOperatingPressure: 180000,
+          valveFlowRate: 14,
+          ventRate: 2.5,
+          lineVolume: 0.035,
+          cylinderBore: 0.012,
+          cylinderStroke: 0.035,
+          cylinderFriction: 5,
+          returnSpring: 18,
+          linkageRatio: 1,
+          surfaceMaxAngle: 65,
+          surfaceArea: 0.0024,
+          surfaceCount: 3,
+          surfaceCd: 1.35,
+          locationFromNose: 0.42,
+          maxDynamicPressure: 85000
+        },
+        controller: {
+          mode: 'target_apogee',
+          targetApogee: 240,
+          deployAltitude: 40,
+          descentDeployAltitude: 160,
+          kp: 0.018,
+          kd: 0.008,
+          minimumCommand: 0.03
+        },
+        noise: {
+          seed: 20260625,
+          altitudeStd: 0.15,
+          velocityStd: 0.05,
+          accelStd: 0.12,
+          ambientPressureStd: 8,
+          pneumaticPressureStd: 120,
+          temperatureStd: 0.05,
+          initialAttitudeStd: 0.35
+        },
+        controlCode: `ControlOutput control_function(SensorData sensor_data) {
+    ControlOutput out{};
+    const double target_apogee = 240.0;
+    const double deploy_altitude = 40.0;
+    const double descent_deploy_altitude = 160.0;
+
+    double command = 0.0;
+    const double apogee_error = sensor_data.predicted_apogee - target_apogee;
+
+    if (sensor_data.altitude > deploy_altitude && sensor_data.velocity_z > 0.0 && apogee_error > 0.0) {
+        command = apogee_error * 0.018 + sensor_data.velocity_z * 0.008;
+    }
+
+    if (sensor_data.velocity_z < -2.0 && sensor_data.altitude < descent_deploy_altitude) {
+        command = 1.0;
+    }
+
+    if (command < 0.0) command = 0.0;
+    if (command > 1.0) command = 1.0;
+
+    out.fin_deflection_1 = 0.0;
+    out.fin_deflection_2 = 0.0;
+    out.fin_deflection_3 = 0.0;
+    out.fin_deflection_4 = 0.0;
+    out.valve_command = command;
+    out.surface_target = command;
+    out.recovery_trigger = false;
+    out.data_logging["predicted_apogee"] = sensor_data.predicted_apogee;
+    out.data_logging["tank_pressure"] = sensor_data.tank_pressure;
+    return out;
+}`
       });
       showNotification('Configuration reset to defaults!', 'info');
   };
@@ -1496,84 +1602,113 @@ function calculateFinDeflections(cfdData, targetTrajectory) {
     }));
   };
 
-  // Active Fin Control API Functions
-  const updateActiveFinControlConfig = async (configData) => {
-    try {
-      const response = await fetch(`${SIMULATION_API_URL}/api/active-fin-control/config`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(configData)
-      });
-      const result = await response.json();
-      if (result.success) {
-        console.log('✅ Active fin control config updated');
-      } else {
-        console.error('Failed to update config:', result.error);
+  const updateSimulationSection = (section, field, value) => {
+    setSimulationConfig(prev => ({
+      ...prev,
+      [section]: {
+        ...(prev[section] || {}),
+        [field]: value
       }
-    } catch (error) {
-      console.error('Error updating active fin control config:', error);
+    }));
+  };
+
+  const setActiveSystemEnabled = (enabled) => {
+    setSimulationConfig(prev => ({
+      ...prev,
+      activeFinControl: enabled ? 'enabled' : 'disabled',
+      activePneumaticEnabled: enabled,
+      activeSystem: {
+        ...(prev.activeSystem || {}),
+        enabled
+      }
+    }));
+  };
+
+  const downloadSimulationArtifact = (format) => {
+    if (!simulationResults) {
+      showNotification('Run a simulation before exporting results.', 'warning');
+      return;
     }
+
+    const baseName = `rsim-${simulationResults.simulation_id || Date.now()}`;
+    let contents = '';
+    let filename = `${baseName}.json`;
+    let type = 'application/json';
+
+    if (format === 'csv') {
+      const trajectory = simulationResults.results?.trajectory || [];
+      const headers = [
+        'time',
+        'altitude',
+        'downrange_x',
+        'crossrange_y',
+        'velocity_z',
+        'speed',
+        'acceleration_z',
+        'dynamic_pressure',
+        'drag_force',
+        'valve_command',
+        'surface_deployment',
+        'tank_pressure',
+        'actuator_pressure'
+      ];
+      contents = [
+        headers.join(','),
+        ...trajectory.map(row => headers.map(key => row[key] ?? '').join(','))
+      ].join('\n');
+      filename = `${baseName}-trajectory.csv`;
+      type = 'text/csv';
+    } else {
+      contents = JSON.stringify({
+        configuration: simulationConfig,
+        result: simulationResults
+      }, null, 2);
+    }
+
+    const blob = new Blob([contents], { type });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = filename;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+    showNotification(`Exported ${filename}`, 'success');
+  };
+
+  // Active pneumatic control actions
+  const updateActiveFinControlConfig = async () => {
+    showNotification('Controller and pneumatic settings saved in this configuration.', 'success');
   };
 
   const startActiveFinControl = async () => {
-    try {
-      const response = await fetch(`${SIMULATION_API_URL}/api/active-fin-control/start`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        }
-      });
-      const result = await response.json();
-      if (result.success) {
-        console.log('🚀 Active fin control started');
-      } else {
-        console.error('Failed to start active fin control:', result.error);
-      }
-    } catch (error) {
-      console.error('Error starting active fin control:', error);
-    }
+    await startSimulation();
   };
 
   const stopActiveFinControl = async () => {
-    try {
-      const response = await fetch(`${SIMULATION_API_URL}/api/active-fin-control/stop`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        }
-      });
-      const result = await response.json();
-      if (result.success) {
-        console.log('⏹️ Active fin control stopped');
-      } else {
-        console.error('Failed to stop active fin control:', result.error);
-      }
-    } catch (error) {
-      console.error('Error stopping active fin control:', error);
-    }
+    await stopSimulation();
   };
 
-  const testControlAlgorithm = async (testData) => {
+  const testControlAlgorithm = async () => {
     try {
-      const response = await fetch(`${SIMULATION_API_URL}/api/active-fin-control/test`, {
+      const response = await fetch(`${SIMULATION_API_URL}/api/control-code/compile`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify(testData)
+        body: JSON.stringify({ code: simulationConfig.controlCode })
       });
       const result = await response.json();
       if (result.success) {
-        console.log('🧪 Control test result:', result.fin_deflections);
-        return result.fin_deflections;
+        showNotification('Controller compiled successfully.', 'success');
+        return result;
       } else {
-        console.error('Failed to test control algorithm:', result.error);
+        showNotification(result.message || 'Controller compile failed.', 'error');
         return null;
       }
     } catch (error) {
-      console.error('Error testing control algorithm:', error);
+      showNotification(`Controller compile failed: ${error.message}`, 'error');
       return null;
     }
   };
@@ -4068,37 +4203,118 @@ function calculateFinDeflections(cfdData, targetTrajectory) {
             </div>
             
                 <div className="variable-group">
-                  <label>Active Fin Control:</label>
-                        <select 
-                    value={simulationConfig.activeFinControl} 
-                    onChange={(e) => updateSimulationConfig('activeFinControl', e.target.value)}
+                  <label>Active Air System:</label>
+                  <select
+                    value={simulationConfig.activeSystem?.enabled ? 'enabled' : 'disabled'}
+                    onChange={(e) => setActiveSystemEnabled(e.target.value === 'enabled')}
                   >
                     <option value="disabled">Disabled</option>
                     <option value="enabled">Enabled</option>
-                    <option value="test">Test Mode</option>
-                        </select>
-                      </div>
-                      
-                      </div>
-                    </div>
+                  </select>
+                </div>
+
+                <div className="variable-group">
+                  <label>Target Apogee (m):</label>
+                  <input
+                    type="number"
+                    value={simulationConfig.controller?.targetApogee ?? 240}
+                    onChange={(e) => updateSimulationSection('controller', 'targetApogee', parseFloat(e.target.value))}
+                    step="1"
+                    min="10"
+                    max="2000"
+                  />
+                </div>
+
+                <div className="variable-group">
+                  <label>Tank Pressure (kPa):</label>
+                  <input
+                    type="number"
+                    value={Math.round((simulationConfig.activeSystem?.tankPressure ?? 650000) / 1000)}
+                    onChange={(e) => updateSimulationSection('activeSystem', 'tankPressure', parseFloat(e.target.value) * 1000)}
+                    step="10"
+                    min="100"
+                    max="3000"
+                  />
+                </div>
+
+                <div className="variable-group">
+                  <label>Tank Volume (L):</label>
+                  <input
+                    type="number"
+                    value={simulationConfig.activeSystem?.tankVolume ?? 0.18}
+                    onChange={(e) => updateSimulationSection('activeSystem', 'tankVolume', parseFloat(e.target.value))}
+                    step="0.01"
+                    min="0.01"
+                    max="5"
+                  />
+                </div>
+
+                <div className="variable-group">
+                  <label>Cylinder Stroke (mm):</label>
+                  <input
+                    type="number"
+                    value={Math.round((simulationConfig.activeSystem?.cylinderStroke ?? 0.035) * 1000)}
+                    onChange={(e) => updateSimulationSection('activeSystem', 'cylinderStroke', parseFloat(e.target.value) / 1000)}
+                    step="1"
+                    min="2"
+                    max="150"
+                  />
+                </div>
+
+                <div className="variable-group">
+                  <label>Surface Area (cm² each):</label>
+                  <input
+                    type="number"
+                    value={Math.round((simulationConfig.activeSystem?.surfaceArea ?? 0.0024) * 10000)}
+                    onChange={(e) => updateSimulationSection('activeSystem', 'surfaceArea', parseFloat(e.target.value) / 10000)}
+                    step="1"
+                    min="1"
+                    max="500"
+                  />
+                </div>
+
+                <div className="variable-group">
+                  <label>Noise Seed:</label>
+                  <input
+                    type="number"
+                    value={simulationConfig.noise?.seed ?? 20260625}
+                    onChange={(e) => updateSimulationSection('noise', 'seed', parseInt(e.target.value, 10))}
+                    step="1"
+                  />
+                </div>
+
+                <div className="variable-group">
+                  <label>Controller Mode:</label>
+                  <select
+                    value={simulationConfig.controller?.mode ?? 'target_apogee'}
+                    onChange={(e) => updateSimulationSection('controller', 'mode', e.target.value)}
+                  >
+                    <option value="target_apogee">Target Apogee</option>
+                    <option value="descent_brake">Descent Brake</option>
+                    <option value="disabled">Disabled</option>
+                  </select>
+                </div>
+
+              </div>
+            </div>
 
                   </div>
                 )}
         
         {activeTab === 'control' && (
           <div key="control" className={`tab-content slide-in-${tabDirection}`}>
-            <h2>Active Fin Control System</h2>
+            <h2>Active Pneumatic Airbrake Control</h2>
             
             {/* Control System Status */}
             <div className="control-status">
               <div className="status-indicator">
-                <span className={`status-dot ${simulationConfig.activeFinControl === 'enabled' ? 'active' : 'inactive'}`}></span>
-                <span>Control System: {simulationConfig.activeFinControl === 'enabled' ? 'ACTIVE' : 'INACTIVE'}</span>
+                <span className={`status-dot ${simulationConfig.activeSystem?.enabled ? 'active' : 'inactive'}`}></span>
+                <span>Air System: {simulationConfig.activeSystem?.enabled ? 'ACTIVE' : 'INACTIVE'}</span>
                 </div>
               <div className="control-params">
-                <span>Update Rate: {simulationConfig.controlUpdateRate} Hz</span>
-                <span>CFD Time Step: {simulationConfig.cfdTimeStep}s</span>
-                <span>Fin Limit: ±{simulationConfig.finDeflectionLimit}°</span>
+                <span>Tank: {Math.round((simulationConfig.activeSystem?.tankPressure || 0) / 1000)} kPa</span>
+                <span>Surface: {Math.round((simulationConfig.activeSystem?.surfaceArea || 0) * 10000)} cm²</span>
+                <span>Target: {simulationConfig.controller?.targetApogee || 0} m</span>
                       </div>
                       </div>
                       
@@ -4110,52 +4326,12 @@ function calculateFinDeflections(cfdData, targetTrajectory) {
                   className="control-code-editor"
                   value={simulationConfig.controlCode}
                   onChange={(e) => updateSimulationConfig('controlCode', e.target.value)}
-                  placeholder="// Active Fin Control Algorithm
-// This code runs in real-time during CFD simulation
-// Available variables: attitude, velocity, position, target_trajectory
-// Output: fin_deflections (array of 4 fin angles in degrees)
-
-function calculateFinDeflections(cfdData, targetTrajectory) {
-    // Extract CFD feedback data
-    const attitude = cfdData.attitude;        // [roll, pitch, yaw] in degrees
-    const velocity = cfdData.velocity;        // [vx, vy, vz] in m/s
-    const position = cfdData.position;        // [x, y, z] in meters
-    const angularVelocity = cfdData.angularVelocity; // [wx, wy, wz] in rad/s
-    
-    // Target trajectory
-    const targetPitch = targetTrajectory.pitch;
-    const targetYaw = targetTrajectory.yaw;
-    
-    // Control gains
-    const kp = 1.0;  // Proportional gain
-    const ki = 0.1;  // Integral gain  
-    const kd = 0.05; // Derivative gain
-    
-    // Calculate errors
-    const pitchError = targetPitch - attitude[1];
-    const yawError = targetYaw - attitude[2];
-    
-    // PID control for pitch (fins 1&3)
-    const pitchControl = kp * pitchError + ki * integralError + kd * derivativeError;
-    
-    // PID control for yaw (fins 2&4)  
-    const yawControl = kp * yawError + ki * integralError + kd * derivativeError;
-    
-    // Calculate fin deflections (4 fins)
-    const finDeflections = [
-        pitchControl,  // Fin 1 (top)
-        yawControl,    // Fin 2 (right)
-        -pitchControl, // Fin 3 (bottom) 
-        -yawControl    // Fin 4 (left)
-    ];
-    
-    // Apply deflection limits
-    const maxDeflection = 15; // degrees
-    for (let i = 0; i < finDeflections.length; i++) {
-        finDeflections[i] = Math.max(-maxDeflection, Math.min(maxDeflection, finDeflections[i]));
-    }
-    
-    return finDeflections;
+                  placeholder="ControlOutput control_function(SensorData sensor_data) {
+    ControlOutput out{};
+    out.valve_command = 0.0;
+    out.surface_target = 0.0;
+    out.recovery_trigger = false;
+    return out;
 }"
                   rows={25}
                   cols={80}
@@ -4167,32 +4343,26 @@ function calculateFinDeflections(cfdData, targetTrajectory) {
                   className="btn btn-primary"
                   onClick={() => updateActiveFinControlConfig(simulationConfig)}
                 >
-                  Save Control Code
+                  Save Controller
                 </button>
                 <button 
                   className="btn btn-secondary"
-                  onClick={() => testControlAlgorithm({
-                    attitude: [0, 5, 0], // 5 degree pitch error
-                    velocity: [0, 0, 0],
-                    position: [0, 0, 0],
-                    angular_velocity: [0, 0, 0],
-                    target_trajectory: {pitch: 0, yaw: 0}
-                  })}
+                  onClick={testControlAlgorithm}
                 >
-                  Test Algorithm
+                  Test Compile
                 </button>
                 <button 
                   className="btn btn-success"
                   onClick={startActiveFinControl}
                 >
-                  Start Co-Simulation
+                  Start Active Simulation
                 </button>
                       </div>
                       </div>
                       
             {/* Real-time Feedback Display */}
             <div className="feedback-display">
-              <h3>Real-time CFD Feedback</h3>
+              <h3>Active System Feedback</h3>
               <div className="feedback-grid">
                 <div className="feedback-item">
                   <label>Attitude (deg):</label>
@@ -4203,8 +4373,8 @@ function calculateFinDeflections(cfdData, targetTrajectory) {
                   <span id="velocity-display">Vx: 0.0, Vy: 0.0, Vz: 0.0</span>
                     </div>
                 <div className="feedback-item">
-                  <label>Fin Deflections (deg):</label>
-                  <span id="fin-display">Fin1: 0.0, Fin2: 0.0, Fin3: 0.0, Fin4: 0.0</span>
+                  <label>Valve / Surface:</label>
+                  <span id="fin-display">Valve: 0.0, Surface: 0.0</span>
                   </div>
                 <div className="feedback-item">
                   <label>Control Error:</label>
@@ -4212,7 +4382,6 @@ function calculateFinDeflections(cfdData, targetTrajectory) {
               </div>
                 </div>
                       </div>
-            <p>Content will go here...</p>
                       </div>
         )}
         
@@ -4351,36 +4520,55 @@ function calculateFinDeflections(cfdData, targetTrajectory) {
               {/* Active Fin Control Results */}
               <div className="results-section fin-control-results">
                 <div className="section-header">
-                  <h2>🎛️ Active Fin Control</h2>
+                  <h2>🎛️ Active Pneumatic System</h2>
                   <div className="section-status">
-                    <span className="status-indicator">Active</span>
+                    <span className="status-indicator">{simulationResults?.results?.active_system?.enabled ? 'Active' : 'Inactive'}</span>
                       </div>
                     </div>
                 <div className="control-metrics">
                   <div className="control-chart">
-                    <div className="chart-placeholder">
-                      <div className="chart-icon">🎯</div>
-                      <h3>Fin Deflections</h3>
-                      <p>Real-time fin angle adjustments during flight</p>
-                  </div>
+                    {simulationResults?.results?.active_system?.history?.length ? (
+                      <div className="mini-table">
+                        <div className="mini-table-row header">
+                          <span>t</span>
+                          <span>Valve</span>
+                          <span>Deploy</span>
+                          <span>Tank kPa</span>
+                        </div>
+                        {simulationResults.results.active_system.history.slice(0, 8).map((row) => (
+                          <div className="mini-table-row" key={`active-${row.time}`}>
+                            <span>{row.time}s</span>
+                            <span>{Math.round((row.valve_command || 0) * 100)}%</span>
+                            <span>{Math.round((row.surface_deployment || 0) * 100)}%</span>
+                            <span>{Math.round((row.tank_pressure || 0) / 1000)}</span>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="chart-placeholder">
+                        <div className="chart-icon">🎯</div>
+                        <h3>No Active Data</h3>
+                        <p>Run an active simulation to see valve and pressure history.</p>
+                      </div>
+                    )}
                   </div>
                   <div className="control-stats">
                     <div className="stat-grid">
                       <div className="stat-item">
-                        <span className="stat-label">Max Deflection</span>
-                        <span className="stat-value">--°</span>
+                        <span className="stat-label">Max Deployment</span>
+                        <span className="stat-value">{simulationResults?.results?.active_system ? `${Math.round((simulationResults.results.active_system.max_surface_deployment || 0) * 100)}%` : '--'}</span>
                       </div>
                       <div className="stat-item">
-                        <span className="stat-label">Control Accuracy</span>
-                        <span className="stat-value">--%</span>
+                        <span className="stat-label">Max Surface Angle</span>
+                        <span className="stat-value">{simulationResults?.results?.active_system ? `${Math.round(simulationResults.results.active_system.max_surface_angle_deg || 0)}°` : '--'}</span>
                       </div>
                       <div className="stat-item">
-                        <span className="stat-label">Corrections Made</span>
-                        <span className="stat-value">--</span>
+                        <span className="stat-label">Valve Cycles</span>
+                        <span className="stat-value">{simulationResults?.results?.active_system?.valve_cycles ?? '--'}</span>
                       </div>
                       <div className="stat-item">
-                        <span className="stat-label">Response Time</span>
-                        <span className="stat-value">-- ms</span>
+                        <span className="stat-label">Final Tank</span>
+                        <span className="stat-value">{simulationResults?.results?.active_system ? `${Math.round((simulationResults.results.active_system.tank_pressure_final || 0) / 1000)} kPa` : '--'}</span>
                       </div>
                     </div>
                   </div>
@@ -4398,11 +4586,30 @@ function calculateFinDeflections(cfdData, targetTrajectory) {
                 </div>
                 <div className="trajectory-content">
                   <div className="trajectory-plot">
-                    <div className="plot-placeholder">
-                      <div className="plot-icon">📈</div>
-                      <h3>3D Flight Path</h3>
-                      <p>Complete trajectory from launch to landing</p>
-                    </div>
+                    {simulationResults?.results?.trajectory?.length ? (
+                      <div className="mini-table">
+                        <div className="mini-table-row header">
+                          <span>t</span>
+                          <span>Alt</span>
+                          <span>Vz</span>
+                          <span>Drag</span>
+                        </div>
+                        {simulationResults.results.trajectory.slice(0, 10).map((row) => (
+                          <div className="mini-table-row" key={`traj-${row.time}`}>
+                            <span>{row.time}s</span>
+                            <span>{Math.round(row.altitude)}m</span>
+                            <span>{Math.round(row.velocity_z)}m/s</span>
+                            <span>{Math.round(row.drag_force)}N</span>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="plot-placeholder">
+                        <div className="plot-icon">📈</div>
+                        <h3>Flight Path</h3>
+                        <p>Complete trajectory from launch to landing</p>
+                      </div>
+                    )}
                   </div>
                   <div className="trajectory-data">
                     <div className="data-section">
@@ -4427,15 +4634,15 @@ function calculateFinDeflections(cfdData, targetTrajectory) {
                       <div className="data-grid">
                         <div className="data-item">
                           <span>Landing Distance</span>
-                          <span>-- m</span>
+                          <span>{simulationResults?.results ? `${Math.round(simulationResults.results.downrange_distance || 0)} m` : '-- m'}</span>
                         </div>
                         <div className="data-item">
                           <span>Landing Velocity</span>
-                          <span>-- m/s</span>
+                          <span>{simulationResults?.results ? `${Math.round(simulationResults.results.landing_velocity || 0)} m/s` : '-- m/s'}</span>
                         </div>
                         <div className="data-item">
-                          <span>Accuracy</span>
-                          <span>-- m</span>
+                          <span>Apogee Time</span>
+                          <span>{simulationResults?.results ? `${Math.round(simulationResults.results.apogee_time || 0)} s` : '-- s'}</span>
                         </div>
                       </div>
                     </div>
@@ -4556,7 +4763,7 @@ function calculateFinDeflections(cfdData, targetTrajectory) {
                 <div className="section-header">
                   <h2>💾 Data Export</h2>
                   <div className="section-actions">
-                    <button className="action-btn primary">Download All</button>
+                    <button className="action-btn primary" onClick={() => downloadSimulationArtifact('json')}>Download All</button>
           </div>
                 </div>
                 <div className="export-options">
@@ -4565,7 +4772,7 @@ function calculateFinDeflections(cfdData, targetTrajectory) {
                       <div className="export-icon">📊</div>
                       <h3>CSV Data</h3>
                       <p>Time-series data for analysis</p>
-                      <button className="export-btn">Download</button>
+                      <button className="export-btn" onClick={() => downloadSimulationArtifact('csv')}>Download</button>
                     </div>
                     <div className="export-option">
                       <div className="export-icon">🎥</div>
@@ -4577,7 +4784,7 @@ function calculateFinDeflections(cfdData, targetTrajectory) {
                       <div className="export-icon">📋</div>
                       <h3>Report</h3>
                       <p>Complete analysis report</p>
-                      <button className="export-btn">Generate</button>
+                      <button className="export-btn" onClick={() => downloadSimulationArtifact('json')}>Generate</button>
                     </div>
                     <div className="export-option">
                       <div className="export-icon">🔧</div>

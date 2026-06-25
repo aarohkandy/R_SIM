@@ -3349,6 +3349,31 @@ body {
   gap: 10px;
 }
 
+.mini-table {
+  width: 100%;
+  display: grid;
+  gap: 6px;
+  font-size: 13px;
+}
+
+.mini-table-row {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+  align-items: center;
+  padding: 8px 10px;
+  border: 1px solid rgba(148, 163, 184, 0.35);
+  border-radius: 8px;
+  background: rgba(248, 250, 252, 0.86);
+  color: #1f2937;
+}
+
+.mini-table-row.header {
+  background: rgba(226, 232, 240, 0.9);
+  font-weight: 700;
+  color: #334155;
+}
+
 .data-item {
   display: flex;
   justify-content: space-between;
@@ -3524,6 +3549,5 @@ body {
     text-align: center;
   }
 }
-
 
 

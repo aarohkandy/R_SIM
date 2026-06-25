@@ -1,23 +1,23 @@
 # Control API
 
-## Prep Controller Interface
+## Controller Interface
 
-The current backend compiles C++ controller code using this required signature:
+The backend compiles C++ controller code using this required signature:
 
 ```cpp
 ControlOutput control_function(SensorData sensor_data)
 ```
 
-The pre-goal smoke test verifies that a minimal controller compiles successfully.
+The active simulation can execute compiled C++ controller code during a run. The controller reads flight and pneumatic sensor fields and returns valve/surface commands.
 
-## Future Controller Inputs
+## Controller Inputs
 
 - Time, altitude, velocity, acceleration, attitude, angular rates.
 - Pressure, temperature, battery or power state.
 - Active-system pressure and actuator state.
 - Configurable sensor noise and delay.
 
-## Future Controller Outputs
+## Controller Outputs
 
 - Pneumatic valve commands.
 - Surface target position or deployment command.
@@ -30,4 +30,3 @@ The pre-goal smoke test verifies that a minimal controller compiles successfully
 - Dangerous filesystem/process operations must remain blocked.
 - Timeouts must be enforced.
 - Compile and runtime errors must return clear messages to the user.
-
