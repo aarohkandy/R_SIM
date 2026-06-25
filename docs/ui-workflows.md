@@ -18,4 +18,5 @@
 - Show trajectory, force, pressure, drag, and active-system plots backed by the local simulation histories.
 - Show landing footprint results with touchdown range, bearing, crossrange, descent time, and recovery drift.
 - Show recovery sequence and phase rows with event timing, deployment velocity, phase duration, average descent rate, and drift.
+- Show recovery safety with terminal velocity, required area, area margin, opening load, load limit, and overall status.
 - Support exporting trajectory CSV, force/moment CSV, active-system CSV, recovery CSV, recovery-summary CSV, and the full JSON report.

@@ -258,6 +258,7 @@ class ActiveSimulationManager:
             drag_area = self._as_float(landing.get("dragArea"), 0.18)
             drag_coefficient = self._as_float(landing.get("dragCoefficient"), 1.55)
             max_safe_velocity = self._as_float(landing.get("maxSafeVelocity"), 7.5)
+            max_opening_load_g = self._as_float(landing.get("maxOpeningLoadG"), 15.0)
             drogue_drag_area = self._as_float(landing.get("drogueDragArea"), 0.04)
             drogue_drag_coefficient = self._as_float(landing.get("drogueDragCoefficient"), 1.25)
             valid_events = {"apogee", "altitude", "motor_ejection"}
@@ -277,6 +278,8 @@ class ActiveSimulationManager:
                 errors.append("Landing drag coefficient must be positive.")
             if max_safe_velocity <= 0:
                 errors.append("Landing safe touchdown velocity must be positive.")
+            if max_opening_load_g <= 0:
+                errors.append("Landing maximum opening load must be positive.")
             if main_event not in valid_events:
                 errors.append("Main recovery deploy event must be apogee, altitude, or motor_ejection.")
             if main_event == "motor_ejection" and motor_delay <= 0:
@@ -396,12 +399,14 @@ class ActiveSimulationManager:
         landing_deploy_x = None
         landing_deploy_y = None
         landing_deploy_velocity_z = None
+        landing_deploy_speed_air = None
         drogue_deployed = False
         drogue_deploy_time = None
         drogue_deploy_altitude = None
         drogue_deploy_x = None
         drogue_deploy_y = None
         drogue_deploy_velocity_z = None
+        drogue_deploy_speed_air = None
 
         max_altitude = altitude
         apogee_x = x
@@ -462,6 +467,7 @@ class ActiveSimulationManager:
                     drogue_deploy_x = x
                     drogue_deploy_y = y
                     drogue_deploy_velocity_z = velocity_z
+                    drogue_deploy_speed_air = speed_air
 
                 if (
                     not landing_deployed
@@ -481,6 +487,7 @@ class ActiveSimulationManager:
                     landing_deploy_x = x
                     landing_deploy_y = y
                     landing_deploy_velocity_z = velocity_z
+                    landing_deploy_speed_air = speed_air
 
             sensor = {
                 "timestamp": t,
@@ -809,6 +816,15 @@ class ActiveSimulationManager:
             touchdown_y=y,
             footprint=landing_footprint,
         )
+        recovery_safety = self._build_recovery_safety(
+            landing=landing,
+            density=density,
+            mass_kg=mass_kg,
+            gravity=gravity,
+            main_deploy_speed_air=landing_deploy_speed_air,
+            drogue_deploy_speed_air=drogue_deploy_speed_air,
+            touchdown_velocity=landing_velocity,
+        )
         aero_center = self._aerodynamic_center_m(components, total_length_m, diameter_m)
         cp_m = aero_center["cp_m"]
         stability_margin = (cp_m - cg_m) / diameter_m
@@ -820,6 +836,10 @@ class ActiveSimulationManager:
         )
         if motor_delay_s > 0 and abs(recovery_timing["timing_error_s"]) > 2.5:
             warnings.append("Motor ejection delay is far from apogee; use avionics or adjust delay.")
+        if recovery_safety["main_area_margin_m2"] is not None and recovery_safety["main_area_margin_m2"] < 0:
+            warnings.append("Landing drag area is below the configured safe touchdown target.")
+        if recovery_safety["main_opening_load_status"] == "hard" or recovery_safety["drogue_opening_load_status"] == "hard":
+            warnings.append("Recovery opening load exceeds configured limit.")
         flight_events = self._build_flight_events(
             burn_time_s=burn_time_s,
             max_altitude=max_altitude,
@@ -855,6 +875,7 @@ class ActiveSimulationManager:
             "total_impulse": total_impulse_ns,
             "recovery_timing": recovery_timing,
             "recovery_analysis": recovery_analysis,
+            "recovery_safety": recovery_safety,
             "stability_margin": stability_margin,
             "center_of_pressure_m": cp_m,
             "cp_contributions": aero_center["contributions"],
@@ -924,6 +945,17 @@ class ActiveSimulationManager:
                 "drogue_drag_area_m2": landing["drogue_drag_area_m2"],
                 "drogue_drag_coefficient": landing["drogue_drag_coefficient"],
                 "max_safe_velocity_mps": landing["max_safe_velocity_mps"],
+                "max_opening_load_g": landing["max_opening_load_g"],
+                "required_drag_area_m2": recovery_safety["required_main_drag_area_m2"],
+                "area_margin_m2": recovery_safety["main_area_margin_m2"],
+                "estimated_terminal_velocity_mps": recovery_safety["main_terminal_velocity_mps"],
+                "drogue_terminal_velocity_mps": recovery_safety["drogue_terminal_velocity_mps"],
+                "main_opening_load_n": recovery_safety["main_opening_load_n"],
+                "main_opening_load_g": recovery_safety["main_opening_load_g"],
+                "main_opening_load_status": recovery_safety["main_opening_load_status"],
+                "drogue_opening_load_n": recovery_safety["drogue_opening_load_n"],
+                "drogue_opening_load_g": recovery_safety["drogue_opening_load_g"],
+                "drogue_opening_load_status": recovery_safety["drogue_opening_load_status"],
                 "touchdown_velocity_mps": landing_velocity,
                 "touchdown_time": touchdown_time,
                 "touchdown_x_m": x,
@@ -1326,6 +1358,145 @@ class ActiveSimulationManager:
             "drift_m": drift_m,
         }
 
+    @staticmethod
+    def _terminal_velocity_mps(
+        *,
+        mass_kg: float,
+        gravity: float,
+        density: float,
+        drag_area_m2: float,
+        drag_coefficient: float,
+    ) -> Optional[float]:
+        drag_term = density * drag_coefficient * drag_area_m2
+        if drag_term <= 0:
+            return None
+        return math.sqrt((2.0 * mass_kg * gravity) / drag_term)
+
+    @staticmethod
+    def _opening_load(
+        *,
+        density: float,
+        deploy_speed_mps: Optional[float],
+        drag_area_m2: float,
+        drag_coefficient: float,
+        mass_kg: float,
+        gravity: float,
+    ) -> Dict[str, Optional[float]]:
+        if deploy_speed_mps is None:
+            return {"load_n": None, "load_g": None}
+        load_n = 0.5 * density * deploy_speed_mps * deploy_speed_mps * drag_coefficient * drag_area_m2
+        return {
+            "load_n": load_n,
+            "load_g": load_n / max(mass_kg * gravity, 1e-9),
+        }
+
+    @staticmethod
+    def _load_status(load_g: Optional[float], limit_g: float) -> str:
+        if load_g is None:
+            return "not_deployed"
+        if load_g <= limit_g:
+            return "safe"
+        if load_g <= limit_g * 1.25:
+            return "warn"
+        return "hard"
+
+    def _build_recovery_safety(
+        self,
+        *,
+        landing: Dict,
+        density: float,
+        mass_kg: float,
+        gravity: float,
+        main_deploy_speed_air: Optional[float],
+        drogue_deploy_speed_air: Optional[float],
+        touchdown_velocity: float,
+    ) -> Dict[str, Optional[float]]:
+        if not landing["enabled"]:
+            return {
+                "enabled": False,
+                "required_main_drag_area_m2": None,
+                "main_area_margin_m2": None,
+                "main_terminal_velocity_mps": None,
+                "drogue_terminal_velocity_mps": None,
+                "main_opening_load_n": None,
+                "main_opening_load_g": None,
+                "main_opening_load_status": "disabled",
+                "drogue_opening_load_n": None,
+                "drogue_opening_load_g": None,
+                "drogue_opening_load_status": "disabled",
+                "touchdown_status": "disabled",
+                "overall_status": "disabled",
+            }
+
+        safe_velocity = landing["max_safe_velocity_mps"]
+        main_terminal = self._terminal_velocity_mps(
+            mass_kg=mass_kg,
+            gravity=gravity,
+            density=density,
+            drag_area_m2=landing["drag_area_m2"],
+            drag_coefficient=landing["drag_coefficient"],
+        )
+        required_main_area = (
+            (2.0 * mass_kg * gravity)
+            / max(density * landing["drag_coefficient"] * safe_velocity * safe_velocity, 1e-9)
+        )
+        main_opening = self._opening_load(
+            density=density,
+            deploy_speed_mps=main_deploy_speed_air,
+            drag_area_m2=landing["drag_area_m2"],
+            drag_coefficient=landing["drag_coefficient"],
+            mass_kg=mass_kg,
+            gravity=gravity,
+        )
+        drogue_terminal = self._terminal_velocity_mps(
+            mass_kg=mass_kg,
+            gravity=gravity,
+            density=density,
+            drag_area_m2=landing["drogue_drag_area_m2"],
+            drag_coefficient=landing["drogue_drag_coefficient"],
+        ) if landing["system_type"] == "drogue_main" else None
+        drogue_opening = self._opening_load(
+            density=density,
+            deploy_speed_mps=drogue_deploy_speed_air,
+            drag_area_m2=landing["drogue_drag_area_m2"],
+            drag_coefficient=landing["drogue_drag_coefficient"],
+            mass_kg=mass_kg,
+            gravity=gravity,
+        ) if landing["system_type"] == "drogue_main" else {"load_n": None, "load_g": None}
+
+        main_load_status = self._load_status(main_opening["load_g"], landing["max_opening_load_g"])
+        drogue_load_status = self._load_status(drogue_opening["load_g"], landing["max_opening_load_g"])
+        touchdown_status = "safe" if touchdown_velocity <= safe_velocity else "hard"
+        statuses = {main_load_status, drogue_load_status, touchdown_status}
+        if "hard" in statuses:
+            overall_status = "hard"
+        elif "warn" in statuses:
+            overall_status = "warn"
+        else:
+            overall_status = "safe"
+
+        return {
+            "enabled": True,
+            "air_density_kg_m3": density,
+            "required_main_drag_area_m2": required_main_area,
+            "main_area_margin_m2": landing["drag_area_m2"] - required_main_area,
+            "main_terminal_velocity_mps": main_terminal,
+            "drogue_terminal_velocity_mps": drogue_terminal,
+            "max_safe_velocity_mps": safe_velocity,
+            "max_opening_load_g": landing["max_opening_load_g"],
+            "main_deploy_speed_mps": main_deploy_speed_air,
+            "main_opening_load_n": main_opening["load_n"],
+            "main_opening_load_g": main_opening["load_g"],
+            "main_opening_load_status": main_load_status,
+            "drogue_deploy_speed_mps": drogue_deploy_speed_air,
+            "drogue_opening_load_n": drogue_opening["load_n"],
+            "drogue_opening_load_g": drogue_opening["load_g"],
+            "drogue_opening_load_status": drogue_load_status,
+            "touchdown_velocity_mps": touchdown_velocity,
+            "touchdown_status": touchdown_status,
+            "overall_status": overall_status,
+        }
+
     def _build_recovery_analysis(
         self,
         *,
@@ -1500,6 +1671,7 @@ class ActiveSimulationManager:
             "drogue_drag_area_m2": self._as_float(landing.get("drogueDragArea"), 0.04),
             "drogue_drag_coefficient": self._as_float(landing.get("drogueDragCoefficient"), 1.25),
             "max_safe_velocity_mps": self._as_float(landing.get("maxSafeVelocity"), 7.5),
+            "max_opening_load_g": self._as_float(landing.get("maxOpeningLoadG"), 15.0),
         }
 
     def _build_controller_config(self, config: Dict, active: Dict) -> Dict:

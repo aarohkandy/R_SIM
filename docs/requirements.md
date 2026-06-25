@@ -10,6 +10,7 @@
 - Run a simulation and inspect trajectory, stability, controller, actuator, pressure, active-drag, moment, and landing outputs.
 - Inspect recovery footprint output with touchdown range, bearing, deployment positions, descent time, and drift after landing-system deployment.
 - Inspect recovery event sequence and descent phases with deployment velocities, phase durations, average descent rates, and drift.
+- Inspect recovery safety with terminal speed, required main area, area margin, opening load, load limit, and touchdown status.
 
 ## Current Requirements
 
@@ -27,4 +28,5 @@
 - Active airbrake location must be editable, validated against rocket length, and reflected in moment outputs.
 - Landing outputs must include recovery footprint data and a visible touchdown/drift analysis in the results UI.
 - Landing outputs must include recovery sequence and phase analysis plus a CSV export for the recovery summary.
+- Landing outputs must include recovery safety/load analysis tied to configurable opening-load and touchdown limits.
 - Importable scenario files in `examples/scenarios/` must keep passive, active, warning, and invalid-input behavior reproducible.

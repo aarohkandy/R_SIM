@@ -139,7 +139,8 @@ const componentDefaults = {
     dragCoefficient: 1.55,
     drogueDragArea: 0.04,
     drogueDragCoefficient: 1.25,
-    maxSafeVelocity: 7.5
+    maxSafeVelocity: 7.5,
+    maxOpeningLoadG: 15
   },
   'Rail Button': {
     type: 'Rail Button',
@@ -238,7 +239,8 @@ const defaultConfig = {
     dragCoefficient: 1.55,
     drogueDragArea: 0.04,
     drogueDragCoefficient: 1.25,
-    maxSafeVelocity: 7.5
+    maxSafeVelocity: 7.5,
+    maxOpeningLoadG: 15
   },
   aerodynamics: {
     baseDragCoefficient: 0.56,
@@ -949,6 +951,12 @@ const getDesignChecks = ({ components, metrics, config, landingSizing, activeEnv
         componentTarget(landingComponent, 'maxSafeVelocity')
       ]);
     }
+    if (numberValue(landing.maxOpeningLoadG, 0) <= 0) {
+      add('error', 'Opening load', 'Maximum opening load must be positive.', [
+        'landing.maxOpeningLoadG',
+        componentTarget(landingComponent, 'maxOpeningLoadG')
+      ]);
+    }
     if (landing.type === 'drogue_main') {
       if (drogueDeployEvent === 'altitude' && drogueDeployAltitude <= 0) {
         add('error', 'Drogue altitude', 'Drogue altitude must be positive.', 'landing.drogueDeployAltitude');
@@ -1539,6 +1547,41 @@ function RecoveryAnalysisPanel({ analysis = {} }) {
           ))}
         </div>
       )}
+    </div>
+  );
+}
+
+function statusLabel(status) {
+  if (!status) return 'n/a';
+  return String(status).replace(/_/g, ' ');
+}
+
+function RecoverySafetyPanel({ safety = {} }) {
+  if (!safety.enabled) {
+    return null;
+  }
+  const rows = [
+    ['Overall', statusLabel(safety.overall_status)],
+    ['Main terminal', `${formatNumber(safety.main_terminal_velocity_mps, 2)} m/s`],
+    ['Required main area', `${formatNumber(safety.required_main_drag_area_m2, 3)} m2`],
+    ['Main area margin', `${safety.main_area_margin_m2 >= 0 ? '+' : ''}${formatNumber(safety.main_area_margin_m2, 3)} m2`],
+    ['Main opening', `${formatNumber(safety.main_opening_load_g, 2)} g`],
+    ['Opening limit', `${formatNumber(safety.max_opening_load_g, 1)} g`],
+    ['Drogue terminal', safety.drogue_terminal_velocity_mps === null || safety.drogue_terminal_velocity_mps === undefined ? '--' : `${formatNumber(safety.drogue_terminal_velocity_mps, 2)} m/s`],
+    ['Drogue opening', safety.drogue_opening_load_g === null || safety.drogue_opening_load_g === undefined ? '--' : `${formatNumber(safety.drogue_opening_load_g, 2)} g`]
+  ];
+
+  return (
+    <div className={`safety-panel ${safety.overall_status || ''}`}>
+      <div className="comparison-title">Recovery safety</div>
+      <div className="comparison-grid safety-grid">
+        {rows.map(([label, value]) => (
+          <div key={label}>
+            <span>{label}</span>
+            <strong>{value}</strong>
+          </div>
+        ))}
+      </div>
     </div>
   );
 }
@@ -2134,6 +2177,7 @@ function ComponentInspector({ component, updateComponent, metrics, fieldChecks =
             <Field label="Drogue area" value={component.drogueDragArea ?? 0.04} unit="m2" step="0.005" checks={checks('drogueDragArea')} onChange={(value) => set('drogueDragArea', value)} />
             <Field label="Drogue Cd" value={component.drogueDragCoefficient ?? 1.25} step="0.01" checks={checks('drogueDragCoefficient')} onChange={(value) => set('drogueDragCoefficient', value)} />
             <Field label="Safe touchdown" value={component.maxSafeVelocity} unit="m/s" step="0.1" checks={checks('maxSafeVelocity')} onChange={(value) => set('maxSafeVelocity', value)} />
+            <Field label="Max opening load" value={component.maxOpeningLoadG ?? 15} unit="g" step="0.5" checks={checks('maxOpeningLoadG')} onChange={(value) => set('maxOpeningLoadG', value)} />
           </>
         )}
       </div>
@@ -2472,6 +2516,7 @@ function LandingSetup({ config, setConfig, syncLanding, metrics, fieldChecks = {
           </>
         )}
         <Field label="Safe touchdown" value={landing.maxSafeVelocity} unit="m/s" step="0.1" checks={checks('landing.maxSafeVelocity')} onChange={(value) => setLanding('maxSafeVelocity', value)} />
+        <Field label="Max opening load" value={landing.maxOpeningLoadG ?? 15} unit="g" step="0.5" checks={checks('landing.maxOpeningLoadG')} onChange={(value) => setLanding('maxOpeningLoadG', value)} />
       </div>
       <div className="sizing-card">
         <div className="comparison-title">Recovery sequence</div>
@@ -2642,6 +2687,7 @@ function ResultsPanel({
   const touchdown = data?.landing_system;
   const footprint = data?.landing_footprint || {};
   const recoveryAnalysis = data?.recovery_analysis || {};
+  const recoverySafety = data?.recovery_safety || {};
   const launchGuide = data?.launch_guide;
   const recoveryTiming = data?.recovery_timing;
   const events = data?.flight_events || [];
@@ -2679,6 +2725,17 @@ function ResultsPanel({
         status: landingMargin >= 1 ? 'good' : landingMargin >= 0 ? 'warn' : 'bad',
         detail: `${formatNumber(landingMargin, 2)} m/s below limit`
       },
+    recoverySafety.enabled
+      ? {
+        label: 'Opening load',
+        status: recoverySafety.overall_status === 'safe'
+          ? 'good'
+          : recoverySafety.overall_status === 'warn'
+            ? 'warn'
+            : 'bad',
+        detail: `Main ${formatNumber(recoverySafety.main_opening_load_g, 2)} g / limit ${formatNumber(recoverySafety.max_opening_load_g, 1)} g`
+      }
+      : null,
     recoveryTiming
       ? {
         label: 'Motor delay',
@@ -2750,6 +2807,7 @@ function ResultsPanel({
         <LandingFootprintMap footprint={footprint} />
       </div>
       <RecoveryAnalysisPanel analysis={recoveryAnalysis} />
+      <RecoverySafetyPanel safety={recoverySafety} />
       <div className="tuning-panel">
         <div className="comparison-title">Tuning notes</div>
         <div className="tuning-list">
@@ -3038,7 +3096,8 @@ function App() {
         dragCoefficient: numberValue(landing.dragCoefficient, current.landingSystem.dragCoefficient),
         drogueDragArea: numberValue(landing.drogueDragArea, current.landingSystem.drogueDragArea),
         drogueDragCoefficient: numberValue(landing.drogueDragCoefficient, current.landingSystem.drogueDragCoefficient),
-        maxSafeVelocity: numberValue(landing.maxSafeVelocity, current.landingSystem.maxSafeVelocity)
+        maxSafeVelocity: numberValue(landing.maxSafeVelocity, current.landingSystem.maxSafeVelocity),
+        maxOpeningLoadG: numberValue(landing.maxOpeningLoadG, current.landingSystem.maxOpeningLoadG)
       } : current.landingSystem
     }));
   }, [components]);
@@ -3528,6 +3587,7 @@ function App() {
         filename = 'active-rocket-recovery.csv';
       } else if (format === 'recovery-summary') {
         const analysis = result.results.recovery_analysis || {};
+        const safety = result.results.recovery_safety || {};
         const rows = [
           ...(analysis.deployment_sequence || []).map((event) => ({
             type: 'event',
@@ -3549,11 +3609,23 @@ function App() {
             altitude_loss_m: phase.altitude_loss_m,
             average_descent_rate_mps: phase.average_descent_rate_mps,
             drift_m: phase.drift_m
-          }))
+          })),
+          {
+            type: 'safety',
+            name: 'Recovery safety',
+            status: safety.overall_status,
+            main_terminal_velocity_mps: safety.main_terminal_velocity_mps,
+            required_main_drag_area_m2: safety.required_main_drag_area_m2,
+            main_area_margin_m2: safety.main_area_margin_m2,
+            main_opening_load_g: safety.main_opening_load_g,
+            drogue_opening_load_g: safety.drogue_opening_load_g,
+            max_opening_load_g: safety.max_opening_load_g
+          }
         ];
         const headers = [
           'type',
           'name',
+          'status',
           'time_s',
           'altitude_m',
           'velocity_z_mps',
@@ -3566,7 +3638,13 @@ function App() {
           'end_altitude_m',
           'altitude_loss_m',
           'average_descent_rate_mps',
-          'drift_m'
+          'drift_m',
+          'main_terminal_velocity_mps',
+          'required_main_drag_area_m2',
+          'main_area_margin_m2',
+          'main_opening_load_g',
+          'drogue_opening_load_g',
+          'max_opening_load_g'
         ];
         content = rowsToCsv(rows, headers);
         filename = 'active-rocket-recovery-summary.csv';

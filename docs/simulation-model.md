@@ -13,6 +13,7 @@ This local model is not CFD and is not flight certification. Its output is marke
 - Output includes `trajectory`, `force_history`, and `moment_history` samples so the UI/export path can inspect net forces, thrust, drag, angular rates, and pitch/yaw/roll moments.
 - Output includes `landing_footprint` and recovery history ground-track fields so the UI/export path can inspect touchdown range, bearing, deployment points, descent time, and drift after recovery deployment.
 - Output includes `recovery_analysis` with an event sequence and phase summaries for drogue/main/total descent timing, descent rate, and drift.
+- Output includes `recovery_safety` with required main drag area, estimated terminal velocity, area margin, opening load in newtons and g, and safety statuses.
 
 ## Target Model Direction
 
@@ -26,5 +27,5 @@ This local model is not CFD and is not flight certification. Its output is marke
 ## Required Future Outputs
 
 - Time history of position, velocity, attitude, angular rates, forces, and moments.
-- Apogee, max velocity, flight time, landing/descent summary, recovery footprint, recovery phase analysis, and warnings.
+- Apogee, max velocity, flight time, landing/descent summary, recovery footprint, recovery phase analysis, recovery load/safety analysis, and warnings.
 - Active-system state: tank pressure, valve commands, actuator stroke, surface deployment, and controller outputs.

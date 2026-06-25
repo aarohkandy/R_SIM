@@ -339,6 +339,22 @@ class ActiveSimulationTests(unittest.TestCase):
         self.assertAlmostEqual(main_phase["drift_m"], result["landing_footprint"]["drift_after_main_deploy_m"], places=6)
         self.assertEqual(analysis["touchdown_range_m"], result["landing_footprint"]["touchdown_range_m"])
 
+    def test_recovery_safety_reports_terminal_speed_area_and_opening_load(self):
+        manager = ActiveSimulationManager()
+        result = manager.submit_cfd_simulation(sample_rocket(), base_config())["results"]
+        safety = result["recovery_safety"]
+        landing = result["landing_system"]
+
+        self.assertTrue(safety["enabled"])
+        self.assertGreater(safety["required_main_drag_area_m2"], 0)
+        self.assertGreater(safety["main_area_margin_m2"], 0)
+        self.assertGreater(safety["main_terminal_velocity_mps"], 0)
+        self.assertIsNotNone(safety["main_opening_load_n"])
+        self.assertIsNotNone(safety["main_opening_load_g"])
+        self.assertIn(safety["main_opening_load_status"], {"safe", "warn", "hard"})
+        self.assertEqual(safety["touchdown_status"], landing["touchdown_status"])
+        self.assertEqual(landing["estimated_terminal_velocity_mps"], safety["main_terminal_velocity_mps"])
+
     def test_drogue_main_recovery_has_two_deploy_events(self):
         config = base_config()
         config["landingSystem"].update({
@@ -424,6 +440,15 @@ class ActiveSimulationTests(unittest.TestCase):
 
         self.assertFalse(result["success"])
         self.assertIn("Landing drag area must be positive.", result["validation_errors"])
+
+    def test_invalid_recovery_opening_load_limit_is_rejected(self):
+        config = base_config()
+        config["landingSystem"]["maxOpeningLoadG"] = 0
+        manager = ActiveSimulationManager()
+        result = manager.submit_cfd_simulation(sample_rocket(), config)
+
+        self.assertFalse(result["success"])
+        self.assertIn("Landing maximum opening load must be positive.", result["validation_errors"])
 
     def test_launch_guide_outputs_exit_velocity_and_tilted_downrange(self):
         config = base_config()

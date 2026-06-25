@@ -86,8 +86,10 @@ def main() -> int:
     require("Motor thrust curve must include at least two valid time/thrust points." in active_sim_source, "Backend does not reject invalid supplied thrust curves.")
     require("LandingFootprintMap" in frontend_source, "Frontend results view is missing landing footprint map.")
     require("RecoveryAnalysisPanel" in frontend_source, "Frontend results view is missing recovery analysis panel.")
+    require("RecoverySafetyPanel" in frontend_source, "Frontend results view is missing recovery safety panel.")
     require("landing_footprint" in active_sim_source, "Backend does not report landing footprint output.")
     require("recovery_analysis" in active_sim_source, "Backend does not report recovery analysis output.")
+    require("recovery_safety" in active_sim_source, "Backend does not report recovery safety output.")
     require("drift_after_main_deploy_m" in active_sim_source, "Backend does not report recovery drift after main deployment.")
     database_motor = next(
         (motor for motor in motors.get("motors", []) if motor.get("designation") == "Estes C6-5"),
@@ -234,6 +236,7 @@ ControlOutput control_function(SensorData sensor_data) {
                 "dragArea": 0.18,
                 "dragCoefficient": 1.55,
                 "maxSafeVelocity": 7.5,
+                "maxOpeningLoadG": 15,
             },
             "noise": {
                 "seed": 20260625,
@@ -282,6 +285,10 @@ ControlOutput control_function(SensorData sensor_data) {
     recovery_analysis = results.get("recovery_analysis") or {}
     require(len(recovery_analysis.get("deployment_sequence", [])) >= 3, "Recovery analysis deployment sequence is missing.")
     require(any(phase.get("name") == "Main descent" for phase in recovery_analysis.get("phases", [])), "Recovery analysis main descent phase is missing.")
+    recovery_safety = results.get("recovery_safety") or {}
+    require(recovery_safety.get("main_terminal_velocity_mps") is not None, "Recovery safety terminal velocity is missing.")
+    require(recovery_safety.get("required_main_drag_area_m2") is not None, "Recovery safety required area is missing.")
+    require(recovery_safety.get("main_opening_load_g") is not None, "Recovery safety opening load is missing.")
     first_sample = results["trajectory"][0]
     for key in ("net_force_z", "thrust_force", "pitch_moment", "angular_velocity_y_deg_s", "drag_coefficient"):
         require(key in first_sample, f"Trajectory sample missing {key}: {first_sample}")
@@ -309,6 +316,7 @@ ControlOutput control_function(SensorData sensor_data) {
         "moment_samples": len(results["moment_history"]),
         "touchdown_range": round(landing_footprint["touchdown_range_m"], 2),
         "recovery_phases": len(recovery_analysis["phases"]),
+        "main_opening_load_g": round(recovery_safety["main_opening_load_g"], 2),
         "source": results["source"],
     }
     print(json.dumps(summary, indent=2, sort_keys=True))

@@ -71,3 +71,6 @@
 - Added recovery analysis output and results UI rows for deployment sequence, phase durations, average descent rates, drift, and recovery-summary CSV export.
 - Ran `bash scripts/run_pre_goal_checks.sh`: passed with 43 unit tests, recovery-analysis smoke gates, frontend production build, and frontend lint.
 - Browser-checked local app at `http://localhost:5001/`: ran a simulation, rendered Recovery analysis rows for Apogee, Main deploy, Touchdown, Total descent, and Main descent, showed the Recovery summary CSV action, and produced no browser warnings/errors.
+- Added recovery safety/load outputs and UI for terminal velocity, required area, area margin, opening loads, configurable max opening load, and overall recovery status.
+- Ran `bash scripts/run_pre_goal_checks.sh`: passed with 45 unit tests, recovery safety smoke gates, frontend production build, and frontend lint.
+- Browser-checked local app at `http://localhost:5001/`: ran a simulation, rendered the Recovery safety panel with terminal speed, required area, area margin, opening load, and opening limit, showed the opening-load tuning note, and produced no browser warnings/errors.

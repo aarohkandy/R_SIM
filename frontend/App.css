@@ -1396,6 +1396,7 @@ button:focus-visible {
 .tuning-panel,
 .footprint-panel,
 .recovery-panel,
+.safety-panel,
 .event-panel {
   border: 1px solid var(--line);
   border-radius: 8px;
@@ -1574,6 +1575,22 @@ button:focus-visible {
   font-size: 10px;
   font-weight: 850;
   text-transform: uppercase;
+}
+
+.safety-panel.safe {
+  border-color: rgba(31, 143, 95, 0.32);
+}
+
+.safety-panel.warn {
+  border-color: rgba(194, 123, 31, 0.38);
+}
+
+.safety-panel.hard {
+  border-color: rgba(186, 45, 45, 0.38);
+}
+
+.safety-grid strong {
+  text-transform: none;
 }
 
 .event-list {
