@@ -1317,6 +1317,173 @@ functions
         
         return {"status": "Simulation stopped"}
 
+class LocalPreGoalSimulationManager:
+    """Deterministic local simulation used only to verify pre-goal wiring."""
+
+    def __init__(self):
+        self.simulations = {}
+        self.latest_simulation_id = None
+
+    @staticmethod
+    def _as_float(value, default):
+        try:
+            if value is None or value == "":
+                return float(default)
+            return float(value)
+        except (TypeError, ValueError):
+            return float(default)
+
+    @staticmethod
+    def _first_value(component, keys, default):
+        for key in keys:
+            if key in component and component[key] not in (None, ""):
+                return component[key]
+        return default
+
+    def submit_cfd_simulation(self, rocket_data, simulation_config):
+        simulation_id = f"pre_goal_{uuid.uuid4().hex[:12]}"
+        started_at = time.time()
+        config = self._normalize_config(simulation_config)
+        results = self._run_local_physics(rocket_data, config)
+        entry = {
+            "success": True,
+            "simulation_id": simulation_id,
+            "status": "completed",
+            "progress": 100,
+            "message": "Local pre-goal physics completed. This is not CFD.",
+            "elapsed_time": time.time() - started_at,
+            "rocket_components": len(rocket_data.get("components", [])),
+            "rocket_weight": rocket_data.get("weight", 0),
+            "rocket_cg": rocket_data.get("cg", 0),
+            "results": results,
+        }
+        self.simulations[simulation_id] = entry
+        self.latest_simulation_id = simulation_id
+        return entry
+
+    def _normalize_config(self, simulation_config):
+        if hasattr(simulation_config, "__dataclass_fields__"):
+            return asdict(simulation_config)
+        return simulation_config or {}
+
+    def _run_local_physics(self, rocket_data, config):
+        components = rocket_data.get("components", [])
+        mass_input = self._as_float(rocket_data.get("weight"), 250.0)
+        mass_kg = mass_input / 1000.0 if mass_input > 20 else mass_input
+        mass_kg = max(mass_kg, 0.05)
+
+        structural_lengths = [
+            self._as_float(self._first_value(component, ["length", "totalHeight"], 0.0), 0.0)
+            for component in components
+            if str(component.get("type", "")).lower() not in {"fins", "motor"}
+        ]
+        total_length_input = sum(structural_lengths) or self._as_float(rocket_data.get("totalHeight"), 680.0)
+        total_length_m = total_length_input / 1000.0 if total_length_input > 5 else total_length_input
+        total_length_m = max(total_length_m, 0.2)
+
+        diameters = [
+            self._as_float(self._first_value(component, ["diameter", "bottomDiameter", "topDiameter"], 40.0), 40.0)
+            for component in components
+            if self._as_float(self._first_value(component, ["diameter", "bottomDiameter", "topDiameter"], 0.0), 0.0) > 0
+        ]
+        diameter_input = max(diameters) if diameters else 40.0
+        diameter_m = diameter_input / 1000.0 if diameter_input > 1 else diameter_input
+        diameter_m = max(diameter_m, 0.01)
+
+        motor = next((component for component in components if str(component.get("type", "")).lower() == "motor"), {})
+        thrust_n = self._as_float(self._first_value(motor, ["motorThrust", "average_thrust", "averageThrust"], 6.0), 6.0)
+        burn_time_s = self._as_float(self._first_value(motor, ["motorBurnTime", "burn_time", "burnTime"], 1.6), 1.6)
+        total_impulse_ns = self._as_float(self._first_value(motor, ["motorTotalImpulse", "total_impulse", "totalImpulse"], thrust_n * burn_time_s), thrust_n * burn_time_s)
+        if total_impulse_ns > 0 and burn_time_s > 0:
+            thrust_n = max(thrust_n, total_impulse_ns / burn_time_s)
+
+        pressure_pa = self._as_float(config.get("pressure"), 101325.0)
+        temp_c = self._as_float(config.get("temperature"), 15.0)
+        rho = max(0.5, pressure_pa / (287.05 * (temp_c + 273.15)))
+        area_m2 = math.pi * (diameter_m / 2.0) ** 2
+        fin_count = sum(int(self._as_float(self._first_value(component, ["finCount", "fin_count"], 0), 0)) for component in components if str(component.get("type", "")).lower() == "fins")
+        drag_coefficient = 0.62 + 0.035 * max(fin_count, 3)
+
+        dt = min(max(self._as_float(config.get("timeStep") or config.get("time_step"), 0.02), 0.005), 0.1)
+        max_time = min(max(self._as_float(config.get("maxTime") or config.get("max_time"), 20.0), 3.0), 120.0)
+        wind_speed = abs(self._as_float(config.get("windSpeed") or config.get("wind_speed"), 0.0))
+        gravity = 9.80665
+
+        altitude = 0.0
+        velocity = 0.0
+        time_s = 0.0
+        max_altitude = 0.0
+        max_velocity = 0.0
+        trajectory = []
+
+        while time_s <= max_time:
+            thrust = thrust_n if time_s <= burn_time_s else 0.0
+            relative_velocity = velocity + 0.15 * wind_speed
+            drag_force = 0.5 * rho * drag_coefficient * area_m2 * relative_velocity * abs(relative_velocity)
+            acceleration = (thrust - mass_kg * gravity - drag_force) / mass_kg
+            velocity += acceleration * dt
+            altitude = max(0.0, altitude + velocity * dt)
+            max_altitude = max(max_altitude, altitude)
+            max_velocity = max(max_velocity, abs(velocity))
+
+            if len(trajectory) == 0 or time_s - trajectory[-1]["time"] >= 0.25:
+                trajectory.append({
+                    "time": round(time_s, 3),
+                    "altitude": round(altitude, 4),
+                    "velocity": round(velocity, 4),
+                    "acceleration": round(acceleration, 4),
+                })
+
+            time_s += dt
+            if time_s > burn_time_s and altitude <= 0.0 and velocity < 0.0:
+                break
+
+        cg_input = self._as_float(rocket_data.get("cg"), total_length_input * 0.47)
+        cg_m = cg_input / 1000.0 if cg_input > 5 else cg_input
+        cp_m = total_length_m * 0.62
+        stability_margin = max(0.1, (cp_m - cg_m) / diameter_m)
+
+        return {
+            "source": "local_pre_goal_physics",
+            "is_placeholder": False,
+            "max_altitude": max_altitude,
+            "max_velocity": max_velocity,
+            "total_flight_time": max(time_s, burn_time_s),
+            "motor_thrust": thrust_n,
+            "motor_burn_time": burn_time_s,
+            "total_impulse": total_impulse_ns,
+            "stability_margin": stability_margin,
+            "drag_coefficient": drag_coefficient,
+            "lift_coefficient": 0.0,
+            "pressure_distribution": "local_coefficient_estimate",
+            "velocity_field": "local_vertical_profile",
+            "trajectory_data": "local_pre_goal_profile",
+            "trajectory": trajectory,
+            "notes": "Deterministic local smoke result for pre-goal validation; CFD remains a future integration.",
+        }
+
+    def get_status(self, simulation_id=None):
+        target_id = simulation_id or self.latest_simulation_id
+        if not target_id:
+            return {
+                "status": "idle",
+                "progress": 0,
+                "message": "No local pre-goal simulation has run.",
+            }
+        return self.simulations.get(target_id, {
+            "status": "error",
+            "progress": 0,
+            "message": f"Simulation {target_id} not found.",
+        })
+
+    def stop_simulation(self, simulation_id=None):
+        target_id = simulation_id or self.latest_simulation_id
+        if target_id and target_id in self.simulations:
+            self.simulations[target_id]["status"] = "stopped"
+            self.simulations[target_id]["message"] = "Local pre-goal simulation stopped."
+            return {"success": True, "status": "stopped", "simulation_id": target_id}
+        return {"success": False, "error": "Simulation not found"}
+
 # --- Flask App and Routes ---
 
 # Get the absolute path to the frontend dist directory
@@ -1354,22 +1521,18 @@ motor_db = MotorDatabase(db_path=os.path.join(os.path.dirname(__file__), 'databa
 env_manager = EnvironmentManager()
 cfd_engine = CFDEngine(rocket_geometry=None, environment=None) # Geometry and environment will be passed via API
 
-# Initialize CFD managers
-# Check if we're in cloud mode (Render deployment)
+# Initialize CFD managers.
 simulation_mode = os.environ.get('SIMULATION_MODE', 'local').lower()
 
-if simulation_mode == 'cloud' and gcp_cfd_available:
+if simulation_mode in {'cloud', 'gcp'} and gcp_cfd_available:
     openfoam_manager = GCPCFDClient()
     print("☁️  Google Cloud CFD manager initialized (Cloud Mode)")
-elif gcp_cfd_available:
-    openfoam_manager = GCPCFDClient()
-    print("☁️  Google Cloud CFD manager initialized")
-elif heavy_cfd_available and simulation_mode != 'cloud':
+elif simulation_mode in {'heavy', 'openfoam'} and heavy_cfd_available:
     openfoam_manager = HeavyCFDManager()
     print("🚀 Heavy CFD manager initialized")
 else:
-    openfoam_manager = OpenFOAMManager()
-    print("⚠️  Using simulation mode OpenFOAM manager")
+    openfoam_manager = LocalPreGoalSimulationManager()
+    print("🧪 Local pre-goal simulation manager initialized")
 
 hardware_limits = HardwareLimitations(
     servo_max_speed=180.0,
@@ -1439,31 +1602,62 @@ def start_simulation():
         output_format=simulation_config_data.get('outputFormat', 'vtk')
     )
     
-    # Prepare rocket data for simulation
     rocket_data = {
         'components': rocket_components,
         'weight': rocket_weight,
-        'cg': rocket_cg
+        'cg': rocket_cg,
+        'totalHeight': data.get('totalHeight')
     }
     
-    # Start OpenFOAM simulation
-    result = openfoam_manager.submit_cfd_simulation(
-        rocket_data, simulation_config
-    )
+    if hasattr(openfoam_manager, 'submit_cfd_simulation'):
+        result = openfoam_manager.submit_cfd_simulation(
+            rocket_data, asdict(simulation_config)
+        )
+    else:
+        result = openfoam_manager.start_simulation(
+            rocket_components, rocket_weight, rocket_cg, simulation_config
+        )
     
     if "error" in result:
         return jsonify({"success": False, "message": result["error"]}), 400
-    else:
-        return jsonify({"success": True, "message": result["status"]})
+    return jsonify({
+        "success": result.get("success", True),
+        "simulation_id": result.get("simulation_id"),
+        "status": result.get("status", "started"),
+        "message": result.get("message", result.get("status", "Simulation started")),
+        "results": result.get("results"),
+    })
 
-@app.route("/api/simulation/status", methods=["GET"])
+@app.route("/api/simulation/status", methods=["GET", "POST"])
 def get_simulation_status():
-    status = openfoam_manager.get_status()
+    data = request.get_json(silent=True) or {}
+    simulation_id = data.get("simulation_id") or request.args.get("simulation_id")
+    if hasattr(openfoam_manager, 'get_status'):
+        try:
+            status = openfoam_manager.get_status(simulation_id)
+        except TypeError:
+            status = openfoam_manager.get_status()
+    elif hasattr(openfoam_manager, 'get_simulation_status'):
+        if not simulation_id:
+            return jsonify({"status": "error", "message": "simulation_id required"}), 400
+        status = openfoam_manager.get_simulation_status(simulation_id)
+    else:
+        status = {"status": "error", "message": "No simulation status provider configured"}
     return jsonify(status)
 
 @app.route("/api/simulation/stop", methods=["POST"])
 def stop_simulation():
-    result = openfoam_manager.stop_simulation()
+    data = request.get_json(silent=True) or {}
+    simulation_id = data.get("simulation_id")
+    if hasattr(openfoam_manager, 'stop_simulation'):
+        try:
+            result = openfoam_manager.stop_simulation(simulation_id)
+        except TypeError:
+            result = openfoam_manager.stop_simulation()
+    elif hasattr(openfoam_manager, 'cancel_simulation'):
+        result = openfoam_manager.cancel_simulation(simulation_id)
+    else:
+        result = {"success": False, "error": "No stop provider configured"}
     return jsonify(result)
 
 @app.route("/api/health", methods=["GET"])
@@ -1696,5 +1890,4 @@ if __name__ == '__main__':
     debug = os.environ.get('FLASK_DEBUG', 'false').lower() == 'true'
     
     app.run(host='0.0.0.0', port=port, debug=debug)
-
 
