@@ -29,6 +29,8 @@ const activeDemoRocket = {
 const activeDemoConfig = {
   timeStep: 0.02,
   maxTime: 20,
+  launchSite: 'custom',
+  launchAltitude: 0,
   windSpeed: 1.5,
   windDirection: 25,
   temperature: 15,
@@ -114,6 +116,28 @@ const normalizeBackendMotor = (motor) => {
 const finiteNumber = (value, fallback = 0) => {
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : fallback;
+};
+
+const formatLaunchSiteName = (siteId) => siteId.replace(/_/g, ' ');
+
+const estimatePressureAtElevation = (elevationMeters) => {
+  const elevation = Math.max(0, finiteNumber(elevationMeters));
+  const temperatureK = 288.15 - 0.0065 * Math.min(elevation, 11000);
+  return Math.round(101325 * (temperatureK / 288.15) ** 5.2561);
+};
+
+const normalizeLaunchSite = ([siteId, site]) => {
+  const elevation = finiteNumber(site.elevation);
+  return {
+    id: siteId,
+    label: formatLaunchSiteName(siteId),
+    elevation,
+    temperature: finiteNumber(site.ground_temperature, 15),
+    pressure: estimatePressureAtElevation(elevation),
+    latitude: finiteNumber(site.latitude),
+    longitude: finiteNumber(site.longitude),
+    magneticDeclination: finiteNumber(site.magnetic_declination)
+  };
 };
 
 const formatChartValue = (value) => {
@@ -409,6 +433,7 @@ function App() {
     writeInterval: 100,
     
     // Atmospheric Conditions
+    launchSite: 'custom',
     launchAltitude: 0,
     temperature: 15,
     pressure: 101325,
@@ -547,6 +572,9 @@ function App() {
   const [availableMotors, setAvailableMotors] = useState([]);
   const [motorSearchLoading, setMotorSearchLoading] = useState(false);
   const [motorSearchError, setMotorSearchError] = useState('');
+  const [launchSites, setLaunchSites] = useState([]);
+  const [launchSiteLoading, setLaunchSiteLoading] = useState(false);
+  const [launchSiteError, setLaunchSiteError] = useState('');
   
   const loadAvailableMotors = async () => {
     if (availableMotors.length) {
@@ -593,6 +621,50 @@ function App() {
     ).slice(0, 20);
     
     setMotorSearchResults(filtered);
+  };
+
+  const loadLaunchSites = async () => {
+    setLaunchSiteLoading(true);
+    setLaunchSiteError('');
+    try {
+      const response = await fetch(`${SIMULATION_API_URL}/api/environment/launch-sites`);
+      const result = await response.json();
+      if (!response.ok || !result.launch_sites || typeof result.launch_sites !== 'object') {
+        throw new Error(result.message || 'Launch-site database did not return any sites.');
+      }
+      const sites = Object.entries(result.launch_sites).map(normalizeLaunchSite);
+      setLaunchSites(sites);
+      return sites;
+    } catch (error) {
+      setLaunchSiteError(error.message);
+      setLaunchSites([]);
+      return [];
+    } finally {
+      setLaunchSiteLoading(false);
+    }
+  };
+
+  const applyLaunchSite = (siteId) => {
+    if (siteId === 'custom') {
+      updateSimulationConfig('launchSite', 'custom');
+      return;
+    }
+
+    const site = launchSites.find(candidate => candidate.id === siteId);
+    if (!site) {
+      updateSimulationConfig('launchSite', siteId);
+      return;
+    }
+
+    setSimulationConfig(prev => ({
+      ...prev,
+      launchSite: site.id,
+      launchAltitude: Number(site.elevation.toFixed(1)),
+      temperature: Number(site.temperature.toFixed(1)),
+      pressure: site.pressure,
+      outletPressure: site.pressure
+    }));
+    showNotification(`${site.label} launch conditions loaded.`, 'success');
   };
   
   // Custom notification system
@@ -662,6 +734,10 @@ function App() {
       setCurrentWeatherNotification(null);
     }
   };
+
+  useEffect(() => {
+    loadLaunchSites();
+  }, []);
 
   // Variable information for tooltips
   const variableInfo = {
@@ -1207,6 +1283,7 @@ function App() {
         timeStep: 0.001,
         maxTime: 30,
         writeInterval: 100,
+        launchSite: 'custom',
         launchAltitude: 0,
         temperature: 25,
         pressure: 101325,
@@ -1233,6 +1310,7 @@ function App() {
         timeStep: 0.0008,
         maxTime: 35,
         writeInterval: 120,
+        launchSite: 'custom',
         launchAltitude: 0,
         temperature: 12,
         pressure: 100500,
@@ -1259,6 +1337,7 @@ function App() {
         timeStep: 0.0005,
         maxTime: 40,
         writeInterval: 100,
+        launchSite: 'custom',
         launchAltitude: 0,
         temperature: 18,
         pressure: 101000,
@@ -1285,6 +1364,7 @@ function App() {
         timeStep: 0.0003,
         maxTime: 25,
         writeInterval: 80,
+        launchSite: 'custom',
         launchAltitude: 0,
         temperature: 8,
         pressure: 99500,
@@ -1423,6 +1503,7 @@ function App() {
         timeStep: 0.001,
         maxTime: 30,
         writeInterval: 100,
+        launchSite: 'custom',
         launchAltitude: 0,
         temperature: 15,
         pressure: 101325,
@@ -4395,6 +4476,25 @@ function App() {
               <h3>Frequent Variables</h3>
               <div className="variables-grid">
                 <div className="variable-group">
+                  <label>Launch Site:</label>
+                  <select
+                    value={simulationConfig.launchSite || 'custom'}
+                    onChange={(e) => applyLaunchSite(e.target.value)}
+                    disabled={launchSiteLoading}
+                  >
+                    <option value="custom">{launchSiteLoading ? 'Loading Sites...' : 'Custom Site'}</option>
+                    {launchSites.map(site => (
+                      <option key={site.id} value={site.id}>
+                        {site.label} ({Math.round(site.elevation)} m)
+                      </option>
+                    ))}
+                  </select>
+                  {launchSiteError && (
+                    <span className="field-note error">{launchSiteError}</span>
+                  )}
+                </div>
+
+                <div className="variable-group">
                   <label>Launch Altitude (m):</label>
                   <input 
                     type="number"
@@ -4532,6 +4632,90 @@ function App() {
                     value={simulationConfig.noise?.seed ?? 20260625}
                     onChange={(e) => updateSimulationSection('noise', 'seed', parseInt(e.target.value, 10))}
                     step="1"
+                  />
+                </div>
+
+                <div className="variable-group">
+                  <label>Altitude Noise (m):</label>
+                  <input
+                    type="number"
+                    value={simulationConfig.noise?.altitudeStd ?? 0.15}
+                    onChange={(e) => updateSimulationSection('noise', 'altitudeStd', parseFloat(e.target.value))}
+                    step="0.01"
+                    min="0"
+                    max="20"
+                  />
+                </div>
+
+                <div className="variable-group">
+                  <label>Velocity Noise (m/s):</label>
+                  <input
+                    type="number"
+                    value={simulationConfig.noise?.velocityStd ?? 0.05}
+                    onChange={(e) => updateSimulationSection('noise', 'velocityStd', parseFloat(e.target.value))}
+                    step="0.01"
+                    min="0"
+                    max="20"
+                  />
+                </div>
+
+                <div className="variable-group">
+                  <label>Acceleration Noise (m/s²):</label>
+                  <input
+                    type="number"
+                    value={simulationConfig.noise?.accelStd ?? 0.12}
+                    onChange={(e) => updateSimulationSection('noise', 'accelStd', parseFloat(e.target.value))}
+                    step="0.01"
+                    min="0"
+                    max="50"
+                  />
+                </div>
+
+                <div className="variable-group">
+                  <label>Ambient Pressure Noise (Pa):</label>
+                  <input
+                    type="number"
+                    value={simulationConfig.noise?.ambientPressureStd ?? 8}
+                    onChange={(e) => updateSimulationSection('noise', 'ambientPressureStd', parseFloat(e.target.value))}
+                    step="1"
+                    min="0"
+                    max="5000"
+                  />
+                </div>
+
+                <div className="variable-group">
+                  <label>Pneumatic Pressure Noise (Pa):</label>
+                  <input
+                    type="number"
+                    value={simulationConfig.noise?.pneumaticPressureStd ?? 120}
+                    onChange={(e) => updateSimulationSection('noise', 'pneumaticPressureStd', parseFloat(e.target.value))}
+                    step="10"
+                    min="0"
+                    max="50000"
+                  />
+                </div>
+
+                <div className="variable-group">
+                  <label>Temperature Noise (°C):</label>
+                  <input
+                    type="number"
+                    value={simulationConfig.noise?.temperatureStd ?? 0.05}
+                    onChange={(e) => updateSimulationSection('noise', 'temperatureStd', parseFloat(e.target.value))}
+                    step="0.01"
+                    min="0"
+                    max="10"
+                  />
+                </div>
+
+                <div className="variable-group">
+                  <label>Initial Attitude Noise (°):</label>
+                  <input
+                    type="number"
+                    value={simulationConfig.noise?.initialAttitudeStd ?? 0.35}
+                    onChange={(e) => updateSimulationSection('noise', 'initialAttitudeStd', parseFloat(e.target.value))}
+                    step="0.01"
+                    min="0"
+                    max="20"
                   />
                 </div>
 

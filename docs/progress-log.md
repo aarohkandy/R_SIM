@@ -52,3 +52,11 @@
 - Removed an unused random-output backend CFD helper from the main Flask server so the local API cannot return that placeholder path as a real result.
 - Ran `bash scripts/run_pre_goal_checks.sh`: passed with local-first/cloud-default guards, no random placeholder server output guard, 19 unit tests, 6 scenario fixtures, backend API smoke, frontend production build, and frontend lint.
 - Browser-checked local app at `http://127.0.0.1:5001/`: mount-time status made only `http://localhost:5011/health`, made no external requests, showed active flight simulation copy, and produced no bad responses or console errors.
+- Removed stale tracked frontend backup files that still contained old cloud-function, mock-motor, and random UI code.
+- Hardened the GCP CFD client so missing credentials or missing function setup return explicit unavailable errors instead of synthesized CFD submissions, statuses, or result payloads.
+- Added unit tests for the unavailable GCP CFD path.
+- Hardened the heavy OpenFOAM path so missing OpenFOAM returns an explicit unavailable payload instead of describing a simulation fallback.
+- Raised the default compiled-controller runtime ceiling to 1.0 seconds to avoid false timeouts for valid controllers while retaining the explicit runaway-controller timeout test.
+- Added backend launch-site selection and explicit sensor, atmosphere, attitude, and pneumatic pressure noise controls to the frontend setup panel.
+- Ran `bash scripts/run_pre_goal_checks.sh`: passed with 25 unit tests, 6 scenario fixtures, backend API smoke, root/API health, OpenRocket import smoke, backend motor thrust-curve smoke, frontend production build, frontend lint, launch-site UI static gate, noise-control static gate, and cloud/heavy unavailable-path guards.
+- Browser-checked the built app at `http://127.0.0.1:5011/`: the setup panel loaded launch sites from `/api/environment/launch-sites`, showed Black Rock Desert, Estes Field, and NAR TARC Finals, selected Estes Field, updated launch altitude to 1609 m, and showed the explicit pneumatic pressure noise control.

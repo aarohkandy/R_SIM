@@ -2171,6 +2171,16 @@ body {
   background: rgba(255, 255, 255, 0.95);
 }
 
+.field-note {
+  color: #64748b;
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+.field-note.error {
+  color: #b91c1c;
+}
+
 /* Active Fin Control System Styles */
 .control-status {
   display: flex;
@@ -3643,4 +3653,3 @@ body {
     text-align: center;
   }
 }
-

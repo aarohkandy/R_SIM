@@ -21,19 +21,43 @@ class GCPCFDClient:
         self.credentials = None
         self.authed_session = None
         self.function_url = None
+        self.unavailable_reason = None
         
         # Initialize authentication
         self._setup_authentication()
+
+    def _mark_unavailable(self, reason: str):
+        """Disable cloud CFD and preserve a clear, user-facing reason."""
+        self.unavailable_reason = reason
+        self.credentials = None
+        self.authed_session = None
+        print(f"GCP CFD unavailable: {reason}")
+
+    def _unavailable_response(self, action: str, simulation_id: Optional[str] = None) -> Dict:
+        reason = self.unavailable_reason or "authentication is not configured"
+        message = (
+            f"GCP CFD unavailable for {action}: {reason}. "
+            "Use SIMULATION_MODE=local for the supported offline active pneumatic model, "
+            "or configure real GCP credentials and a deployed function."
+        )
+        response = {
+            "success": False,
+            "status": "unavailable",
+            "progress": 0,
+            "source": "gcp_cfd_unavailable",
+            "message": message,
+            "error": message,
+        }
+        if simulation_id:
+            response["simulation_id"] = simulation_id
+        return response
     
     def _setup_authentication(self):
         """Set up Google Cloud authentication"""
         try:
             # Check if service account file exists
             if not os.path.exists(self.service_account_path):
-                print(f"⚠️  GCP service account file not found: {self.service_account_path}")
-                print("⚠️  GCP integration will be disabled. Running in simulation mode.")
-                self.credentials = None
-                self.authed_session = None
+                self._mark_unavailable(f"service account file not found: {self.service_account_path}")
                 return
             
             # Load service account credentials
@@ -50,8 +74,7 @@ class GCPCFDClient:
             print(f"🏗️  Project ID: {self.project_id}")
             
         except Exception as e:
-            print(f"❌ Authentication failed: {e}")
-            raise
+            self._mark_unavailable(f"authentication failed: {e}")
     
     def set_function_url(self, function_name: str, region: str = "us-central1"):
         """Set the Cloud Function URL"""
@@ -60,6 +83,10 @@ class GCPCFDClient:
     
     def test_connection(self) -> bool:
         """Test connection to Cloud Function"""
+        if not self.authed_session:
+            print(self._unavailable_response("connection test")["message"])
+            return False
+
         if not self.function_url:
             print("❌ Function URL not set")
             return False
@@ -91,11 +118,10 @@ class GCPCFDClient:
     def submit_cfd_simulation(self, rocket_data: Dict, simulation_config: Dict) -> Dict:
         """Submit a CFD simulation to Google Cloud Function"""
         if not self.authed_session:
-            print("⚠️  GCP not available, running in simulation mode")
-            return self._simulate_cfd_submission(rocket_data, simulation_config)
+            return self._unavailable_response("submission")
         
         if not self.function_url:
-            raise ValueError("Function URL not set")
+            return self._unavailable_response("submission")
         
         try:
             payload = {
@@ -124,32 +150,27 @@ class GCPCFDClient:
                 return result
             else:
                 print(f"❌ Submission failed: {response.text}")
-                return {"error": f"Submission failed: {response.status_code}"}
+                return {
+                    "success": False,
+                    "source": "gcp_cfd_error",
+                    "error": f"Submission failed: {response.status_code}",
+                }
                 
         except Exception as e:
             print(f"❌ Submission error: {e}")
-            return {"error": str(e)}
-    
-    def _simulate_cfd_submission(self, rocket_data: Dict, simulation_config: Dict) -> Dict:
-        """Simulate CFD submission when GCP is not available"""
-        simulation_id = f"sim_{int(time.time())}"
-        print(f"🎭 Simulating CFD submission (ID: {simulation_id})")
-        
-        return {
-            "success": True,
-            "simulation_id": simulation_id,
-            "status": "submitted",
-            "message": "Simulation submitted (simulation mode)",
-            "estimated_completion": time.time() + 300  # 5 minutes
-        }
+            return {
+                "success": False,
+                "source": "gcp_cfd_error",
+                "error": str(e),
+            }
     
     def get_simulation_status(self, simulation_id: str) -> Dict:
         """Get the status of a running simulation"""
         if not self.authed_session:
-            return self._simulate_status_check(simulation_id)
+            return self._unavailable_response("status check", simulation_id)
         
         if not self.function_url:
-            raise ValueError("Function URL not set")
+            return self._unavailable_response("status check", simulation_id)
         
         try:
             payload = {
@@ -166,18 +187,44 @@ class GCPCFDClient:
             if response.status_code == 200:
                 return response.json()
             else:
-                return {"error": f"Status check failed: {response.status_code}"}
+                return {
+                    "success": False,
+                    "status": "error",
+                    "progress": 0,
+                    "source": "gcp_cfd_error",
+                    "error": f"Status check failed: {response.status_code}",
+                }
                 
         except Exception as e:
-            return {"error": str(e)}
+            return {
+                "success": False,
+                "status": "error",
+                "progress": 0,
+                "source": "gcp_cfd_error",
+                "error": str(e),
+            }
+
+    def get_status(self, simulation_id: Optional[str] = None) -> Dict:
+        """Status alias used by the Flask health/status routes."""
+        if simulation_id:
+            return self.get_simulation_status(simulation_id)
+        if not self.authed_session:
+            return self._unavailable_response("status")
+        return {
+            "success": True,
+            "status": "configured",
+            "progress": 0,
+            "source": "gcp_cfd",
+            "message": "GCP CFD client is configured. Submit a simulation to get a run status.",
+        }
     
     def get_simulation_results(self, simulation_id: str) -> Dict:
         """Get the results of a completed simulation"""
         if not self.authed_session:
-            return self._simulate_results_get(simulation_id)
+            return self._unavailable_response("results retrieval", simulation_id)
         
         if not self.function_url:
-            raise ValueError("Function URL not set")
+            return self._unavailable_response("results retrieval", simulation_id)
         
         try:
             payload = {
@@ -194,18 +241,26 @@ class GCPCFDClient:
             if response.status_code == 200:
                 return response.json()
             else:
-                return {"error": f"Results retrieval failed: {response.status_code}"}
+                return {
+                    "success": False,
+                    "source": "gcp_cfd_error",
+                    "error": f"Results retrieval failed: {response.status_code}",
+                }
                 
         except Exception as e:
-            return {"error": str(e)}
+            return {
+                "success": False,
+                "source": "gcp_cfd_error",
+                "error": str(e),
+            }
     
     def cancel_simulation(self, simulation_id: str) -> Dict:
         """Cancel a running simulation"""
         if not self.authed_session:
-            return {"success": True, "message": "Simulation cancelled (simulation mode)"}
+            return self._unavailable_response("cancel", simulation_id)
         
         if not self.function_url:
-            raise ValueError("Function URL not set")
+            return self._unavailable_response("cancel", simulation_id)
         
         try:
             payload = {
@@ -222,35 +277,18 @@ class GCPCFDClient:
             if response.status_code == 200:
                 return response.json()
             else:
-                return {"error": f"Cancel failed: {response.status_code}"}
+                return {
+                    "success": False,
+                    "source": "gcp_cfd_error",
+                    "error": f"Cancel failed: {response.status_code}",
+                }
                 
         except Exception as e:
-            return {"error": str(e)}
-    
-    def _simulate_status_check(self, simulation_id: str) -> Dict:
-        """Simulate status check when GCP is not available"""
-        return {
-            "success": True,
-            "simulation_id": simulation_id,
-            "status": "running",
-            "progress": 45,
-            "message": "Simulation in progress (simulation mode)"
-        }
-    
-    def _simulate_results_get(self, simulation_id: str) -> Dict:
-        """Simulate results retrieval when GCP is not available"""
-        return {
-            "success": True,
-            "simulation_id": simulation_id,
-            "status": "completed",
-            "results": {
-                "drag_coefficient": 0.45,
-                "lift_coefficient": 0.12,
-                "pressure_distribution": "simulated_data",
-                "velocity_field": "simulated_data"
-            },
-            "message": "Results retrieved (simulation mode)"
-        }
+            return {
+                "success": False,
+                "source": "gcp_cfd_error",
+                "error": str(e),
+            }
 
 def main():
     """Test the GCP CFD client"""

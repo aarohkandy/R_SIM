@@ -55,7 +55,16 @@ class HeavyCFDManager:
     def start_simulation(self, rocket_components, rocket_weight, rocket_cg, simulation_config):
         """Start a full OpenFOAM CFD simulation"""
         if not self.openfoam_available:
-            return {"error": "OpenFOAM not available, falling back to simulation mode"}
+            return {
+                "success": False,
+                "status": "unavailable",
+                "source": "openfoam_unavailable",
+                "error": (
+                    "OpenFOAM is not available, so heavy CFD cannot run locally. "
+                    "Use SIMULATION_MODE=local for the supported active pneumatic model "
+                    "or install/configure OpenFOAM before selecting heavy CFD."
+                ),
+            }
             
         if self.simulation_running:
             return {"error": "Simulation already running"}
@@ -1028,6 +1037,7 @@ boundaryField
         return {
             "status": "Running" if self.simulation_running else "Idle",
             "openfoam_available": self.openfoam_available,
+            "source": "openfoam_cfd" if self.openfoam_available else "openfoam_unavailable",
             "case_dir": self.openfoam_case_dir,
             "results": self.results
         }

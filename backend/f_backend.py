@@ -32,7 +32,7 @@ try:
         openfoam_env.load_openfoam_environment()
         print("✅ OpenFOAM environment loaded")
     else:
-        print("⚠️  OpenFOAM environment not found, using simulation mode")
+        print("OpenFOAM environment not found; local active dynamics remain the default.")
 except Exception as e:
     print(f"⚠️  Could not load OpenFOAM environment: {e}")
 
@@ -213,7 +213,7 @@ class CPPControlSystem:
         self,
         hardware_limits: HardwareLimitations,
         compile_timeout_seconds: float = 30.0,
-        runtime_timeout_seconds: float = 0.35,
+        runtime_timeout_seconds: float = 1.0,
         max_code_bytes: int = 20000,
     ):
         self.hardware_limits = hardware_limits

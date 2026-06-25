@@ -36,11 +36,14 @@ The active scenario matrix uses importable files in `examples/scenarios/`:
   - `/api/simulation/status`
 - Sample active pneumatic rocket simulation returns structured deterministic output.
 - Sample active pneumatic rocket simulation uses a motor thrust curve from the backend motor database.
+- Frontend launch-site selection is wired to `/api/environment/launch-sites`.
+- Frontend setup exposes deterministic sensor, atmosphere, attitude, and pneumatic pressure noise settings.
 - Frontend motor search is wired to `/api/environment/motors` and must not contain a mock motor list.
 - Frontend results view renders live charts from trajectory, force, pressure, and active-system histories.
 - Frontend export actions include trajectory CSV, force/moment CSV, active-system CSV, and full JSON.
 - Frontend API configuration does not default to hardcoded cloud/GCP services for the local workflow.
 - Backend main server does not contain random placeholder result generation.
+- Cloud/GCP and heavy OpenFOAM paths fail with explicit unavailable errors when their real credentials/toolchains are missing.
 - Frontend dependencies install.
 - Frontend production build succeeds.
 - Frontend lint succeeds.
