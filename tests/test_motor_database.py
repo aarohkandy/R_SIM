@@ -1,6 +1,7 @@
 import sys
 import tempfile
 import unittest
+from io import BytesIO
 from pathlib import Path
 
 
@@ -8,7 +9,7 @@ ROOT = Path(__file__).resolve().parents[1]
 BACKEND = ROOT / "backend"
 sys.path.insert(0, str(BACKEND))
 
-from f_backend import MotorDatabase, app  # noqa: E402
+from f_backend import MotorDatabase, app, parse_motor_file  # noqa: E402
 
 
 class MotorDatabaseTests(unittest.TestCase):
@@ -57,6 +58,30 @@ class MotorDatabaseTests(unittest.TestCase):
             self.assertEqual(by_full_name.designation, by_model.designation)
             self.assertGreater(len(by_model.thrust_curve), 5)
 
+    def test_parse_rasp_eng_motor_file(self):
+        motor = parse_motor_file(
+            b"""
+; RASP sample
+X9 24 70 5 0.010 0.025 CustomMfg
+0.000 0.0
+0.050 20.0
+0.200 10.0
+0.400 0.0
+""",
+            "custom-x9.eng",
+        )
+
+        self.assertEqual(motor.designation, "X9")
+        self.assertEqual(motor.manufacturer, "CustomMfg")
+        self.assertEqual(motor.diameter, 24.0)
+        self.assertEqual(motor.length, 70.0)
+        self.assertAlmostEqual(motor.total_mass, 25.0)
+        self.assertAlmostEqual(motor.propellant_mass, 10.0)
+        self.assertEqual(motor.delay_time, 5.0)
+        self.assertEqual(motor.impulse_class, "B")
+        self.assertGreater(motor.total_impulse, 3.0)
+        self.assertEqual(len(motor.thrust_curve), 4)
+
 
 class MotorEndpointTests(unittest.TestCase):
     def test_motor_endpoint_returns_filter_metadata_and_filtered_results(self):
@@ -74,6 +99,38 @@ class MotorEndpointTests(unittest.TestCase):
         self.assertTrue(all(motor["manufacturer"] == "AeroTech" for motor in motors))
         self.assertTrue(all(motor["impulse_class"] == "G" for motor in motors))
         self.assertTrue(any(motor["designation"] == "AeroTech G40-7W" for motor in motors))
+
+    def test_motor_import_endpoint_accepts_rocksim_rse(self):
+        client = app.test_client()
+        payload = b"""
+<engine-database>
+  <engine-list>
+    <engine mfg="UnitTest" code="UT18-4" dia="18" len="70" initWt="0.028" propWt="0.012" delays="4">
+      <data>
+        <eng-data t="0.000" f="0.0"/>
+        <eng-data t="0.040" f="18.0"/>
+        <eng-data t="0.200" f="11.0"/>
+        <eng-data t="0.500" f="0.0"/>
+      </data>
+    </engine>
+  </engine-list>
+</engine-database>
+"""
+
+        response = client.post(
+            "/api/environment/motors/import",
+            data={"file": (BytesIO(payload), "unit-test-ut18.rse")},
+            content_type="multipart/form-data",
+        )
+        body = response.get_json()
+
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(body["success"])
+        self.assertEqual(body["motor"]["manufacturer"], "UnitTest")
+        self.assertEqual(body["motor"]["designation"], "UT18-4")
+        self.assertEqual(len(body["motor"]["thrust_curve"]), 4)
+        self.assertGreater(body["motor"]["total_impulse"], 4.0)
+        self.assertIn("UnitTest", body["filters"]["manufacturers"])
 
 
 if __name__ == "__main__":

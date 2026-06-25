@@ -54,6 +54,18 @@ def main() -> int:
         all(motor.get("impulse_class") == "G" for motor in filtered_motors.get("motors", [])),
         f"Filtered motor search returned the wrong impulse class: {filtered_motors}",
     )
+    motor_import = json_body(client.post(
+        "/api/environment/motors/import",
+        data={
+            "file": (
+                io.BytesIO(b"PGX9 24 70 5 0.010 0.025 PreGoal\n0 0\n0.05 20\n0.20 10\n0.40 0\n"),
+                "pre-goal-x9.eng",
+            )
+        },
+        content_type="multipart/form-data",
+    ))
+    require(motor_import.get("success"), f"Motor file import failed: {motor_import}")
+    require(len(motor_import.get("motor", {}).get("thrust_curve", [])) == 4, f"Imported motor curve was not preserved: {motor_import}")
     frontend_source = (ROOT / "frontend" / "main.jsx").read_text(encoding="utf-8")
     frontend_style = (ROOT / "frontend" / "App.css").read_text(encoding="utf-8")
     backend_source = (ROOT / "backend" / "f_backend.py").read_text(encoding="utf-8")
@@ -70,6 +82,8 @@ def main() -> int:
     require("Simulation submitted (simulation mode)" not in gcp_client_source, "GCP CFD client still reports unavailable cloud work as submitted.")
     require("falling back to simulation mode" not in heavy_cfd_source, "Heavy CFD still describes missing OpenFOAM as a simulation fallback.")
     require("/api/environment/motors" in frontend_source, "Frontend motor picker is not wired to the backend motor database.")
+    require("/api/environment/motors/import" in frontend_source and "Import motor file" in frontend_source, "Frontend motor picker cannot import motor curve files.")
+    require("parse_motor_file" in backend_source, "Backend is missing common motor-file import parsing.")
     require("motorFilters" in frontend_source, "Frontend motor picker is missing catalog filters.")
     require("Impulse" in frontend_source and "Manufacturer" in frontend_source and "TARC approved" in frontend_source, "Frontend motor picker is missing expected filter controls.")
     require("/api/environment/launch-sites" in frontend_source, "Frontend launch-site picker is not wired to the backend launch-site database.")

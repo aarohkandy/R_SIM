@@ -1284,7 +1284,7 @@ button:focus-visible {
 
 .motor-browser-head {
   display: flex;
-  align-items: baseline;
+  align-items: center;
   justify-content: space-between;
   gap: 10px;
   padding: 0 2px 8px;
@@ -1292,9 +1292,20 @@ button:focus-visible {
   font-size: 11px;
 }
 
+.motor-browser-head div {
+  display: grid;
+  gap: 2px;
+}
+
 .motor-browser-head strong {
   color: var(--ink);
   font-size: 13px;
+}
+
+.motor-browser-head button {
+  min-height: 28px;
+  padding: 4px 8px;
+  font-size: 11px;
 }
 
 .motor-filter-grid {

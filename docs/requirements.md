@@ -9,6 +9,7 @@
 - Place internal payload, avionics, battery, and ballast mass components along the rocket so CG and stability can be tuned without changing exterior geometry.
 - Place main and drogue parachute components in the rocket tree so recovery area, Cd, deployment event, altitude, and opening-load limits can be edited as parts.
 - Import an existing OpenRocket `.ork` design when available, preserving common body, nose, fin, motor, mass, and CG data.
+- Import RASP `.eng` and RockSim `.rse` motor thrust-curve files into the local motor catalog.
 - Define an active air system with pressure source, valves, actuator geometry, deployment location, and surface limits.
 - Write controller code that receives simulated sensor data and commands the active system.
 - Add deterministic or seeded noise for sensors, atmosphere, actuator response, and pressure behavior.
@@ -33,6 +34,7 @@
 - Internal mass components must expose station, host, role, and mass controls; affect component mass/CG calculations; render in the side view; and remain excluded from external length, diameter, and aerodynamic geometry.
 - Parachute components must expose main/drogue role, host, station, deploy event, deploy altitude, drag area, Cd, and opening-load controls; render in the side view; import from OpenRocket files; and drive the landing/recovery simulation config.
 - Frontend motor search must use the local backend motor database, not hardcoded placeholder motor data, and support designation, impulse class, manufacturer, diameter, and TARC filters.
+- Motor imports must accept common `.eng` and `.rse` thrust-curve files, compute impulse/burn/average/peak values from the curve, and make the imported motor selectable from the Motors tab.
 - C++ controller code must compile before it is used by an active simulation.
 - Pneumatic outputs must show pressure use, actuator movement, and surface deployment when active control commands it.
 - Active airbrake location must be editable, validated against rocket length, and reflected in moment outputs.

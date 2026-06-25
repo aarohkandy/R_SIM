@@ -2592,6 +2592,8 @@ function MotorBrowser({
   motors,
   loading,
   error,
+  importState,
+  onImportMotor,
   query,
   setQuery,
   filters,
@@ -2628,16 +2630,33 @@ function MotorBrowser({
     filters.diameter,
     filters.tarcOnly ? 'tarc' : ''
   ].filter(Boolean).length;
+  const motorFileInputRef = useRef(null);
 
   return (
     <div className="inspector-scroll">
       <div className="panel-copy">
         <h2>Motor database</h2>
-        <p>Installed motor curves for the current rocket.</p>
+        <p>Installed motor curves and imported thrust files for the current rocket.</p>
       </div>
       <div className="motor-browser-head">
-        <strong>{filtered.length} matches</strong>
-        <span>{motors.length} catalog motors</span>
+        <div>
+          <strong>{filtered.length} matches</strong>
+          <span>{motors.length} catalog motors</span>
+        </div>
+        <button type="button" onClick={() => motorFileInputRef.current?.click()}>
+          Import motor file
+        </button>
+        <input
+          ref={motorFileInputRef}
+          className="hidden-input"
+          type="file"
+          accept=".eng,.rse,.xml"
+          onChange={(event) => {
+            const file = event.target.files?.[0];
+            if (file) onImportMotor(file);
+            event.target.value = '';
+          }}
+        />
       </div>
       <div className="motor-filter-grid">
         <Field label="Designation" type="text" value={query} onChange={setQuery} />
@@ -2689,6 +2708,11 @@ function MotorBrowser({
       </div>
       {loading && <div className="inline-status">Loading motors...</div>}
       {error && <div className="inline-status error">{error}</div>}
+      {importState?.message && (
+        <div className={`inline-status ${importState.status === 'error' ? 'error' : ''}`}>
+          {importState.message}
+        </div>
+      )}
       <div className="motor-list">
         {filtered.map((motor) => (
           <button key={motor.id} type="button" className="motor-row" onClick={() => addMotor(motor)}>
@@ -3455,6 +3479,7 @@ function App() {
   const [motorMetadata, setMotorMetadata] = useState({ manufacturers: [], impulse_classes: [], diameters_mm: [] });
   const [motorsLoading, setMotorsLoading] = useState(false);
   const [motorError, setMotorError] = useState('');
+  const [motorImportState, setMotorImportState] = useState({ status: 'idle', message: '' });
   const [launchSites, setLaunchSites] = useState([]);
   const [apiStatus, setApiStatus] = useState('checking');
   const [runState, setRunState] = useState('idle');
@@ -3701,6 +3726,45 @@ function App() {
     setSelectedId(copy.id);
     setInspectorTab('component');
     staleResults();
+  };
+
+  const importMotorFile = async (file) => {
+    if (!API_URL) {
+      setMotorImportState({ status: 'error', message: 'Local API is offline.' });
+      return;
+    }
+    setMotorImportState({ status: 'loading', message: `Importing ${file.name}...` });
+    setMotorError('');
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+      const response = await fetch(`${API_URL}/api/environment/motors/import`, { method: 'POST', body: formData });
+      const body = await response.json();
+      if (!response.ok || !body.success) throw new Error(body.message || 'Motor import failed.');
+      const importedMotor = normalizeMotor(body.motor);
+      setMotors((current) => {
+        const byId = new Map(current.map((motor) => [motor.id, motor]));
+        byId.set(importedMotor.id, importedMotor);
+        return [...byId.values()].sort((left, right) => left.displayName.localeCompare(right.displayName));
+      });
+      setMotorMetadata(body.filters || { manufacturers: [], impulse_classes: [], diameters_mm: [] });
+      setMotorQuery(importedMotor.model);
+      setMotorFilters({
+        manufacturer: importedMotor.manufacturer,
+        impulseClass: '',
+        diameter: '',
+        tarcOnly: false
+      });
+      setMotorImportState({
+        status: 'success',
+        message: `${importedMotor.displayName} imported with ${importedMotor.thrustCurve.length} curve points.`
+      });
+      setMotorError('');
+      setMessage(`${importedMotor.displayName} motor file imported.`);
+    } catch (error) {
+      setMotorImportState({ status: 'error', message: error.message });
+      setMotorError(error.message);
+    }
   };
 
   const addMotor = (motor) => {
@@ -4284,6 +4348,8 @@ function App() {
         motors={motors}
         loading={motorsLoading}
         error={motorError}
+        importState={motorImportState}
+        onImportMotor={importMotorFile}
         query={motorQuery}
         setQuery={setMotorQuery}
         filters={motorFilters}

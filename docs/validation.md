@@ -28,6 +28,7 @@ The active scenario matrix uses importable files in `examples/scenarios/`:
   - `/api/health`
   - `/health`
   - `/api/environment/motors`
+  - `/api/environment/motors/import`
   - `/api/environment/launch-sites`
   - `/api/openrocket/import`
   - `/api/control-code/compile`
@@ -42,6 +43,7 @@ The active scenario matrix uses importable files in `examples/scenarios/`:
 - Frontend launch-site selection is wired to `/api/environment/launch-sites`.
 - Frontend setup exposes deterministic sensor, atmosphere, attitude, and pneumatic pressure noise settings.
 - Frontend motor search is wired to `/api/environment/motors` and must not contain a mock motor list.
+- Frontend motor import is wired to `/api/environment/motors/import` and backend smoke tests preserve imported `.eng`/`.rse` thrust-curve points.
 - Frontend design tree and rocket side-view drawing expose structural split markers.
 - Frontend inspector/table expose subpart attachment hosts for fins, motors, and rail buttons.
 - Frontend design tree nests attached subparts beneath their host airframe part and separates unattached subparts.

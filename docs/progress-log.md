@@ -94,3 +94,6 @@
 - Reworked the design tree into an OpenRocket-style airframe hierarchy, nesting attached parachutes, masses, fins, motors, and rail buttons beneath their selected host while keeping unattached subparts separated for repair.
 - Ran `bash scripts/run_pre_goal_checks.sh`: passed with 57 unit tests, nested-tree smoke gate, scenario matrix, backend API smoke, frontend production build, and frontend lint.
 - Browser-checked local app at `http://localhost:5001/`: verified Main parachute under Recovery bay, Avionics battery pack under Avionics bay, fins/motor under Aft airframe, then changed the fin host to Forward airframe and saw both the tree and table update with no browser warnings/errors.
+- Added RASP `.eng` and RockSim `.rse` motor-file import into the local motor catalog, deriving burn time, impulse, average thrust, peak thrust, mass, delay, and curve points from uploaded files.
+- Ran `bash scripts/run_pre_goal_checks.sh`: passed with 59 unit tests, motor-file import smoke gate, scenario matrix, backend API smoke, frontend production build, and frontend lint.
+- Browser-checked local app at `http://localhost:5001/`: imported a sample `.eng` through the backend, saw `BrowserMfg BROWSERX9` in the Motors tab with the import button present, added it to the rocket, verified a 4-point thrust curve in the motor inspector, and produced no browser warnings/errors.

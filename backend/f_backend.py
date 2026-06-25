@@ -11,6 +11,7 @@ import re
 import numpy as np
 import sqlite3
 import shutil
+import xml.etree.ElementTree as ET
 from typing import Dict, List, Optional, Tuple
 from dataclasses import dataclass, asdict
 from pathlib import Path
@@ -808,6 +809,199 @@ class MotorDatabase:
         if manufacturer and designation.lower().startswith(prefix.lower()):
             return designation[len(prefix):].strip()
         return designation
+
+
+def _parse_float(value, default: Optional[float] = None) -> Optional[float]:
+    try:
+        if value is None or value == "":
+            return default
+        return float(str(value).strip())
+    except (TypeError, ValueError):
+        return default
+
+
+def _mass_to_grams(value: Optional[float]) -> float:
+    if value is None:
+        return 0.0
+    mass = float(value)
+    return round(mass * 1000.0, 4) if 0 < abs(mass) <= 20 else round(mass, 4)
+
+
+def _distance_to_mm(value: Optional[float]) -> float:
+    if value is None:
+        return 0.0
+    distance = float(value)
+    return round(distance * 1000.0, 4) if 0 < abs(distance) <= 5 else round(distance, 4)
+
+
+def _integrate_motor_curve(points: List[Tuple[float, float]]) -> float:
+    return sum(
+        max(points[index][0] - points[index - 1][0], 0) * (points[index][1] + points[index - 1][1]) * 0.5
+        for index in range(1, len(points))
+    )
+
+
+def _impulse_class(total_impulse: float) -> str:
+    bounds = [
+        ("1/4A", 0.625),
+        ("1/2A", 1.25),
+        ("A", 2.5),
+        ("B", 5.0),
+        ("C", 10.0),
+        ("D", 20.0),
+        ("E", 40.0),
+        ("F", 80.0),
+        ("G", 160.0),
+        ("H", 320.0),
+        ("I", 640.0),
+        ("J", 1280.0),
+        ("K", 2560.0),
+        ("L", 5120.0),
+        ("M", 10240.0),
+        ("N", 20480.0),
+        ("O", 40960.0),
+    ]
+    for label, upper in bounds:
+        if total_impulse <= upper:
+            return label
+    return "P"
+
+
+def _delay_from_text(value: str) -> float:
+    match = re.search(r"\d+(?:\.\d+)?", str(value or ""))
+    return float(match.group(0)) if match else 0.0
+
+
+def _build_motor_spec(
+    designation: str,
+    manufacturer: str,
+    diameter: float,
+    length: float,
+    total_mass: float,
+    propellant_mass: float,
+    delay_time: float,
+    thrust_curve: List[Tuple[float, float]],
+    impulse_class: str = "",
+) -> MotorSpecification:
+    clean_curve = sorted(
+        {
+            round(float(time_point), 5): max(0.0, float(thrust_value))
+            for time_point, thrust_value in thrust_curve
+            if time_point is not None and thrust_value is not None and float(time_point) >= 0
+        }.items()
+    )
+    if len(clean_curve) < 2:
+        raise ValueError("Motor file must include at least two thrust curve points.")
+    total_impulse = _integrate_motor_curve(clean_curve)
+    if total_impulse <= 0:
+        raise ValueError("Motor thrust curve impulse must be positive.")
+    burn_time = clean_curve[-1][0]
+    if burn_time <= 0:
+        raise ValueError("Motor burn time must be positive.")
+    max_thrust = max(thrust for _, thrust in clean_curve)
+    average_thrust = total_impulse / burn_time
+    return MotorSpecification(
+        designation=str(designation or "Imported Motor").strip(),
+        manufacturer=str(manufacturer or "Imported").strip(),
+        diameter=round(float(diameter or 0), 4),
+        length=round(float(length or 0), 4),
+        total_mass=round(float(total_mass or 0), 4),
+        propellant_mass=round(float(propellant_mass or 0), 4),
+        average_thrust=round(average_thrust, 4),
+        max_thrust=round(max_thrust, 4),
+        total_impulse=round(total_impulse, 4),
+        burn_time=round(burn_time, 4),
+        impulse_class=impulse_class or _impulse_class(total_impulse),
+        delay_time=round(float(delay_time or 0), 4),
+        thrust_curve=[(round(time_point, 5), round(thrust, 5)) for time_point, thrust in clean_curve],
+        approved_for_tarc=False,
+    )
+
+
+def parse_motor_file(payload: bytes, filename: str) -> MotorSpecification:
+    lower_name = (filename or "").lower()
+    if lower_name.endswith(".eng"):
+        return _parse_rasp_motor(payload)
+    if lower_name.endswith((".rse", ".xml")):
+        return _parse_rocksim_motor(payload)
+    raise ValueError("Only RASP .eng and RockSim .rse motor files are supported.")
+
+
+def _parse_rasp_motor(payload: bytes) -> MotorSpecification:
+    lines = payload.decode("utf-8", errors="replace").splitlines()
+    header = None
+    points: List[Tuple[float, float]] = []
+    for raw_line in lines:
+        line = raw_line.strip()
+        if not line or line.startswith(";"):
+            continue
+        parts = line.split()
+        if header is None:
+            header = parts
+            continue
+        if len(parts) >= 2:
+            time_point = _parse_float(parts[0])
+            thrust_value = _parse_float(parts[1])
+            if time_point is not None and thrust_value is not None:
+                points.append((time_point, thrust_value))
+    if not header or len(header) < 6:
+        raise ValueError("RASP .eng file is missing a valid motor header.")
+    designation = header[0]
+    diameter = _distance_to_mm(_parse_float(header[1], 0.0))
+    length = _distance_to_mm(_parse_float(header[2], 0.0))
+    delay_time = _delay_from_text(header[3] if len(header) > 3 else "")
+    propellant_mass = _mass_to_grams(_parse_float(header[4], 0.0))
+    total_mass = _mass_to_grams(_parse_float(header[5], 0.0))
+    manufacturer = " ".join(header[6:]).strip() if len(header) > 6 else "Imported"
+    return _build_motor_spec(
+        designation=designation,
+        manufacturer=manufacturer or "Imported",
+        diameter=diameter,
+        length=length,
+        total_mass=total_mass,
+        propellant_mass=propellant_mass,
+        delay_time=delay_time,
+        thrust_curve=points,
+    )
+
+
+def _parse_rocksim_motor(payload: bytes) -> MotorSpecification:
+    root = ET.fromstring(payload)
+    engine = next((element for element in root.iter() if element.tag.rsplit("}", 1)[-1].lower() == "engine"), None)
+    if engine is None:
+        raise ValueError("RockSim .rse file does not contain an engine entry.")
+
+    def attr(*names, default=None):
+        for name in names:
+            for key, value in engine.attrib.items():
+                if key.lower().replace("-", "").replace("_", "") == name.lower().replace("-", "").replace("_", ""):
+                    return value
+        return default
+
+    points = []
+    for child in engine.iter():
+        tag = child.tag.rsplit("}", 1)[-1].lower()
+        if tag not in {"eng-data", "engdata"}:
+            continue
+        time_point = _parse_float(child.attrib.get("t"))
+        thrust_value = _parse_float(child.attrib.get("f"))
+        if time_point is not None and thrust_value is not None:
+            points.append((time_point, thrust_value))
+
+    designation = attr("code", "designation", "name", default="Imported Motor")
+    manufacturer = attr("mfg", "manufacturer", default="Imported")
+    total_impulse = _parse_float(attr("itot", "totalimpulse"), 0.0) or 0.0
+    return _build_motor_spec(
+        designation=designation,
+        manufacturer=manufacturer,
+        diameter=_distance_to_mm(_parse_float(attr("dia", "diameter"), 0.0)),
+        length=_distance_to_mm(_parse_float(attr("len", "length"), 0.0)),
+        total_mass=_mass_to_grams(_parse_float(attr("initwt", "totalmass", "mass"), 0.0)),
+        propellant_mass=_mass_to_grams(_parse_float(attr("propwt", "propellantmass"), 0.0)),
+        delay_time=_delay_from_text(attr("delays", "delay", default="")),
+        thrust_curve=points,
+        impulse_class=attr("class", "impulseclass", default="") or (_impulse_class(total_impulse) if total_impulse > 0 else ""),
+    )
 
 # --- EnvironmentManager ---
 
@@ -1889,6 +2083,29 @@ def get_all_motors_route():
         "count": len(motors),
         "filters": motor_db.get_filter_options(tarc_only=tarc_only),
     })
+
+@app.route("/api/environment/motors/import", methods=["POST"])
+def import_motor_route():
+    uploaded = request.files.get("file")
+    if uploaded is None:
+        return jsonify({"success": False, "message": "Upload a RASP .eng or RockSim .rse motor file."}), 400
+
+    filename = uploaded.filename or "motor.eng"
+    if not filename.lower().endswith((".eng", ".rse", ".xml")):
+        return jsonify({"success": False, "message": "Only RASP .eng and RockSim .rse motor files are supported."}), 400
+
+    try:
+        motor = parse_motor_file(uploaded.read(), filename)
+        if not motor_db.add_motor(motor):
+            raise ValueError("Motor database rejected the imported motor.")
+        return jsonify({
+            "success": True,
+            "motor": asdict(motor),
+            "filters": motor_db.get_filter_options(),
+            "message": f"{motor.manufacturer} {motor.designation} imported.",
+        })
+    except Exception as exc:
+        return jsonify({"success": False, "message": f"Motor import failed: {exc}"}), 400
 
 @app.route("/api/environment/launch-sites", methods=["GET"])
 def get_launch_sites_route():

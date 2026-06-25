@@ -18,6 +18,7 @@
 - Provide a built-in active demo rocket and accept full scenario JSON files with both `rocketData` and `simulationConfig`.
 - Let users import OpenRocket `.ork` designs from the builder view and continue editing/simulating the imported components.
 - Search and add motors from the local backend motor database, including designation-only search, impulse/manufacturer/diameter/TARC filters, and thrust-curve metadata used by the simulator.
+- Import RASP `.eng` and RockSim `.rse` motor files from the Motors tab, add them to the local catalog, and immediately use their thrust curves in the rocket.
 - Show selected motor thrust curves with impulse, burn-time, peak-thrust, and editable sampled points.
 - Surface warnings next to the inputs that caused them.
 - Show trajectory, force, pressure, drag, and active-system plots backed by the local simulation histories.
