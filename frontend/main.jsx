@@ -867,9 +867,43 @@ function App() {
     }
   };
 
-  const importSTL = (event) => {
+  const importDesign = async (event) => {
     const file = event.target.files[0];
-    if (file && file.name.toLowerCase().endsWith('.stl')) {
+    if (!file) {
+      return;
+    }
+
+    const lowerName = file.name.toLowerCase();
+    if (lowerName.endsWith('.ork') || lowerName.endsWith('.xml')) {
+      try {
+        const formData = new FormData();
+        formData.append('file', file);
+        const response = await fetch(`${SIMULATION_API_URL}/api/openrocket/import`, {
+          method: 'POST',
+          body: formData
+        });
+        const result = await response.json();
+        if (!response.ok || !result.success) {
+          throw new Error(result.message || 'OpenRocket import failed.');
+        }
+        const rocketData = result.rocketData || {};
+        setRocketComponents(rocketData.components || []);
+        setRocketWeight(Number(rocketData.weight) || 0);
+        setRocketCG(Number(rocketData.cg) || 0);
+        setSelectedComponent(null);
+        setSimulationResults(null);
+        setCurrentSimulationId(null);
+        setSimulationStatus(null);
+        const warnings = result.warnings?.length ? ` Warnings: ${result.warnings.join(' ')}` : '';
+        showNotification(`OpenRocket design imported: ${result.design_name}.${warnings}`, result.warnings?.length ? 'warning' : 'success');
+      } catch (error) {
+        showNotification(`OpenRocket import failed: ${error.message}`, 'error');
+      }
+      event.target.value = '';
+      return;
+    }
+
+    if (lowerName.endsWith('.stl')) {
       console.log('📁 STL Import:', file.name, `(${(file.size/1024).toFixed(1)}KB)`);
       
       const reader = new FileReader();
@@ -943,7 +977,7 @@ function App() {
       };
       reader.readAsText(file);
     } else {
-      showNotification('Please select a valid STL file', 'warning');
+      showNotification('Please select a valid STL, ORK, or XML design file', 'warning');
     }
     
     // Reset the file input
@@ -4211,13 +4245,13 @@ function App() {
                       <div className="component-grid full-width">
                         <button className="component-btn stl-import-btn full-width-btn" onClick={() => fileInputRef.current.click()}>
                           <div className="component-icon stl-icon"></div>
-                          Import STL
+                          Import Design
                         </button>
                         <input
                           ref={fileInputRef}
                           type="file"
-                          accept=".stl"
-                          onChange={importSTL}
+                          accept=".stl,.ork,.xml"
+                          onChange={importDesign}
                           style={{ display: 'none' }}
                         />
                       </div>

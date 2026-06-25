@@ -28,6 +28,7 @@ The active scenario matrix uses importable files in `examples/scenarios/`:
   - `/api/health`
   - `/api/environment/motors`
   - `/api/environment/launch-sites`
+  - `/api/openrocket/import`
   - `/api/control-code/compile`
   - `/api/control-code/compile` rejection of forbidden controller code
   - `/api/simulation/start`

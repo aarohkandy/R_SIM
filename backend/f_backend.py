@@ -19,6 +19,7 @@ from flask import Flask, request, jsonify, Blueprint
 from flask_cors import CORS
 
 from active_simulation import ActiveSimulationManager
+from openrocket_import import parse_openrocket_design
 
 # Load OpenFOAM environment
 try:
@@ -1763,6 +1764,70 @@ def get_all_motors_route():
 @app.route("/api/environment/launch-sites", methods=["GET"])
 def get_launch_sites_route():
     return jsonify(env_manager.get_launch_sites())
+
+def _enrich_imported_motors_from_database(rocket_data: Dict) -> Dict:
+    for component in rocket_data.get("components", []):
+        if component.get("type") != "Motor":
+            continue
+        candidates = [
+            component.get("motorModel"),
+            component.get("name"),
+            " ".join(part for part in [component.get("motorType"), component.get("motorModel")] if part),
+        ]
+        motor = None
+        for candidate in candidates:
+            if not candidate:
+                continue
+            motor = motor_db.get_motor(candidate)
+            if motor:
+                break
+        if not motor:
+            continue
+        component.update({
+            "name": f"{motor.manufacturer} {motor.designation}",
+            "length": motor.length,
+            "diameter": motor.diameter,
+            "topDiameter": motor.diameter,
+            "bottomDiameter": motor.diameter,
+            "lengthInput": str(motor.length),
+            "diameterInput": str(motor.diameter),
+            "topDiameterInput": str(motor.diameter),
+            "bottomDiameterInput": str(motor.diameter),
+            "weight": motor.total_mass,
+            "motorType": motor.manufacturer,
+            "motorModel": motor.designation,
+            "motorImpulse": motor.impulse_class,
+            "motorThrust": motor.average_thrust,
+            "motorBurnTime": motor.burn_time,
+            "motorTotalImpulse": motor.total_impulse,
+            "motorDelay": motor.delay_time,
+            "motorWeight": motor.total_mass,
+            "thrustCurve": [{"time": time_point, "thrust": thrust_value} for time_point, thrust_value in motor.thrust_curve],
+        })
+    return rocket_data
+
+@app.route("/api/openrocket/import", methods=["POST"])
+def import_openrocket_route():
+    uploaded = request.files.get("file")
+    if uploaded is None:
+        return jsonify({"success": False, "message": "Upload an OpenRocket .ork or XML file."}), 400
+
+    filename = uploaded.filename or "design.ork"
+    if not filename.lower().endswith((".ork", ".xml")):
+        return jsonify({"success": False, "message": "Only .ork or .xml OpenRocket design files are supported."}), 400
+
+    try:
+        imported = parse_openrocket_design(uploaded.read(), filename)
+        rocket_data = _enrich_imported_motors_from_database(imported.rocket_data)
+        return jsonify({
+            "success": True,
+            "design_name": imported.design_name,
+            "rocketData": rocket_data,
+            "warnings": imported.warnings,
+            "source": "openrocket_import",
+        })
+    except Exception as exc:
+        return jsonify({"success": False, "message": f"OpenRocket import failed: {exc}"}), 400
 
 @app.route("/api/control-code/compile", methods=["POST"])
 def compile_control_code():

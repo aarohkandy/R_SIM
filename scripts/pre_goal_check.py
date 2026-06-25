@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import json
+import io
 import os
 import sys
 import time
@@ -41,6 +42,34 @@ def main() -> int:
 
     sites = json_body(client.get("/api/environment/launch-sites"))
     require(len(sites.get("launch_sites", {})) >= 1, "Launch-site endpoint returned no sites.")
+
+    sample_openrocket = b"""<?xml version="1.0" encoding="UTF-8"?>
+<openrocket>
+  <rocket>
+    <name>Pre Goal Imported Rocket</name>
+    <subcomponents><stage><subcomponents>
+      <nosecone><name>Nose</name><length>0.120</length><aftRadius>0.020</aftRadius><mass>0.035</mass></nosecone>
+      <bodytube><name>Body</name><length>0.560</length><outerRadius>0.020</outerRadius><mass>0.135</mass>
+        <subcomponents>
+          <trapezoidfinset><name>Fins</name><finCount>3</finCount><rootChord>0.090</rootChord><height>0.055</height><mass>0.045</mass></trapezoidfinset>
+          <motor><manufacturer>Estes</manufacturer><designation>Estes C6-5</designation><diameter>0.018</diameter><length>0.070</length><burnTime>1.600</burnTime><totalImpulse>10.000</totalImpulse><averageThrust>6.000</averageThrust><mass>0.017</mass></motor>
+        </subcomponents>
+      </bodytube>
+    </subcomponents></stage></subcomponents>
+  </rocket>
+</openrocket>
+"""
+    imported = json_body(client.post(
+        "/api/openrocket/import",
+        data={"file": (io.BytesIO(sample_openrocket), "pre-goal.ork")},
+        content_type="multipart/form-data",
+    ))
+    require(imported.get("success") is True, f"OpenRocket import failed: {imported}")
+    imported_rocket = imported.get("rocketData") or {}
+    imported_components = imported_rocket.get("components") or []
+    require(len(imported_components) >= 4, f"OpenRocket import returned too few components: {imported}")
+    imported_motor = next((component for component in imported_components if component.get("type") == "Motor"), {})
+    require(len(imported_motor.get("thrustCurve", [])) > 5, f"Imported motor was not enriched with thrust curve: {imported_motor}")
 
     controller_code = r"""
 ControlOutput control_function(SensorData sensor_data) {
@@ -186,6 +215,7 @@ ControlOutput control_function(SensorData sensor_data) {
         "health": "ok",
         "motors": len(motors.get("motors", [])),
         "launch_sites": len(sites.get("launch_sites", {})),
+        "openrocket_import": len(imported_components),
         "controller_compile": "ok",
         "controller_safety": "ok",
         "simulation_id": simulation_id,

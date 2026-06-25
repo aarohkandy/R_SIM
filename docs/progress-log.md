@@ -35,3 +35,7 @@
 - Hardened the C++ controller path: preprocessor directives, filesystem/process/console I/O, dynamic allocation, thread creation, and unbounded-loop patterns are rejected before compile; runtime timeouts return clear errors; output is clamped to controller/hardware limits.
 - Added controller safety tests for safe compile/run, forbidden operations, comment/string false positives, runtime timeout, and output clamping.
 - Ran `bash scripts/run_pre_goal_checks.sh`: passed with 15 unit tests, 6 scenario fixtures, backend API smoke including `controller_safety: ok`, frontend production build, and frontend lint.
+- Added OpenRocket `.ork`/XML import support for common nose cone, body tube, fin set, motor, mass, and CG fields, including zipped `.ork` archives and local motor-database thrust-curve enrichment.
+- Wired the builder import button to accept `.ork`, `.xml`, and `.stl` files; OpenRocket imports replace the current component list and preserve imported weight/CG.
+- Ran `bash scripts/run_pre_goal_checks.sh`: passed with 19 unit tests, 6 scenario fixtures, backend API smoke including `openrocket_import: 4`, frontend production build, and frontend lint.
+- Browser-checked local app at `http://127.0.0.1:5001/`: Import Design is visible, accepts `.ork`, `.xml`, and `.stl`, and produced no fresh browser console errors.
