@@ -66,6 +66,10 @@ def main() -> int:
     require("fieldChecks" in frontend_source, "Frontend design checks are not wired to inputs.")
     require("field-message" in frontend_source, "Frontend fields do not render design-check messages.")
     require("field-message" in frontend_style, "Frontend fields do not style design-check messages.")
+    require("SimulationSetupPanel" in frontend_source, "Frontend is missing the named simulation setup manager.")
+    require("simulationSetups" in frontend_source, "Frontend does not persist named simulation setups.")
+    require("runSetup" in frontend_source, "Frontend cannot run a selected simulation setup.")
+    require("setup-row" in frontend_style, "Frontend simulation setup manager is missing list styling.")
     database_motor = next(
         (motor for motor in motors.get("motors", []) if motor.get("designation") == "Estes C6-5"),
         motors["motors"][0],

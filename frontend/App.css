@@ -1215,6 +1215,69 @@ button:focus-visible {
   grid-template-columns: 1fr;
 }
 
+.setup-actions,
+.setup-detail-actions {
+  display: grid;
+  gap: 8px;
+}
+
+.setup-actions {
+  grid-template-columns: 1fr 1fr;
+  margin-bottom: 10px;
+}
+
+.setup-list {
+  display: grid;
+  gap: 7px;
+}
+
+.setup-row {
+  display: grid;
+  gap: 4px;
+  min-height: 64px;
+  padding: 9px;
+  text-align: left;
+  border-color: var(--line);
+  background: #fff;
+}
+
+.setup-row.active {
+  border-color: rgba(217, 81, 78, 0.45);
+  background: rgba(217, 81, 78, 0.07);
+}
+
+.setup-row strong {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 13px;
+}
+
+.setup-row span,
+.setup-row em {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--muted);
+  font-size: 11px;
+  font-style: normal;
+}
+
+.setup-name-field {
+  padding: 9px;
+}
+
+.setup-detail-actions {
+  grid-template-columns: 1fr 1fr;
+  padding: 0 9px 9px;
+}
+
+.setup-detail-actions button:last-child {
+  color: var(--bad);
+}
+
 .sequence-list {
   display: grid;
   gap: 7px;

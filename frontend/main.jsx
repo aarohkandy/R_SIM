@@ -995,6 +995,64 @@ const normalizeRocketOverrides = (rocketData = {}, data = {}) => {
   };
 };
 
+const clonePlain = (value, fallback = {}) => {
+  try {
+    return JSON.parse(JSON.stringify(value ?? fallback));
+  } catch {
+    return fallback;
+  }
+};
+
+const createSimulationSetup = (label, config, rocketOverrides = {}) => ({
+  id: makeId('setup'),
+  label,
+  createdAt: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+  updatedAt: new Date().toISOString(),
+  config: mergeConfig(defaultConfig, clonePlain(config, defaultConfig)),
+  rocketOverrides: clonePlain(rocketOverrides, {})
+});
+
+const createInitialSimulationSetups = (baseConfig = defaultConfig, rocketOverrides = {}) => {
+  const passiveConfig = mergeConfig(baseConfig, {
+    activePneumaticEnabled: false,
+    activeSystem: { enabled: false },
+    controller: { mode: 'disabled' }
+  });
+  const descentConfig = mergeConfig(baseConfig, {
+    controller: {
+      mode: 'descent_brake',
+      targetApogee: 300,
+      descentDeployAltitude: 70
+    },
+    landingSystem: {
+      type: 'drogue_main',
+      drogueDeployEvent: 'apogee',
+      mainDeployEvent: 'altitude'
+    }
+  });
+
+  return [
+    createSimulationSetup('Active target apogee', baseConfig, rocketOverrides),
+    createSimulationSetup('Passive baseline', passiveConfig, rocketOverrides),
+    createSimulationSetup('Descent brake and landing', descentConfig, rocketOverrides)
+  ];
+};
+
+const normalizeSimulationSetups = (rawSetups, fallbackConfig, fallbackOverrides = {}) => {
+  if (!Array.isArray(rawSetups) || rawSetups.length === 0) {
+    return createInitialSimulationSetups(fallbackConfig, fallbackOverrides);
+  }
+
+  return rawSetups.map((setup, index) => ({
+    id: String(setup.id || makeId('setup')),
+    label: setup.label || setup.name || `Simulation setup ${index + 1}`,
+    createdAt: setup.createdAt || 'Imported',
+    updatedAt: setup.updatedAt || new Date().toISOString(),
+    config: mergeConfig(defaultConfig, setup.config || setup.simulationConfig || fallbackConfig),
+    rocketOverrides: clonePlain(setup.rocketOverrides || fallbackOverrides, {})
+  }));
+};
+
 const normalizeImportedComponents = (rawComponents) => rawComponents.map((component) => ({
   ...component,
   id: String(component.id || makeId(component.type || 'component'))
@@ -1008,12 +1066,15 @@ const normalizeImportedDesign = (data) => {
   }
 
   const incomingConfig = data.config || data.simulationConfig || {};
+  const config = mergeConfig(defaultConfig, incomingConfig);
+  const rocketOverrides = data.rocketOverrides || normalizeRocketOverrides(rocketData, data);
   return {
     id: data.id || data.name || 'imported-design',
     description: data.description || '',
     components: normalizeImportedComponents(rawComponents),
-    config: mergeConfig(defaultConfig, incomingConfig),
-    rocketOverrides: data.rocketOverrides || normalizeRocketOverrides(rocketData, data)
+    config,
+    rocketOverrides,
+    simulationSetups: normalizeSimulationSetups(data.simulationSetups || data.simulations, config, rocketOverrides)
   };
 };
 
@@ -1981,6 +2042,93 @@ function LandingSetup({ config, setConfig, syncLanding, metrics, fieldChecks = {
   );
 }
 
+function SimulationSetupPanel({
+  simulationSetups,
+  selectedSetupId,
+  setSelectedSetupId,
+  runState,
+  onCreateSetup,
+  onUpdateSetup,
+  onDuplicateSetup,
+  onDeleteSetup,
+  onRestoreSetup,
+  onRunSetup,
+  onCompareSetup,
+  onRenameSetup
+}) {
+  const selectedSetup = simulationSetups.find((setup) => setup.id === selectedSetupId);
+  const describeSetup = (setup) => {
+    const activeEnabled = setup.config.activeSystem?.enabled;
+    const controllerMode = setup.config.controller?.mode || 'target_apogee';
+    const target = numberValue(setup.config.controller?.targetApogee, 0);
+    const landing = setup.config.landingSystem || {};
+    return {
+      active: activeEnabled ? 'Active' : 'Passive',
+      controller: controllerMode.replace(/_/g, ' '),
+      target: target > 0 ? `${formatNumber(target, 0)} m` : '--',
+      recovery: landing.enabled ? recoveryEventDetail(landing.mainDeployEvent || landing.deployEvent || 'altitude', landing.deployAltitude) : 'Recovery off'
+    };
+  };
+
+  return (
+    <div className="inspector-scroll">
+      <div className="panel-copy">
+        <h2>Simulation setups</h2>
+        <p>Save named flight configurations and run them against the current rocket.</p>
+      </div>
+      <div className="setup-actions">
+        <button type="button" onClick={onCreateSetup}>Save current setup</button>
+        <button type="button" onClick={onUpdateSetup} disabled={!selectedSetup}>Update selected</button>
+      </div>
+      <div className="setup-list">
+        {simulationSetups.map((setup) => {
+          const summary = describeSetup(setup);
+          return (
+            <button
+              type="button"
+              className={`setup-row ${setup.id === selectedSetupId ? 'active' : ''}`}
+              key={setup.id}
+              onClick={() => setSelectedSetupId(setup.id)}
+            >
+              <strong>{setup.label}</strong>
+              <span>{summary.active} / {summary.controller}</span>
+              <em>Target {summary.target}; {summary.recovery}</em>
+            </button>
+          );
+        })}
+      </div>
+      {selectedSetup && (
+        <div className="sizing-card setup-detail">
+          <div className="comparison-title">Selected setup</div>
+          <div className="field-grid single setup-name-field">
+            <Field
+              label="Setup name"
+              type="text"
+              value={selectedSetup.label}
+              onChange={(value) => onRenameSetup(selectedSetup.id, value)}
+            />
+          </div>
+          <div className="sizing-grid">
+            {Object.entries(describeSetup(selectedSetup)).map(([label, value]) => (
+              <div key={label}>
+                <span>{label}</span>
+                <strong>{value}</strong>
+              </div>
+            ))}
+          </div>
+          <div className="setup-detail-actions">
+            <button type="button" onClick={() => onRunSetup(selectedSetup)} disabled={runState === 'running'}>Run setup</button>
+            <button type="button" onClick={() => onCompareSetup(selectedSetup)} disabled={runState === 'running'}>Compare</button>
+            <button type="button" onClick={() => onRestoreSetup(selectedSetup)}>Restore</button>
+            <button type="button" onClick={() => onDuplicateSetup(selectedSetup)}>Duplicate</button>
+            <button type="button" onClick={() => onDeleteSetup(selectedSetup.id)} disabled={simulationSetups.length <= 1}>Delete</button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function ResultsPanel({
   result,
   comparisonResult,
@@ -2260,6 +2408,8 @@ function App() {
   const [comparisonResult, setComparisonResult] = useState(null);
   const [simulationCases, setSimulationCases] = useState([]);
   const [selectedCaseId, setSelectedCaseId] = useState(null);
+  const [simulationSetups, setSimulationSetups] = useState(() => createInitialSimulationSetups(defaultConfig, {}));
+  const [selectedSetupId, setSelectedSetupId] = useState(null);
   const [rocketOverrides, setRocketOverrides] = useState({});
   const [controllerCompileState, setControllerCompileState] = useState({ status: 'idle', message: '' });
   const fileInputRef = useRef(null);
@@ -2279,6 +2429,7 @@ function App() {
   }), [components, metrics, config, landingSizing, activeEnvelope, guideAnalysis]);
   const fieldChecks = useMemo(() => getFieldCheckMap(designChecks), [designChecks]);
   const selectedComponent = components.find((component) => component.id === selectedId);
+  const selectedSimulationSetup = simulationSetups.find((setup) => setup.id === selectedSetupId);
 
   const staleResults = () => {
     setResult(null);
@@ -2337,6 +2488,16 @@ function App() {
       cancelled = true;
     };
   }, []);
+
+  useEffect(() => {
+    if (!simulationSetups.length) {
+      if (selectedSetupId !== null) setSelectedSetupId(null);
+      return;
+    }
+    if (!simulationSetups.some((setup) => setup.id === selectedSetupId)) {
+      setSelectedSetupId(simulationSetups[0].id);
+    }
+  }, [simulationSetups, selectedSetupId]);
 
   useEffect(() => {
     const airbrake = components.find((component) => component.type === 'Active Airbrake');
@@ -2483,29 +2644,15 @@ function App() {
     staleResults();
   };
 
-  const buildSimulationPayload = (overrides = {}) => {
-    const nextConfig = {
-      ...config,
-      ...overrides,
-      activeSystem: {
-        ...config.activeSystem,
-        ...(overrides.activeSystem || {})
-      },
-      controller: {
-        ...config.controller,
-        ...(overrides.controller || {})
-      },
-      landingSystem: {
-        ...config.landingSystem,
-        ...(overrides.landingSystem || {})
-      }
-    };
+  const buildSimulationPayload = (overrides = {}, sourceConfig = config, sourceOverrides = rocketOverrides) => {
+    const nextConfig = mergeConfig(sourceConfig, overrides);
+    const runMetrics = applyRocketOverrides(componentMetrics, sourceOverrides);
 
     return {
       rocketComponents: components,
-      rocketWeight: metrics.mass,
-      rocketCG: metrics.cg,
-      totalHeight: metrics.totalLength,
+      rocketWeight: runMetrics.mass,
+      rocketCG: runMetrics.cg,
+      totalHeight: runMetrics.totalLength,
       simulationConfig: {
         ...nextConfig,
         activePneumaticEnabled: nextConfig.activeSystem.enabled,
@@ -2533,9 +2680,9 @@ function App() {
     }
     return {
       ...body,
-      rocket_weight: metrics.mass,
-      rocket_cg: metrics.cg,
-      totalHeight: metrics.totalLength
+      rocket_weight: payload.rocketWeight,
+      rocket_cg: payload.rocketCG,
+      totalHeight: payload.totalHeight
     };
   };
 
@@ -2590,6 +2737,90 @@ function App() {
     }
   };
 
+  const runSetup = async (setup, compare = false) => {
+    if (!API_URL) {
+      setMessage('No local API URL is configured.');
+      return;
+    }
+    if (!setup) {
+      setMessage('Select a simulation setup first.');
+      return;
+    }
+    setRunState('running');
+    setMessage(compare ? `Comparing ${setup.label}...` : `Running ${setup.label}...`);
+    try {
+      const active = await submitSimulation(buildSimulationPayload({}, setup.config, setup.rocketOverrides));
+      const passive = compare
+        ? await submitSimulation(buildSimulationPayload({
+          activePneumaticEnabled: false,
+          activeSystem: { enabled: false },
+          controller: { mode: 'disabled' }
+        }, setup.config, setup.rocketOverrides))
+        : null;
+      const runCase = summarizeRun({ label: compare ? `${setup.label} comparison` : setup.label, active, passive });
+      setResult(active);
+      setComparisonResult(passive);
+      setSelectedCaseId(runCase.id);
+      setSimulationCases((current) => [runCase, ...current].slice(0, 12));
+      setInspectorTab('results');
+      setRunState('complete');
+      setMessage(compare ? `${setup.label} comparison complete.` : `${setup.label} complete.`);
+    } catch (error) {
+      setRunState('error');
+      setMessage(error.message);
+    }
+  };
+
+  const createSetupFromCurrent = () => {
+    const setup = createSimulationSetup(`Setup ${simulationSetups.length + 1}`, config, rocketOverrides);
+    setSimulationSetups((current) => [setup, ...current]);
+    setSelectedSetupId(setup.id);
+    setInspectorTab('simulations');
+    setMessage(`${setup.label} saved.`);
+  };
+
+  const updateSelectedSetupFromCurrent = () => {
+    if (!selectedSimulationSetup) return;
+    const updatedAt = new Date().toISOString();
+    setSimulationSetups((current) => current.map((setup) => (
+      setup.id === selectedSimulationSetup.id
+        ? {
+          ...setup,
+          updatedAt,
+          config: mergeConfig(defaultConfig, config),
+          rocketOverrides: clonePlain(rocketOverrides, {})
+        }
+        : setup
+    )));
+    setMessage(`${selectedSimulationSetup.label} updated from current settings.`);
+  };
+
+  const renameSimulationSetup = (id, label) => {
+    setSimulationSetups((current) => current.map((setup) => (
+      setup.id === id ? { ...setup, label, updatedAt: new Date().toISOString() } : setup
+    )));
+  };
+
+  const duplicateSimulationSetup = (setup) => {
+    const copy = createSimulationSetup(`${setup.label} copy`, setup.config, setup.rocketOverrides);
+    setSimulationSetups((current) => [copy, ...current]);
+    setSelectedSetupId(copy.id);
+    setMessage(`${copy.label} created.`);
+  };
+
+  const deleteSimulationSetup = (id) => {
+    setSimulationSetups((current) => current.filter((setup) => setup.id !== id));
+    setMessage('Simulation setup deleted.');
+  };
+
+  const restoreSimulationSetup = (setup) => {
+    setConfig(mergeConfig(defaultConfig, setup.config));
+    setRocketOverrides(clonePlain(setup.rocketOverrides, {}));
+    setControllerCompileState({ status: 'idle', message: '' });
+    staleResults();
+    setMessage(`${setup.label} restored to the workbench.`);
+  };
+
   const compileController = async () => {
     if (!API_URL) {
       setControllerCompileState({ status: 'error', message: 'No local API URL is configured.' });
@@ -2618,6 +2849,7 @@ function App() {
       components,
       config,
       rocketOverrides,
+      simulationSetups,
       rocketData: {
         weight: metrics.mass,
         cg: metrics.cg,
@@ -2643,6 +2875,8 @@ function App() {
       setComponents(imported.components);
       setConfig(imported.config);
       setRocketOverrides(imported.rocketOverrides);
+      setSimulationSetups(imported.simulationSetups);
+      setSelectedSetupId(imported.simulationSetups[0]?.id || null);
       setControllerCompileState({ status: 'idle', message: '' });
       setSelectedId(imported.components[0]?.id || null);
       staleResults();
@@ -2667,6 +2901,7 @@ function App() {
       components,
       config,
       rocketOverrides,
+      simulationSetups,
       exportedAt: new Date().toISOString()
     };
     const blob = new Blob([JSON.stringify(scenario, null, 2)], { type: 'application/json' });
@@ -2782,6 +3017,8 @@ function App() {
         setComponents(imported.components);
         setConfig(imported.config);
         setRocketOverrides(imported.rocketOverrides);
+        setSimulationSetups(imported.simulationSetups);
+        setSelectedSetupId(imported.simulationSetups[0]?.id || null);
         setControllerCompileState({ status: 'idle', message: '' });
         setSelectedId(imported.components[0]?.id || null);
         staleResults();
@@ -2799,6 +3036,9 @@ function App() {
         }));
         setComponents(imported.length ? imported : defaultComponents);
         setRocketOverrides({});
+        const nextSetups = createInitialSimulationSetups(defaultConfig, {});
+        setSimulationSetups(nextSetups);
+        setSelectedSetupId(nextSetups[0]?.id || null);
         setControllerCompileState({ status: 'idle', message: '' });
         setSelectedId(imported[0]?.id || null);
         staleResults();
@@ -2815,9 +3055,12 @@ function App() {
   };
 
   const newDesign = () => {
+    const nextSetups = createInitialSimulationSetups(defaultConfig, {});
     setComponents(defaultComponents.map((component) => ({ ...component, id: makeId(component.type.toLowerCase().replace(/[^a-z0-9]+/g, '-')) })));
     setConfig(defaultConfig);
     setRocketOverrides({});
+    setSimulationSetups(nextSetups);
+    setSelectedSetupId(nextSetups[0]?.id || null);
     setControllerCompileState({ status: 'idle', message: '' });
     staleResults();
     setSimulationCases([]);
@@ -2880,6 +3123,22 @@ function App() {
       />
     ),
     landing: <LandingSetup config={config} setConfig={setConfigAndInvalidate} syncLanding={syncLanding} metrics={metrics} fieldChecks={fieldChecks} />,
+    simulations: (
+      <SimulationSetupPanel
+        simulationSetups={simulationSetups}
+        selectedSetupId={selectedSetupId}
+        setSelectedSetupId={setSelectedSetupId}
+        runState={runState}
+        onCreateSetup={createSetupFromCurrent}
+        onUpdateSetup={updateSelectedSetupFromCurrent}
+        onDuplicateSetup={duplicateSimulationSetup}
+        onDeleteSetup={deleteSimulationSetup}
+        onRestoreSetup={restoreSimulationSetup}
+        onRunSetup={(setup) => runSetup(setup, false)}
+        onCompareSetup={(setup) => runSetup(setup, true)}
+        onRenameSetup={renameSimulationSetup}
+      />
+    ),
     results: (
       <ResultsPanel
         result={result}
@@ -2989,6 +3248,7 @@ function App() {
               ['flight', 'Flight'],
               ['active', 'Active'],
               ['landing', 'Landing'],
+              ['simulations', 'Sims'],
               ['results', 'Results']
             ].map(([id, label]) => (
               <button
@@ -3015,5 +3275,6 @@ function App() {
 }
 
 const rootElement = document.getElementById('root');
-const root = ReactDOM.createRoot(rootElement);
+const root = rootElement._activeRocketRoot || ReactDOM.createRoot(rootElement);
+rootElement._activeRocketRoot = root;
 root.render(<App />);
