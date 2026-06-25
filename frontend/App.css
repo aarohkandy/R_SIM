@@ -1158,9 +1158,42 @@ button:focus-visible {
   gap: 7px;
 }
 
+.motor-browser-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 0 2px 8px;
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.motor-browser-head strong {
+  color: var(--ink);
+  font-size: 13px;
+}
+
+.motor-filter-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.motor-filter-actions {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.motor-filter-actions .switch {
+  min-height: 34px;
+}
+
 .motor-row {
   display: grid;
-  grid-template-columns: minmax(0, 1.4fr) 64px 78px 78px 98px;
+  grid-template-columns: minmax(0, 1.5fr) 72px 64px 78px 78px 98px;
   gap: 6px;
   align-items: center;
   text-align: left;
@@ -1916,6 +1949,11 @@ button:focus-visible {
 
   .palette-grid,
   .metric-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .motor-filter-grid,
+  .motor-filter-actions {
     grid-template-columns: 1fr;
   }
 

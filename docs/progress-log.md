@@ -74,3 +74,7 @@
 - Added recovery safety/load outputs and UI for terminal velocity, required area, area margin, opening loads, configurable max opening load, and overall recovery status.
 - Ran `bash scripts/run_pre_goal_checks.sh`: passed with 45 unit tests, recovery safety smoke gates, frontend production build, and frontend lint.
 - Browser-checked local app at `http://localhost:5001/`: ran a simulation, rendered the Recovery safety panel with terminal speed, required area, area margin, opening load, and opening limit, showed the opening-load tuning note, and produced no browser warnings/errors.
+- Expanded the local motor catalog to 20 seeded motors across Estes, Quest, AeroTech, and Cesaroni, with backend filters for designation, manufacturer, impulse class, diameter, and TARC approval.
+- Added OpenRocket-style motor browser filters to the frontend so designation search no longer doubles as manufacturer/class search.
+- Ran `bash scripts/run_pre_goal_checks.sh`: passed with 49 unit tests, motor catalog/filter smoke gates, frontend production build, and frontend lint.
+- Browser-checked local app at `http://localhost:5001/`: the Motors tab loaded 20 catalog motors, designation search rejected manufacturer-only text, G40/AeroTech/G/29 mm filters narrowed to AeroTech G40-7W, and no browser warnings/errors were produced.

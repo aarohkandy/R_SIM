@@ -8,6 +8,7 @@ This local model is not CFD and is not flight certification. Its output is marke
 
 ## Current Fidelity Hooks
 
+- The local motor catalog is exposed through `/api/environment/motors` with designation search plus manufacturer, impulse-class, diameter, and TARC filters; returned motors include thrust curves used by simulation and UI inspection.
 - Motor components may provide `thrustCurve` points as `{time, thrust}` records or `[time, thrust]` pairs. The local model linearly interpolates thrust, uses the integrated curve area as total impulse, and reports `thrust_profile.source: curve`.
 - Simulation config may provide `aerodynamics.baseDragCoefficient` and `aerodynamics.activeDragCoefficientTable` points with deployment-to-`cdIncrement` calibration. Without a table, the model falls back to surface-area drag coupling.
 - Output includes `trajectory`, `force_history`, and `moment_history` samples so the UI/export path can inspect net forces, thrust, drag, angular rates, and pitch/yaw/roll moments.

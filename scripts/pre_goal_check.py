@@ -40,7 +40,20 @@ def main() -> int:
     require(root_health.get("status") == "healthy", "Root health endpoint is not healthy.")
 
     motors = json_body(client.get("/api/environment/motors"))
-    require(len(motors.get("motors", [])) >= 1, "Motor database returned no motors.")
+    require(len(motors.get("motors", [])) >= 18, "Motor database returned too few motors for a useful local catalog.")
+    motor_filters = motors.get("filters") or {}
+    require("AeroTech" in motor_filters.get("manufacturers", []), "Motor filters are missing AeroTech manufacturer metadata.")
+    require("G" in motor_filters.get("impulse_classes", []), "Motor filters are missing G impulse-class metadata.")
+    filtered_motors = json_body(client.get("/api/environment/motors?manufacturer=AeroTech&impulse_class=G&query=G40"))
+    require(filtered_motors.get("count", 0) >= 1, f"Filtered motor search returned no matches: {filtered_motors}")
+    require(
+        all(motor.get("manufacturer") == "AeroTech" for motor in filtered_motors.get("motors", [])),
+        f"Filtered motor search returned the wrong manufacturer: {filtered_motors}",
+    )
+    require(
+        all(motor.get("impulse_class") == "G" for motor in filtered_motors.get("motors", [])),
+        f"Filtered motor search returned the wrong impulse class: {filtered_motors}",
+    )
     frontend_source = (ROOT / "frontend" / "main.jsx").read_text(encoding="utf-8")
     frontend_style = (ROOT / "frontend" / "App.css").read_text(encoding="utf-8")
     backend_source = (ROOT / "backend" / "f_backend.py").read_text(encoding="utf-8")
@@ -56,6 +69,8 @@ def main() -> int:
     require("Simulation submitted (simulation mode)" not in gcp_client_source, "GCP CFD client still reports unavailable cloud work as submitted.")
     require("falling back to simulation mode" not in heavy_cfd_source, "Heavy CFD still describes missing OpenFOAM as a simulation fallback.")
     require("/api/environment/motors" in frontend_source, "Frontend motor picker is not wired to the backend motor database.")
+    require("motorFilters" in frontend_source, "Frontend motor picker is missing catalog filters.")
+    require("Impulse" in frontend_source and "Manufacturer" in frontend_source and "TARC approved" in frontend_source, "Frontend motor picker is missing expected filter controls.")
     require("/api/environment/launch-sites" in frontend_source, "Frontend launch-site picker is not wired to the backend launch-site database.")
     require("mockMotors" not in frontend_source, "Frontend motor picker still contains a mock motor list.")
     require("pneumaticPressureStd" in frontend_source, "Frontend setup is missing explicit pneumatic pressure noise controls.")
@@ -303,6 +318,7 @@ ControlOutput control_function(SensorData sensor_data) {
         "health": "ok",
         "motors": len(motors.get("motors", [])),
         "motor_curve_points": len(database_thrust_curve),
+        "motor_catalog": len(motors.get("motors", [])),
         "launch_sites": len(sites.get("launch_sites", {})),
         "openrocket_import": len(imported_components),
         "controller_compile": "ok",

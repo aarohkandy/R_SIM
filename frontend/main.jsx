@@ -2188,38 +2188,121 @@ function ComponentInspector({ component, updateComponent, metrics, fieldChecks =
   );
 }
 
-function MotorBrowser({ motors, loading, error, query, setQuery, addMotor }) {
+function MotorBrowser({
+  motors,
+  loading,
+  error,
+  query,
+  setQuery,
+  filters,
+  setFilters,
+  metadata,
+  addMotor
+}) {
+  const manufacturerOptions = metadata?.manufacturers?.length
+    ? metadata.manufacturers
+    : Array.from(new Set(motors.map((motor) => motor.manufacturer))).sort();
+  const impulseOptions = metadata?.impulse_classes?.length
+    ? metadata.impulse_classes
+    : Array.from(new Set(motors.map((motor) => motor.impulse).filter(Boolean))).sort();
+  const diameterOptions = metadata?.diameters_mm?.length
+    ? metadata.diameters_mm
+    : Array.from(new Set(motors.map((motor) => motor.diameter).filter(Boolean))).sort((a, b) => a - b);
+  const setFilter = (key, value) => setFilters((current) => ({ ...current, [key]: value }));
   const filtered = useMemo(() => {
     const text = query.trim().toLowerCase();
-    const base = text
-      ? motors.filter((motor) => (
-        motor.displayName.toLowerCase().includes(text) ||
-        motor.impulse.toLowerCase().includes(text) ||
-        motor.manufacturer.toLowerCase().includes(text)
-      ))
-      : motors;
-    return base.slice(0, 36);
-  }, [motors, query]);
+    const diameter = numberValue(filters.diameter, 0);
+    return motors.filter((motor) => {
+      if (text && !motor.model.toLowerCase().includes(text)) return false;
+      if (filters.manufacturer && motor.manufacturer !== filters.manufacturer) return false;
+      if (filters.impulseClass && motor.impulse !== filters.impulseClass) return false;
+      if (filters.diameter && Math.abs(motor.diameter - diameter) > 0.05) return false;
+      if (filters.tarcOnly && !motor.approvedForTarc) return false;
+      return true;
+    }).slice(0, 48);
+  }, [motors, query, filters]);
+  const activeFilterCount = [
+    query.trim(),
+    filters.manufacturer,
+    filters.impulseClass,
+    filters.diameter,
+    filters.tarcOnly ? 'tarc' : ''
+  ].filter(Boolean).length;
 
   return (
     <div className="inspector-scroll">
       <div className="panel-copy">
         <h2>Motor database</h2>
-        <p>Search installed motor curves and add one to the aft mount.</p>
+        <p>Installed motor curves for the current rocket.</p>
       </div>
-      <Field label="Search" type="text" value={query} onChange={setQuery} />
+      <div className="motor-browser-head">
+        <strong>{filtered.length} matches</strong>
+        <span>{motors.length} catalog motors</span>
+      </div>
+      <div className="motor-filter-grid">
+        <Field label="Designation" type="text" value={query} onChange={setQuery} />
+        <Field
+          label="Impulse"
+          value={filters.impulseClass}
+          onChange={(value) => setFilter('impulseClass', value)}
+          options={[
+            { value: '', label: 'All classes' },
+            ...impulseOptions.map((item) => ({ value: item, label: item }))
+          ]}
+        />
+        <Field
+          label="Manufacturer"
+          value={filters.manufacturer}
+          onChange={(value) => setFilter('manufacturer', value)}
+          options={[
+            { value: '', label: 'All makers' },
+            ...manufacturerOptions.map((item) => ({ value: item, label: item }))
+          ]}
+        />
+        <Field
+          label="Diameter"
+          value={filters.diameter}
+          unit="mm"
+          onChange={(value) => setFilter('diameter', value)}
+          options={[
+            { value: '', label: 'All' },
+            ...diameterOptions.map((item) => ({ value: String(item), label: formatNumber(item, 0) }))
+          ]}
+        />
+      </div>
+      <div className="motor-filter-actions">
+        <Toggle
+          checked={filters.tarcOnly}
+          onChange={(value) => setFilter('tarcOnly', value)}
+          label="TARC approved"
+        />
+        <button
+          type="button"
+          onClick={() => {
+            setQuery('');
+            setFilters({ manufacturer: '', impulseClass: '', diameter: '', tarcOnly: false });
+          }}
+          disabled={!activeFilterCount}
+        >
+          Clear filters
+        </button>
+      </div>
       {loading && <div className="inline-status">Loading motors...</div>}
       {error && <div className="inline-status error">{error}</div>}
       <div className="motor-list">
         {filtered.map((motor) => (
           <button key={motor.id} type="button" className="motor-row" onClick={() => addMotor(motor)}>
             <strong>{motor.displayName}</strong>
+            <span>{motor.manufacturer}</span>
             <span>{motor.impulse} class</span>
             <span>{formatNumber(motor.totalImpulse, 1)} Ns</span>
             <span>{formatNumber(motor.thrust, 1)} N avg</span>
             <span>{formatNumber(motor.length, 0)} x {formatNumber(motor.diameter, 0)} mm</span>
           </button>
         ))}
+        {!loading && !filtered.length && (
+          <div className="inline-status">No motors match those filters.</div>
+        )}
       </div>
     </div>
   );
@@ -2968,6 +3051,8 @@ function App() {
   const [inspectorTab, setInspectorTab] = useState('component');
   const [motors, setMotors] = useState([]);
   const [motorQuery, setMotorQuery] = useState('');
+  const [motorFilters, setMotorFilters] = useState({ manufacturer: '', impulseClass: '', diameter: '', tarcOnly: false });
+  const [motorMetadata, setMotorMetadata] = useState({ manufacturers: [], impulse_classes: [], diameters_mm: [] });
   const [motorsLoading, setMotorsLoading] = useState(false);
   const [motorError, setMotorError] = useState('');
   const [launchSites, setLaunchSites] = useState([]);
@@ -3044,6 +3129,7 @@ function App() {
         if (motorsResponse.ok) {
           const motorsData = await motorsResponse.json();
           setMotors((motorsData.motors || []).map(normalizeMotor));
+          setMotorMetadata(motorsData.filters || { manufacturers: [], impulse_classes: [], diameters_mm: [] });
         }
         if (sitesResponse.ok) {
           const siteData = await sitesResponse.json();
@@ -3751,6 +3837,9 @@ function App() {
         error={motorError}
         query={motorQuery}
         setQuery={setMotorQuery}
+        filters={motorFilters}
+        setFilters={setMotorFilters}
+        metadata={motorMetadata}
         addMotor={addMotor}
       />
     ),

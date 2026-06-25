@@ -22,7 +22,7 @@
 - Motor thrust curves and optional aerodynamic coefficient tables must affect local simulation output when supplied.
 - Supplied motor thrust curves must be inspectable/editable in the UI and must own simulated impulse when valid.
 - OpenRocket `.ork` import must return simulation-ready rocket components and warn when motor/mass/CG data must be inferred.
-- Frontend motor search must use the local backend motor database, not hardcoded placeholder motor data.
+- Frontend motor search must use the local backend motor database, not hardcoded placeholder motor data, and support designation, impulse class, manufacturer, diameter, and TARC filters.
 - C++ controller code must compile before it is used by an active simulation.
 - Pneumatic outputs must show pressure use, actuator movement, and surface deployment when active control commands it.
 - Active airbrake location must be editable, validated against rocket length, and reflected in moment outputs.

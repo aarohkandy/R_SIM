@@ -538,6 +538,37 @@ int main(int argc, char** argv) {{
 # --- MotorDatabase ---
 
 class MotorDatabase:
+    IMPULSE_ORDER = {
+        "1/4A": 0,
+        "1/2A": 1,
+        "A": 2,
+        "B": 3,
+        "C": 4,
+        "D": 5,
+        "E": 6,
+        "F": 7,
+        "G": 8,
+        "H": 9,
+        "I": 10,
+        "J": 11,
+        "K": 12,
+        "L": 13,
+        "M": 14,
+        "N": 15,
+        "O": 16,
+        "P": 17,
+        "Q": 18,
+        "R": 19,
+        "S": 20,
+        "T": 21,
+        "U": 22,
+        "V": 23,
+        "W": 24,
+        "X": 25,
+        "Y": 26,
+        "Z": 27,
+    }
+
     def __init__(self, db_path: str = None):
         if db_path is None:
             db_path = os.path.join(os.path.dirname(__file__), 'database', 'motors.db')
@@ -569,19 +600,29 @@ class MotorDatabase:
             conn.commit()
     
     def _populate_tarc_motors(self):
-        with sqlite3.connect(self.db_path) as conn:
-            cursor = conn.cursor()
-            cursor.execute('SELECT COUNT(*) FROM motors')
-            if cursor.fetchone()[0] > 0:
-                return
-        
-        tarc_motors = [
+        seed_motors = [
             {'designation': 'Estes A8-3', 'manufacturer': 'Estes', 'diameter': 18.0, 'length': 70.0, 'total_mass': 8.5, 'propellant_mass': 1.9, 'average_thrust': 2.5, 'max_thrust': 9.5, 'total_impulse': 2.5, 'burn_time': 1.0, 'impulse_class': 'A', 'delay_time': 3.0, 'approved_for_tarc': True, 'thrust_curve': self._generate_thrust_curve('A8', 1.0, 2.5, 9.5)},
             {'designation': 'Estes B6-4', 'manufacturer': 'Estes', 'diameter': 18.0, 'length': 70.0, 'total_mass': 11.5, 'propellant_mass': 4.6, 'average_thrust': 4.3, 'max_thrust': 12.8, 'total_impulse': 5.0, 'burn_time': 1.6, 'impulse_class': 'B', 'delay_time': 4.0, 'approved_for_tarc': True, 'thrust_curve': self._generate_thrust_curve('B6', 1.6, 4.3, 12.8)},
             {'designation': 'Estes C6-5', 'manufacturer': 'Estes', 'diameter': 18.0, 'length': 70.0, 'total_mass': 17.5, 'propellant_mass': 8.8, 'average_thrust': 5.0, 'max_thrust': 14.1, 'total_impulse': 10.0, 'burn_time': 2.0, 'impulse_class': 'C', 'delay_time': 5.0, 'approved_for_tarc': True, 'thrust_curve': self._generate_thrust_curve('C6', 2.0, 5.0, 14.1)},
             {'designation': 'Estes D12-5', 'manufacturer': 'Estes', 'diameter': 24.0, 'length': 70.0, 'total_mass': 37.7, 'propellant_mass': 17.6, 'average_thrust': 8.8, 'max_thrust': 25.0, 'total_impulse': 20.0, 'burn_time': 2.3, 'impulse_class': 'D', 'delay_time': 5.0, 'approved_for_tarc': True, 'thrust_curve': self._generate_thrust_curve('D12', 2.3, 8.8, 25.0)},
+            {'designation': 'Estes E12-6', 'manufacturer': 'Estes', 'diameter': 24.0, 'length': 95.0, 'total_mass': 61.0, 'propellant_mass': 35.8, 'average_thrust': 12.2, 'max_thrust': 30.0, 'total_impulse': 30.0, 'burn_time': 2.5, 'impulse_class': 'E', 'delay_time': 6.0, 'approved_for_tarc': True, 'thrust_curve': self._generate_thrust_curve('E12', 2.5, 12.2, 30.0)},
+            {'designation': 'Quest A6-4', 'manufacturer': 'Quest', 'diameter': 18.0, 'length': 70.0, 'total_mass': 9.0, 'propellant_mass': 2.5, 'average_thrust': 4.5, 'max_thrust': 10.0, 'total_impulse': 2.5, 'burn_time': 0.7, 'impulse_class': 'A', 'delay_time': 4.0, 'approved_for_tarc': True, 'thrust_curve': self._generate_thrust_curve('A6', 0.7, 4.5, 10.0)},
+            {'designation': 'Quest B6-4', 'manufacturer': 'Quest', 'diameter': 18.0, 'length': 70.0, 'total_mass': 12.2, 'propellant_mass': 5.0, 'average_thrust': 4.8, 'max_thrust': 13.5, 'total_impulse': 5.0, 'burn_time': 1.2, 'impulse_class': 'B', 'delay_time': 4.0, 'approved_for_tarc': True, 'thrust_curve': self._generate_thrust_curve('B6', 1.2, 4.8, 13.5)},
+            {'designation': 'Quest C12-6', 'manufacturer': 'Quest', 'diameter': 18.0, 'length': 70.0, 'total_mass': 18.0, 'propellant_mass': 9.0, 'average_thrust': 9.0, 'max_thrust': 22.0, 'total_impulse': 10.0, 'burn_time': 1.1, 'impulse_class': 'C', 'delay_time': 6.0, 'approved_for_tarc': True, 'thrust_curve': self._generate_thrust_curve('C12', 1.1, 9.0, 22.0)},
+            {'designation': 'Quest D16-6', 'manufacturer': 'Quest', 'diameter': 18.0, 'length': 70.0, 'total_mass': 23.0, 'propellant_mass': 14.0, 'average_thrust': 14.0, 'max_thrust': 35.0, 'total_impulse': 20.0, 'burn_time': 1.4, 'impulse_class': 'D', 'delay_time': 6.0, 'approved_for_tarc': True, 'thrust_curve': self._generate_thrust_curve('D16', 1.4, 14.0, 35.0)},
+            {'designation': 'AeroTech D10-5W', 'manufacturer': 'AeroTech', 'diameter': 18.0, 'length': 70.0, 'total_mass': 21.0, 'propellant_mass': 11.0, 'average_thrust': 10.0, 'max_thrust': 24.0, 'total_impulse': 20.0, 'burn_time': 2.0, 'impulse_class': 'D', 'delay_time': 5.0, 'approved_for_tarc': True, 'thrust_curve': self._generate_thrust_curve('D10', 2.0, 10.0, 24.0)},
+            {'designation': 'AeroTech E20-7W', 'manufacturer': 'AeroTech', 'diameter': 24.0, 'length': 95.0, 'total_mass': 62.0, 'propellant_mass': 32.0, 'average_thrust': 20.0, 'max_thrust': 50.0, 'total_impulse': 40.0, 'burn_time': 2.0, 'impulse_class': 'E', 'delay_time': 7.0, 'approved_for_tarc': True, 'thrust_curve': self._generate_thrust_curve('E20', 2.0, 20.0, 50.0)},
+            {'designation': 'AeroTech F24-7W', 'manufacturer': 'AeroTech', 'diameter': 24.0, 'length': 95.0, 'total_mass': 83.0, 'propellant_mass': 40.0, 'average_thrust': 24.0, 'max_thrust': 65.0, 'total_impulse': 50.0, 'burn_time': 2.1, 'impulse_class': 'F', 'delay_time': 7.0, 'approved_for_tarc': True, 'thrust_curve': self._generate_thrust_curve('F24', 2.1, 24.0, 65.0)},
+            {'designation': 'AeroTech F42-8T', 'manufacturer': 'AeroTech', 'diameter': 24.0, 'length': 95.0, 'total_mass': 86.0, 'propellant_mass': 43.0, 'average_thrust': 42.0, 'max_thrust': 90.0, 'total_impulse': 60.0, 'burn_time': 1.4, 'impulse_class': 'F', 'delay_time': 8.0, 'approved_for_tarc': True, 'thrust_curve': self._generate_thrust_curve('F42', 1.4, 42.0, 90.0)},
+            {'designation': 'AeroTech G40-7W', 'manufacturer': 'AeroTech', 'diameter': 29.0, 'length': 124.0, 'total_mass': 145.0, 'propellant_mass': 62.0, 'average_thrust': 40.0, 'max_thrust': 92.0, 'total_impulse': 90.0, 'burn_time': 2.2, 'impulse_class': 'G', 'delay_time': 7.0, 'approved_for_tarc': True, 'thrust_curve': self._generate_thrust_curve('G40', 2.2, 40.0, 92.0)},
+            {'designation': 'AeroTech G80-10T', 'manufacturer': 'AeroTech', 'diameter': 29.0, 'length': 124.0, 'total_mass': 150.0, 'propellant_mass': 66.0, 'average_thrust': 80.0, 'max_thrust': 140.0, 'total_impulse': 120.0, 'burn_time': 1.5, 'impulse_class': 'G', 'delay_time': 10.0, 'approved_for_tarc': False, 'thrust_curve': self._generate_thrust_curve('G80', 1.5, 80.0, 140.0)},
+            {'designation': 'AeroTech H128W-10', 'manufacturer': 'AeroTech', 'diameter': 29.0, 'length': 180.0, 'total_mass': 235.0, 'propellant_mass': 120.0, 'average_thrust': 128.0, 'max_thrust': 245.0, 'total_impulse': 220.0, 'burn_time': 1.7, 'impulse_class': 'H', 'delay_time': 10.0, 'approved_for_tarc': False, 'thrust_curve': self._generate_thrust_curve('H128', 1.7, 128.0, 245.0)},
+            {'designation': 'Cesaroni F30-6A', 'manufacturer': 'Cesaroni', 'diameter': 24.0, 'length': 95.0, 'total_mass': 86.0, 'propellant_mass': 42.0, 'average_thrust': 30.0, 'max_thrust': 70.0, 'total_impulse': 55.0, 'burn_time': 1.8, 'impulse_class': 'F', 'delay_time': 6.0, 'approved_for_tarc': True, 'thrust_curve': self._generate_thrust_curve('F30', 1.8, 30.0, 70.0)},
+            {'designation': 'Cesaroni G57-8A', 'manufacturer': 'Cesaroni', 'diameter': 29.0, 'length': 124.0, 'total_mass': 145.0, 'propellant_mass': 70.0, 'average_thrust': 57.0, 'max_thrust': 125.0, 'total_impulse': 110.0, 'burn_time': 1.9, 'impulse_class': 'G', 'delay_time': 8.0, 'approved_for_tarc': False, 'thrust_curve': self._generate_thrust_curve('G57', 1.9, 57.0, 125.0)},
+            {'designation': 'Cesaroni H133-10A', 'manufacturer': 'Cesaroni', 'diameter': 29.0, 'length': 180.0, 'total_mass': 250.0, 'propellant_mass': 130.0, 'average_thrust': 133.0, 'max_thrust': 250.0, 'total_impulse': 240.0, 'burn_time': 1.8, 'impulse_class': 'H', 'delay_time': 10.0, 'approved_for_tarc': False, 'thrust_curve': self._generate_thrust_curve('H133', 1.8, 133.0, 250.0)},
+            {'designation': 'Cesaroni I204-14A', 'manufacturer': 'Cesaroni', 'diameter': 38.0, 'length': 240.0, 'total_mass': 420.0, 'propellant_mass': 230.0, 'average_thrust': 204.0, 'max_thrust': 390.0, 'total_impulse': 430.0, 'burn_time': 2.1, 'impulse_class': 'I', 'delay_time': 14.0, 'approved_for_tarc': False, 'thrust_curve': self._generate_thrust_curve('I204', 2.1, 204.0, 390.0)},
         ]
-        for motor_data in tarc_motors:
+        for motor_data in seed_motors:
             self.add_motor(MotorSpecification(**motor_data))
     
     def _generate_thrust_curve(self, motor_type: str, burn_time: float, avg_thrust: float, max_thrust: float) -> List[Tuple[float, float]]:
@@ -604,8 +645,34 @@ class MotorDatabase:
         try:
             with sqlite3.connect(self.db_path) as conn:
                 cursor = conn.cursor()
-                cursor.execute('INSERT OR REPLACE INTO motors (designation, manufacturer, diameter, length, total_mass, propellant_mass, average_thrust, max_thrust, total_impulse, burn_time, impulse_class, delay_time, approved_for_tarc) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)', (motor.designation, motor.manufacturer, motor.diameter, motor.length, motor.total_mass, motor.propellant_mass, motor.average_thrust, motor.max_thrust, motor.total_impulse, motor.burn_time, motor.impulse_class, motor.delay_time, motor.approved_for_tarc))
-                motor_id = cursor.lastrowid
+                cursor.execute('SELECT id FROM motors WHERE designation = ?', (motor.designation,))
+                existing = cursor.fetchone()
+                values = (
+                    motor.manufacturer, motor.diameter, motor.length, motor.total_mass,
+                    motor.propellant_mass, motor.average_thrust, motor.max_thrust,
+                    motor.total_impulse, motor.burn_time, motor.impulse_class,
+                    motor.delay_time, motor.approved_for_tarc,
+                )
+                if existing:
+                    motor_id = existing[0]
+                    cursor.execute('''
+                        UPDATE motors
+                        SET manufacturer = ?, diameter = ?, length = ?, total_mass = ?,
+                            propellant_mass = ?, average_thrust = ?, max_thrust = ?,
+                            total_impulse = ?, burn_time = ?, impulse_class = ?,
+                            delay_time = ?, approved_for_tarc = ?
+                        WHERE id = ?
+                    ''', (*values, motor_id))
+                else:
+                    cursor.execute('''
+                        INSERT INTO motors (
+                            designation, manufacturer, diameter, length, total_mass,
+                            propellant_mass, average_thrust, max_thrust, total_impulse,
+                            burn_time, impulse_class, delay_time, approved_for_tarc
+                        )
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    ''', (motor.designation, *values))
+                    motor_id = cursor.lastrowid
                 cursor.execute('DELETE FROM thrust_curves WHERE motor_id = ?', (motor_id,))
                 for time_point, thrust_value in motor.thrust_curve:
                     cursor.execute('INSERT INTO thrust_curves (motor_id, time_point, thrust_value) VALUES (?, ?, ?)', (motor_id, time_point, thrust_value))
@@ -619,37 +686,128 @@ class MotorDatabase:
         try:
             with sqlite3.connect(self.db_path) as conn:
                 cursor = conn.cursor()
-                cursor.execute('SELECT * FROM motors WHERE designation = ?', (designation,))
-                motor_row = cursor.fetchone()
+                candidate = str(designation or "").strip().lower()
+                cursor.execute('SELECT * FROM motors')
+                motor_row = next(
+                    (
+                        row for row in cursor.fetchall()
+                        if candidate in {
+                            str(row[1]).strip().lower(),
+                            f"{row[2]} {row[1]}".strip().lower(),
+                            self._motor_model_name(row[1], row[2]).strip().lower(),
+                        }
+                    ),
+                    None,
+                )
                 if not motor_row: return None
                 cursor.execute('SELECT time_point, thrust_value FROM thrust_curves WHERE motor_id = ? ORDER BY time_point', (motor_row[0],))
                 thrust_curve = cursor.fetchall()
-                return MotorSpecification(designation=motor_row[1], manufacturer=motor_row[2], diameter=motor_row[3], length=motor_row[4], total_mass=motor_row[5], propellant_mass=motor_row[6], average_thrust=motor_row[7], max_thrust=motor_row[8], total_impulse=motor_row[9], burn_time=motor_row[10], impulse_class=motor_row[11], delay_time=motor_row[12], thrust_curve=thrust_curve, approved_for_tarc=bool(motor_row[13]))
+                return self._row_to_motor(motor_row, thrust_curve)
         except Exception as e:
             print(f"Error getting motor: {e}")
             return None
 
-    def get_all_motors(self, tarc_only: bool = False) -> List[MotorSpecification]:
+    def get_all_motors(
+        self,
+        tarc_only: bool = False,
+        query: str = "",
+        manufacturer: str = "",
+        impulse_class: str = "",
+        diameter_mm: Optional[float] = None,
+    ) -> List[MotorSpecification]:
         try:
             with sqlite3.connect(self.db_path) as conn:
                 cursor = conn.cursor()
-                query = 'SELECT * FROM motors'
+                search_text = query
+                sql = 'SELECT * FROM motors'
                 params = ()
                 if tarc_only:
-                    query += ' WHERE approved_for_tarc = ?'
+                    sql += ' WHERE approved_for_tarc = ?'
                     params = (True,)
-                cursor.execute(query, params)
+                cursor.execute(sql, params)
                 motor_rows = cursor.fetchall()
                 
                 motors = []
                 for motor_row in motor_rows:
                     cursor.execute('SELECT time_point, thrust_value FROM thrust_curves WHERE motor_id = ? ORDER BY time_point', (motor_row[0],))
                     thrust_curve = cursor.fetchall()
-                    motors.append(MotorSpecification(designation=motor_row[1], manufacturer=motor_row[2], diameter=motor_row[3], length=motor_row[4], total_mass=motor_row[5], propellant_mass=motor_row[6], average_thrust=motor_row[7], max_thrust=motor_row[8], total_impulse=motor_row[9], burn_time=motor_row[10], impulse_class=motor_row[11], delay_time=motor_row[12], thrust_curve=thrust_curve, approved_for_tarc=bool(motor_row[13])))
-                return motors
+                    motors.append(self._row_to_motor(motor_row, thrust_curve))
+                return self._filter_motors(motors, search_text, manufacturer, impulse_class, diameter_mm)
         except Exception as e:
             print(f"Error getting all motors: {e}")
             return []
+
+    def get_filter_options(self, tarc_only: bool = False) -> Dict:
+        motors = self.get_all_motors(tarc_only=tarc_only)
+        return {
+            "manufacturers": sorted({motor.manufacturer for motor in motors if motor.manufacturer}),
+            "impulse_classes": sorted(
+                {motor.impulse_class for motor in motors if motor.impulse_class},
+                key=lambda item: self.IMPULSE_ORDER.get(item, 999),
+            ),
+            "diameters_mm": sorted({motor.diameter for motor in motors if motor.diameter}),
+        }
+
+    def _filter_motors(
+        self,
+        motors: List[MotorSpecification],
+        search_text: str = "",
+        manufacturer: str = "",
+        impulse_class: str = "",
+        diameter_mm: Optional[float] = None,
+    ) -> List[MotorSpecification]:
+        search = str(search_text or "").strip().lower()
+        maker = str(manufacturer or "").strip().lower()
+        impulse = str(impulse_class or "").strip().upper()
+
+        filtered = []
+        for motor in motors:
+            model_name = self._motor_model_name(motor.designation, motor.manufacturer).lower()
+            if search and search not in model_name:
+                continue
+            if maker and maker != motor.manufacturer.lower():
+                continue
+            if impulse and impulse != motor.impulse_class.upper():
+                continue
+            if diameter_mm is not None and abs(float(diameter_mm) - float(motor.diameter)) > 0.05:
+                continue
+            filtered.append(motor)
+
+        return sorted(
+            filtered,
+            key=lambda motor: (
+                self.IMPULSE_ORDER.get(motor.impulse_class, 999),
+                motor.manufacturer,
+                self._motor_model_name(motor.designation, motor.manufacturer),
+            ),
+        )
+
+    def _row_to_motor(self, motor_row, thrust_curve) -> MotorSpecification:
+        return MotorSpecification(
+            designation=motor_row[1],
+            manufacturer=motor_row[2],
+            diameter=motor_row[3],
+            length=motor_row[4],
+            total_mass=motor_row[5],
+            propellant_mass=motor_row[6],
+            average_thrust=motor_row[7],
+            max_thrust=motor_row[8],
+            total_impulse=motor_row[9],
+            burn_time=motor_row[10],
+            impulse_class=motor_row[11],
+            delay_time=motor_row[12],
+            thrust_curve=thrust_curve,
+            approved_for_tarc=bool(motor_row[13]),
+        )
+
+    @staticmethod
+    def _motor_model_name(designation: str, manufacturer: str) -> str:
+        designation = str(designation or "").strip()
+        manufacturer = str(manufacturer or "").strip()
+        prefix = f"{manufacturer} "
+        if manufacturer and designation.lower().startswith(prefix.lower()):
+            return designation[len(prefix):].strip()
+        return designation
 
 # --- EnvironmentManager ---
 
@@ -1711,8 +1869,26 @@ cpp_control_system = CPPControlSystem(hardware_limits)
 @app.route("/api/environment/motors", methods=["GET"])
 def get_all_motors_route():
     tarc_only = request.args.get("tarc_only", "false").lower() == "true"
-    motors = motor_db.get_all_motors(tarc_only=tarc_only)
-    return jsonify({"motors": [asdict(m) for m in motors]})
+    query = request.args.get("query", "")
+    manufacturer = request.args.get("manufacturer", "")
+    impulse_class = request.args.get("impulse_class", "")
+    diameter_value = request.args.get("diameter", "")
+    try:
+        diameter_mm = float(diameter_value) if diameter_value else None
+    except ValueError:
+        diameter_mm = None
+    motors = motor_db.get_all_motors(
+        tarc_only=tarc_only,
+        query=query,
+        manufacturer=manufacturer,
+        impulse_class=impulse_class,
+        diameter_mm=diameter_mm,
+    )
+    return jsonify({
+        "motors": [asdict(m) for m in motors],
+        "count": len(motors),
+        "filters": motor_db.get_filter_options(tarc_only=tarc_only),
+    })
 
 @app.route("/api/environment/launch-sites", methods=["GET"])
 def get_launch_sites_route():
