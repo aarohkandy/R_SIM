@@ -44,6 +44,7 @@ The active scenario matrix uses importable files in `examples/scenarios/`:
 - Frontend motor search is wired to `/api/environment/motors` and must not contain a mock motor list.
 - Frontend design tree and rocket side-view drawing expose structural split markers.
 - Frontend inspector/table expose subpart attachment hosts for fins, motors, and rail buttons.
+- Frontend design tree nests attached subparts beneath their host airframe part and separates unattached subparts.
 - Frontend palette, inspector, table, mass breakdown, and side-view drawing expose internal mass components.
 - Frontend palette, inspector, table, side-view drawing, OpenRocket import, and backend simulation config expose parachute recovery components.
 - Frontend results view renders live charts from trajectory, force, pressure, and active-system histories.

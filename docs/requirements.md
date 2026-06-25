@@ -5,6 +5,7 @@
 - Define a rocket with structural parts, fins, motor data, mass, CG, and launch conditions.
 - Mark structural split/stage boundaries between rocket parts while keeping fins, motors, and rail buttons as non-splittable subparts.
 - Attach fins, motors, and rail buttons to valid airframe hosts so subparts behave like an OpenRocket-style component hierarchy.
+- Inspect attached subparts nested beneath their host airframe parts in the design tree.
 - Place internal payload, avionics, battery, and ballast mass components along the rocket so CG and stability can be tuned without changing exterior geometry.
 - Place main and drogue parachute components in the rocket tree so recovery area, Cd, deployment event, altitude, and opening-load limits can be edited as parts.
 - Import an existing OpenRocket `.ork` design when available, preserving common body, nose, fin, motor, mass, and CG data.
@@ -28,6 +29,7 @@
 - OpenRocket `.ork` import must return simulation-ready rocket components and warn when motor/mass/CG data must be inferred.
 - Builder split markers must appear in the design tree and side-view drawing, persist through save/export/import, and be reported in simulation output.
 - Builder subparts must expose their airframe attachment host in the inspector/table, auto-attach to a valid aft host when added, and reject invalid subpart-to-subpart references during simulation validation.
+- Builder design tree must nest attached subparts below their host airframe components and flag unattached subparts separately.
 - Internal mass components must expose station, host, role, and mass controls; affect component mass/CG calculations; render in the side view; and remain excluded from external length, diameter, and aerodynamic geometry.
 - Parachute components must expose main/drogue role, host, station, deploy event, deploy altitude, drag area, Cd, and opening-load controls; render in the side view; import from OpenRocket files; and drive the landing/recovery simulation config.
 - Frontend motor search must use the local backend motor database, not hardcoded placeholder motor data, and support designation, impulse class, manufacturer, diameter, and TARC filters.

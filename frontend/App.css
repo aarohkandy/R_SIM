@@ -291,11 +291,27 @@ button:focus-visible {
   background: rgba(217, 81, 78, 0.08);
 }
 
+.tree-item.child {
+  background: #fafbfc;
+  grid-template-columns: 12px minmax(0, 1fr) auto auto auto auto;
+}
+
+.tree-item.orphan {
+  border-color: rgba(194, 123, 31, 0.3);
+  background: rgba(194, 123, 31, 0.08);
+}
+
 .tree-item button {
   min-height: 24px;
   padding: 2px 5px;
   font-size: 10px;
   color: var(--muted);
+}
+
+.tree-children {
+  margin: 1px 0 5px 19px;
+  padding-left: 9px;
+  border-left: 1px solid var(--line);
 }
 
 .tree-add-split,
@@ -351,10 +367,27 @@ button:focus-visible {
 }
 
 .tree-name {
+  display: grid;
+  gap: 1px;
+  min-width: 0;
+}
+
+.tree-name strong,
+.tree-name em {
   overflow: hidden;
   white-space: nowrap;
   text-overflow: ellipsis;
+}
+
+.tree-name strong {
   font-size: 12px;
+  font-weight: 750;
+}
+
+.tree-name em {
+  color: var(--muted);
+  font-size: 10px;
+  font-style: normal;
 }
 
 .part-swatch {

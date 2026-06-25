@@ -93,6 +93,7 @@ def main() -> int:
     require("attachmentHostTypes" in frontend_source, "Frontend is missing valid subpart attachment hosts.")
     require("Attached to" in frontend_source, "Component inspector is missing subpart attachment editing.")
     require("getAttachmentHost(component, components)" in frontend_source, "Component table is missing subpart attachment visibility.")
+    require("getTreeAttachmentGroups" in frontend_source and "tree-children" in frontend_style, "Frontend design tree does not nest attached subparts under their host.")
     require("Mass Component" in frontend_source, "Frontend is missing internal payload/ballast mass components.")
     require("mass-marker" in frontend_source and "mass-marker" in frontend_style, "Rocket drawing is missing internal mass markers.")
     require("Parachute" in frontend_source, "Frontend is missing explicit recovery parachute components.")

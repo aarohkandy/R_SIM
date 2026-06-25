@@ -1994,6 +1994,27 @@ function RocketDrawing({ components, splitPoints, selectedId, setSelectedId, met
   );
 }
 
+const isTreeAirframeComponent = (component) => (
+  structuralTypes.has(component.type) && !['Landing System', 'Rail Button'].includes(component.type)
+);
+
+const getTreeAttachmentGroups = (components) => {
+  const childrenByHost = new Map();
+  const unattached = [];
+  components.forEach((component) => {
+    if (!attachmentChildTypes.has(component.type)) return;
+    const host = getAttachmentHost(component, components);
+    if (!host) {
+      unattached.push(component);
+      return;
+    }
+    const key = String(host.id);
+    if (!childrenByHost.has(key)) childrenByHost.set(key, []);
+    childrenByHost.get(key).push(component);
+  });
+  return { childrenByHost, unattached };
+};
+
 function DesignTree({
   components,
   splitPoints,
@@ -2005,37 +2026,48 @@ function DesignTree({
   addSplitPoint,
   removeSplitPoint
 }) {
-  const groups = [
-    ['Airframe', components.filter((component) => structuralTypes.has(component.type) && !['Landing System', 'Rail Button'].includes(component.type))],
-    ['Attached subparts', components.filter((component) => attachmentChildTypes.has(component.type))],
-    ['Recovery and landing', components.filter((component) => component.type === 'Landing System')]
-  ];
+  const airframeComponents = components.filter(isTreeAirframeComponent);
+  const landingComponents = components.filter((component) => component.type === 'Landing System');
+  const { childrenByHost, unattached } = getTreeAttachmentGroups(components);
   const splitViews = getSplitPointViews(splitPoints, components);
   const boundaries = getSplitBoundaries(components);
   const splitByAfter = new Map(splitViews.map((point) => [point.afterComponentId, point]));
   const boundaryByAfter = new Map(boundaries.map((boundary) => [boundary.afterComponentId, boundary]));
+  const renderTreeItem = (component, { child = false, orphan = false, meta = component.type } = {}) => (
+    <div
+      key={component.id}
+      className={`tree-item ${child ? 'child' : ''} ${orphan ? 'orphan' : ''} ${selectedId === component.id ? 'active' : ''}`}
+      onClick={() => setSelectedId(component.id)}
+    >
+      <span className="part-swatch" style={{ backgroundColor: componentColor[component.type] || '#999' }} />
+      <span className="tree-name">
+        <strong>{component.name}</strong>
+        <em>{meta}</em>
+      </span>
+      <button type="button" onClick={(event) => { event.stopPropagation(); moveComponent(component.id, -1); }}>Up</button>
+      <button type="button" onClick={(event) => { event.stopPropagation(); moveComponent(component.id, 1); }}>Down</button>
+      <button type="button" onClick={(event) => { event.stopPropagation(); duplicateComponent(component.id); }}>Copy</button>
+      <button type="button" onClick={(event) => { event.stopPropagation(); removeComponent(component.id); }}>Remove</button>
+    </div>
+  );
 
   return (
     <section className="left-section">
       <div className="section-title">Design tree</div>
       <div className="tree-root">
         <div className="tree-vehicle">ActiveRocket</div>
-        {groups.map(([label, items]) => (
-          <div className="tree-group" key={label}>
-            <div className="tree-group-label">{label}</div>
-            {items.map((component) => (
+        <div className="tree-group">
+          <div className="tree-group-label">Airframe hierarchy</div>
+          {airframeComponents.map((component) => {
+            const children = childrenByHost.get(String(component.id)) || [];
+            return (
               <React.Fragment key={component.id}>
-                <div
-                  className={`tree-item ${selectedId === component.id ? 'active' : ''}`}
-                  onClick={() => setSelectedId(component.id)}
-                >
-                  <span className="part-swatch" style={{ backgroundColor: componentColor[component.type] || '#999' }} />
-                  <span className="tree-name">{component.name}</span>
-                  <button type="button" onClick={(event) => { event.stopPropagation(); moveComponent(component.id, -1); }}>Up</button>
-                  <button type="button" onClick={(event) => { event.stopPropagation(); moveComponent(component.id, 1); }}>Down</button>
-                  <button type="button" onClick={(event) => { event.stopPropagation(); duplicateComponent(component.id); }}>Copy</button>
-                  <button type="button" onClick={(event) => { event.stopPropagation(); removeComponent(component.id); }}>Remove</button>
-                </div>
+                {renderTreeItem(component)}
+                {children.length > 0 && (
+                  <div className="tree-children">
+                    {children.map((childComponent) => renderTreeItem(childComponent, { child: true }))}
+                  </div>
+                )}
                 {boundaryByAfter.has(String(component.id)) && (
                   splitByAfter.has(String(component.id)) ? (
                     <div className="tree-split-marker">
@@ -2066,9 +2098,21 @@ function DesignTree({
                   )
                 )}
               </React.Fragment>
-            ))}
+            );
+          })}
+        </div>
+        {unattached.length > 0 && (
+          <div className="tree-group">
+            <div className="tree-group-label">Unattached subparts</div>
+            {unattached.map((component) => renderTreeItem(component, { child: true, orphan: true, meta: `${component.type} - choose host` }))}
           </div>
-        ))}
+        )}
+        {landingComponents.length > 0 && (
+          <div className="tree-group">
+            <div className="tree-group-label">Recovery configuration</div>
+            {landingComponents.map((component) => renderTreeItem(component, { meta: 'Landing system settings' }))}
+          </div>
+        )}
       </div>
     </section>
   );

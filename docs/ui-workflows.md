@@ -10,6 +10,7 @@
 - Let users save, restore, duplicate, and run named simulation setups from the current rocket.
 - Let users set axial placement for fins, motors, and rail buttons, and reflect those positions in drawing, mass, and CP analysis.
 - Let users choose the airframe host for fins, motors, and rail buttons, and show that attachment in the component table.
+- Show fins, motors, rail buttons, internal masses, and parachutes nested under their selected host in the design tree, with unattached subparts separated for repair.
 - Let users add payload, avionics, battery, ballast, and recovery-hardware mass components with editable station, host, role, and mass.
 - Let users add main and drogue parachutes as attached recovery components, then edit deployment event, altitude, drag area, Cd, and opening-load limits from the component inspector.
 - Let users add and remove split markers only between structural parts, with red markers in both the design tree and rocket side view.
