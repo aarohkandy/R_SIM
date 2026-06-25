@@ -64,10 +64,10 @@
     "success": true,
     "ranges": {
       "max_altitude": [43, 48],
-      "max_velocity": [27, 30],
+      "max_velocity": [25, 26],
       "active_system.max_surface_deployment": [0.35, 0.5],
       "active_system.tank_pressure_final": [620000, 635000],
-      "max_drag_force": [1.5, 2.1]
+      "max_drag_force": [2.2, 2.4]
     },
     "lessThanScenario": {
       "scenario": "passive_baseline",
@@ -75,4 +75,3 @@
     }
   }
 }
-

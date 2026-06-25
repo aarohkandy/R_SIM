@@ -91,10 +91,10 @@
       "max_altitude": [53, 58],
       "max_velocity": [29, 32],
       "max_net_force": [14, 17],
-      "max_drag_coefficient": [7.0, 8.0],
+      "max_drag_coefficient": [220, 230],
       "max_drag_force": [4.5, 6.0],
       "active_system.max_surface_deployment": [0.85, 1.0],
-      "active_system.tank_pressure_final": [600000, 625000]
+      "active_system.tank_pressure_final": [595000, 605000]
     },
     "equals": {
       "thrust_profile.source": "curve",

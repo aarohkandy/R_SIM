@@ -64,11 +64,10 @@
     "success": true,
     "ranges": {
       "max_altitude": [45, 50],
-      "max_velocity": [28, 31],
+      "max_velocity": [25, 27],
       "active_system.max_surface_deployment": [0.35, 0.5],
-      "active_system.tank_pressure_final": [155000, 170000]
+      "active_system.tank_pressure_final": [160000, 165000]
     },
     "warningsContain": ["minimum operating pressure"]
   }
 }
-

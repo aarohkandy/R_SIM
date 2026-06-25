@@ -42,6 +42,7 @@ def main() -> int:
     motors = json_body(client.get("/api/environment/motors"))
     require(len(motors.get("motors", [])) >= 1, "Motor database returned no motors.")
     frontend_source = (ROOT / "frontend" / "main.jsx").read_text(encoding="utf-8")
+    frontend_style = (ROOT / "frontend" / "App.css").read_text(encoding="utf-8")
     backend_source = (ROOT / "backend" / "f_backend.py").read_text(encoding="utf-8")
     gcp_client_source = (ROOT / "backend" / "gcp_cfd_client.py").read_text(encoding="utf-8")
     heavy_cfd_source = (ROOT / "backend" / "openfoam_integration.py").read_text(encoding="utf-8")
@@ -57,9 +58,14 @@ def main() -> int:
     require("/api/environment/launch-sites" in frontend_source, "Frontend launch-site picker is not wired to the backend launch-site database.")
     require("mockMotors" not in frontend_source, "Frontend motor picker still contains a mock motor list.")
     require("pneumaticPressureStd" in frontend_source, "Frontend setup is missing explicit pneumatic pressure noise controls.")
-    require("MiniLineChart" in frontend_source, "Frontend results view is missing live chart rendering.")
-    require("downloadSimulationArtifact('forces-csv')" in frontend_source, "Frontend force/moment CSV export is missing.")
-    require("downloadSimulationArtifact('active-csv')" in frontend_source, "Frontend active-system CSV export is missing.")
+    require("function LineChart" in frontend_source, "Frontend results view is missing live chart rendering.")
+    require("exportResults('forces')" in frontend_source, "Frontend force/moment CSV export is missing.")
+    require("exportResults('active')" in frontend_source, "Frontend active-system CSV export is missing.")
+    require("exportResults('recovery')" in frontend_source, "Frontend recovery CSV export is missing.")
+    require("getDesignChecks" in frontend_source, "Frontend is missing live design checks.")
+    require("fieldChecks" in frontend_source, "Frontend design checks are not wired to inputs.")
+    require("field-message" in frontend_source, "Frontend fields do not render design-check messages.")
+    require("field-message" in frontend_style, "Frontend fields do not style design-check messages.")
     database_motor = next(
         (motor for motor in motors.get("motors", []) if motor.get("designation") == "Estes C6-5"),
         motors["motors"][0],

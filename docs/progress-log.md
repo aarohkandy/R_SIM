@@ -60,3 +60,4 @@
 - Added backend launch-site selection and explicit sensor, atmosphere, attitude, and pneumatic pressure noise controls to the frontend setup panel.
 - Ran `bash scripts/run_pre_goal_checks.sh`: passed with 25 unit tests, 6 scenario fixtures, backend API smoke, root/API health, OpenRocket import smoke, backend motor thrust-curve smoke, frontend production build, frontend lint, launch-site UI static gate, noise-control static gate, and cloud/heavy unavailable-path guards.
 - Browser-checked the built app at `http://127.0.0.1:5011/`: the setup panel loaded launch sites from `/api/environment/launch-sites`, showed Black Rock Desert, Estes Field, and NAR TARC Finals, selected Estes Field, updated launch altitude to 1609 m, and showed the explicit pneumatic pressure noise control.
+- Added live OpenRocket-style design checks that surface stability, motor, guide, active pneumatic, and recovery issues in the main workbench and beside the specific inputs that caused them.

@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useEffect, useId, useMemo, useRef, useState } from 'react';
 import ReactDOM from 'react-dom/client';
 import './App.css';
 
@@ -8,7 +8,14 @@ const API_URL = (
   (import.meta.env.DEV ? 'http://localhost:5011' : '')
 ).replace(/\/$/, '');
 
-const makeId = (prefix) => `${prefix}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`;
+let fallbackIdCounter = 0;
+
+const makeId = (prefix) => {
+  const cryptoUuid = globalThis.crypto?.randomUUID?.();
+  const cryptoId = cryptoUuid ? cryptoUuid.slice(0, 8) : null;
+  const fallbackId = `${Date.now().toString(36)}-${fallbackIdCounter += 1}`;
+  return `${prefix}-${cryptoId || fallbackId}`;
+};
 
 const clamp = (value, min, max) => Math.min(max, Math.max(min, value));
 
@@ -632,6 +639,285 @@ const getLaunchGuideAnalysis = (metrics, config) => {
   };
 };
 
+const severityRank = {
+  error: 0,
+  warn: 1,
+  info: 2,
+  ok: 3
+};
+
+const componentTarget = (component, field) => (component ? `component.${component.id}.${field}` : null);
+
+const getDesignChecks = ({ components, metrics, config, landingSizing, activeEnvelope, guideAnalysis }) => {
+  const checks = [];
+  const add = (severity, label, detail, targets) => {
+    const targetList = (Array.isArray(targets) ? targets : [targets]).filter(Boolean);
+    checks.push({
+      id: `${severity}-${label}-${detail}`.toLowerCase().replace(/[^a-z0-9]+/g, '-'),
+      severity,
+      label,
+      detail,
+      targets: targetList
+    });
+  };
+
+  const motor = metrics.motor || components.find((component) => component.type === 'Motor');
+  const landingComponent = components.find((component) => component.type === 'Landing System');
+  const activeComponent = components.find((component) => component.type === 'Active Airbrake');
+  const active = config.activeSystem || {};
+  const controller = config.controller || {};
+  const landing = config.landingSystem || {};
+  const ambientPressure = numberValue(config.pressure, 101325);
+  const targetApogee = numberValue(controller.targetApogee, 0);
+  const motorDelay = numberValue(motor?.motorDelay, 0);
+
+  if (!motor) {
+    add('error', 'Motor missing', 'Add a motor before simulation.', 'component.motor');
+  }
+
+  components.forEach((component) => {
+    const mass = componentMass(component);
+    if (mass <= 0) {
+      add('error', 'Mass missing', `${component.name} needs a positive mass.`, componentTarget(component, 'mass'));
+    }
+
+    if (structuralTypes.has(component.type) && component.type !== 'Rail Button' && numberValue(component.length, 0) <= 0) {
+      add('error', 'Length missing', `${component.name} needs a positive length.`, componentTarget(component, 'length'));
+    }
+
+    if (['Nose Cone', 'Body Tube', 'Transition', 'Electronics Bay', 'Recovery Bay', 'Active Airbrake', 'Landing System', 'Motor'].includes(component.type)) {
+      const diameter = getDiameter(component);
+      if (diameter <= 0) {
+        add('error', 'Diameter missing', `${component.name} needs a positive diameter.`, componentTarget(component, 'diameter'));
+      } else if (diameter < 10) {
+        add('warn', 'Diameter looks small', `${component.name} may be using meters instead of millimeters.`, componentTarget(component, 'diameter'));
+      }
+    }
+
+    if (component.type === 'Transition') {
+      if (numberValue(component.topDiameter, 0) <= 0) {
+        add('error', 'Transition front diameter', 'Top diameter must be positive.', componentTarget(component, 'topDiameter'));
+      }
+      if (numberValue(component.bottomDiameter, 0) <= 0) {
+        add('error', 'Transition rear diameter', 'Bottom diameter must be positive.', componentTarget(component, 'bottomDiameter'));
+      }
+    }
+
+    if (component.type === 'Fins') {
+      if (numberValue(component.finCount, 0) < 3) {
+        add('warn', 'Fin count', 'Use at least three fins for a practical baseline.', componentTarget(component, 'finCount'));
+      }
+      if (numberValue(component.finWidth, 0) <= 0) {
+        add('error', 'Fin root chord', 'Root chord must be positive.', componentTarget(component, 'finWidth'));
+      }
+      if (numberValue(component.finHeight, 0) <= 0) {
+        add('error', 'Fin span', 'Fin span must be positive.', componentTarget(component, 'finHeight'));
+      }
+      if (numberValue(component.finThickness, 0) <= 0) {
+        add('warn', 'Fin thickness', 'Add fin thickness for mass and drag realism.', componentTarget(component, 'finThickness'));
+      }
+    }
+
+    if (component.type === 'Motor') {
+      const thrust = numberValue(component.motorThrust, 0);
+      const impulse = numberValue(component.motorTotalImpulse, 0);
+      if (numberValue(component.motorBurnTime, 0) <= 0) {
+        add('error', 'Motor burn time', 'Burn time must be positive.', componentTarget(component, 'motorBurnTime'));
+      }
+      if (thrust <= 0 && impulse <= 0) {
+        add('error', 'Motor power', 'Average thrust or total impulse must be positive.', [
+          componentTarget(component, 'motorThrust'),
+          componentTarget(component, 'motorTotalImpulse')
+        ]);
+      }
+      if (numberValue(component.motorDelay, 0) < 0) {
+        add('error', 'Motor delay', 'Delay must not be negative.', componentTarget(component, 'motorDelay'));
+      }
+    }
+  });
+
+  if (metrics.mass <= 0) {
+    add('error', 'Flight mass', 'Flight mass must be positive.', 'flight.mass');
+  }
+  if (metrics.cg <= 0 || metrics.cg > metrics.totalLength) {
+    add('warn', 'Flight CG', 'CG should sit inside the rocket length.', 'flight.cg');
+  }
+  if (metrics.totalLength <= 0) {
+    add('error', 'Flight length', 'Flight length must be positive.', 'flight.totalLength');
+  }
+  if (metrics.stability < 1) {
+    add('warn', 'Static margin low', `${formatNumber(metrics.stability, 2)} cal; move CG forward or CP aft.`, 'flight.cg');
+  } else if (metrics.stability > 3.5) {
+    add('info', 'Static margin high', `${formatNumber(metrics.stability, 2)} cal; expect weathercocking sensitivity.`, 'flight.cg');
+  }
+  if (metrics.thrustToWeight < 3) {
+    add('error', 'Lift-off thrust low', `${formatNumber(metrics.thrustToWeight, 2)} T/W; choose a stronger motor.`, componentTarget(motor, 'motorThrust'));
+  } else if (metrics.thrustToWeight < 5) {
+    add('warn', 'Lift-off thrust modest', `${formatNumber(metrics.thrustToWeight, 2)} T/W leaves little wind margin.`, componentTarget(motor, 'motorThrust'));
+  }
+
+  if (numberValue(config.pressure, 0) <= 0) {
+    add('error', 'Ambient pressure', 'Pressure must be positive.', 'flight.pressure');
+  }
+  if (numberValue(config.launchGuideLength, 0) <= 0) {
+    add('error', 'Guide length', 'Launch guide length must be positive.', 'flight.launchGuideLength');
+  }
+  if (numberValue(config.launchGuideAngle, 0) < 0 || numberValue(config.launchGuideAngle, 0) > 30) {
+    add('error', 'Guide angle', 'Keep guide angle between 0 and 30 degrees.', 'flight.launchGuideAngle');
+  }
+  if (numberValue(config.minRailExitVelocity, 0) <= 0) {
+    add('error', 'Minimum guide speed', 'Minimum guide speed must be positive.', 'flight.minRailExitVelocity');
+  } else if (!guideAnalysis.ok) {
+    add('warn', 'Guide exit slow', `${formatNumber(guideAnalysis.exitVelocity, 2)} m/s is below the configured limit.`, 'flight.launchGuideLength');
+  }
+  if (numberValue(config.timeStep, 0) <= 0) {
+    add('error', 'Time step', 'Time step must be positive.', 'flight.timeStep');
+  } else if (numberValue(config.timeStep, 0) > 0.1) {
+    add('warn', 'Time step large', 'The solver clamps time steps above 0.1 s.', 'flight.timeStep');
+  }
+  if (numberValue(config.maxTime, 0) <= 0) {
+    add('error', 'Max time', 'Max time must be positive.', 'flight.maxTime');
+  }
+  if (controller.mode === 'target_apogee' && targetApogee <= 0) {
+    add('error', 'Target apogee', 'Target apogee must be positive.', 'controller.targetApogee');
+  }
+
+  if (!active.enabled) {
+    add('warn', 'Active control off', 'Enable active control for this active rocket workflow.', 'active.enabled');
+  } else {
+    if (numberValue(active.tankPressure, 0) <= ambientPressure) {
+      add('error', 'Tank pressure', 'Tank pressure must be above ambient pressure.', 'active.tankPressure');
+    } else if (numberValue(active.tankPressure, 0) < numberValue(active.minOperatingPressure, 0)) {
+      add('warn', 'Tank pressure low', 'Tank starts below minimum operating pressure.', 'active.tankPressure');
+    }
+    if (numberValue(active.tankVolume, 0) <= 0) {
+      add('error', 'Tank volume', 'Tank volume must be positive.', 'active.tankVolume');
+    }
+    if (numberValue(active.regulatorPressure, 0) <= ambientPressure) {
+      add('error', 'Regulator pressure', 'Regulator pressure must be above ambient pressure.', 'active.regulatorPressure');
+    }
+    if (numberValue(active.valveFlowRate, 0) <= 0) {
+      add('error', 'Valve flow', 'Valve flow must be positive.', 'active.valveFlowRate');
+    }
+    if (numberValue(active.cylinderBore, 0) <= 0) {
+      add('error', 'Cylinder bore', 'Cylinder bore must be positive.', 'active.cylinderBore');
+    }
+    if (numberValue(active.cylinderStroke, 0) <= 0) {
+      add('error', 'Cylinder stroke', 'Cylinder stroke must be positive.', 'active.cylinderStroke');
+    }
+    if (numberValue(active.surfaceCount, 0) < 1) {
+      add('error', 'Surface count', 'At least one active surface is required.', [
+        'active.surfaceCount',
+        componentTarget(activeComponent, 'surfaceCount')
+      ]);
+    }
+    if (numberValue(active.surfaceArea, 0) <= 0) {
+      add('error', 'Surface area', 'Active surface area must be positive.', [
+        'active.surfaceArea',
+        componentTarget(activeComponent, 'surfaceArea')
+      ]);
+    } else if (activeEnvelope.cdIncrement < 0.5) {
+      add('warn', 'Airbrake authority', `Only +${formatNumber(activeEnvelope.cdIncrement, 2)} Cd; increase area or count.`, [
+        'active.surfaceArea',
+        componentTarget(activeComponent, 'surfaceArea')
+      ]);
+    }
+    if (numberValue(active.surfaceMaxAngle, 0) <= 0) {
+      add('error', 'Surface angle', 'Max angle must be positive.', [
+        'active.surfaceMaxAngle',
+        componentTarget(activeComponent, 'surfaceMaxAngle')
+      ]);
+    }
+  }
+
+  if (!landing.enabled) {
+    add('warn', 'Landing disabled', 'Enable recovery to model touchdown.', 'landing.enabled');
+  } else {
+    const mainDeployEvent = landing.mainDeployEvent || landing.deployEvent || 'altitude';
+    const drogueDeployEvent = landing.drogueDeployEvent || 'apogee';
+    const deployAltitude = numberValue(landing.deployAltitude, 0);
+    const drogueDeployAltitude = numberValue(landing.drogueDeployAltitude ?? landing.deployAltitude, 0);
+
+    if (mainDeployEvent === 'altitude') {
+      if (deployAltitude <= 0) {
+        add('error', 'Deploy altitude', 'Deploy altitude must be positive.', [
+          'landing.deployAltitude',
+          componentTarget(landingComponent, 'deployAltitude')
+        ]);
+      } else if (targetApogee > 0 && deployAltitude >= targetApogee) {
+        add('warn', 'Deploy altitude high', 'Main deployment is at or above target apogee.', [
+          'landing.deployAltitude',
+          componentTarget(landingComponent, 'deployAltitude')
+        ]);
+      }
+    }
+    if (mainDeployEvent === 'motor_ejection' && motorDelay <= 0) {
+      add('warn', 'Main motor ejection', 'Set a positive motor delay for motor ejection.', [
+        'landing.mainDeployEvent',
+        componentTarget(motor, 'motorDelay')
+      ]);
+    }
+    if (numberValue(landing.dragArea, 0) <= 0) {
+      add('error', 'Landing drag area', 'Landing drag area must be positive.', [
+        'landing.dragArea',
+        componentTarget(landingComponent, 'dragArea')
+      ]);
+    } else if (landingSizing.estimatedTerminalVelocity > landingSizing.safeVelocity) {
+      add('warn', 'Recovery undersized', `${formatNumber(landingSizing.estimatedTerminalVelocity, 2)} m/s exceeds safe touchdown.`, [
+        'landing.dragArea',
+        componentTarget(landingComponent, 'dragArea')
+      ]);
+    }
+    if (numberValue(landing.dragCoefficient, 0) <= 0) {
+      add('error', 'Landing drag coefficient', 'Drag coefficient must be positive.', [
+        'landing.dragCoefficient',
+        componentTarget(landingComponent, 'dragCoefficient')
+      ]);
+    }
+    if (numberValue(landing.maxSafeVelocity, 0) <= 0) {
+      add('error', 'Safe touchdown', 'Safe touchdown speed must be positive.', [
+        'landing.maxSafeVelocity',
+        componentTarget(landingComponent, 'maxSafeVelocity')
+      ]);
+    }
+    if (landing.type === 'drogue_main') {
+      if (drogueDeployEvent === 'altitude' && drogueDeployAltitude <= 0) {
+        add('error', 'Drogue altitude', 'Drogue altitude must be positive.', 'landing.drogueDeployAltitude');
+      }
+      if (drogueDeployEvent === 'motor_ejection' && motorDelay <= 0) {
+        add('warn', 'Drogue motor ejection', 'Set a positive motor delay for drogue ejection.', [
+          'landing.drogueDeployEvent',
+          componentTarget(motor, 'motorDelay')
+        ]);
+      }
+      if (numberValue(landing.drogueDragArea, 0) <= 0) {
+        add('error', 'Drogue area', 'Drogue drag area must be positive.', [
+          'landing.drogueDragArea',
+          componentTarget(landingComponent, 'drogueDragArea')
+        ]);
+      }
+      if (numberValue(landing.drogueDragCoefficient, 0) <= 0) {
+        add('error', 'Drogue Cd', 'Drogue drag coefficient must be positive.', [
+          'landing.drogueDragCoefficient',
+          componentTarget(landingComponent, 'drogueDragCoefficient')
+        ]);
+      }
+    }
+  }
+
+  return checks.sort((left, right) => (
+    severityRank[left.severity] - severityRank[right.severity] ||
+    left.label.localeCompare(right.label)
+  ));
+};
+
+const getFieldCheckMap = (checks) => checks.reduce((map, check) => {
+  check.targets.forEach((target) => {
+    map[target] = [...(map[target] || []), check];
+  });
+  return map;
+}, {});
+
 const summarizeRun = ({ label, active, passive = null }) => {
   const activeData = active?.results || {};
   const passiveData = passive?.results || null;
@@ -753,10 +1039,15 @@ const applyRocketOverrides = (metrics, overrides = {}) => {
   };
 };
 
-function Field({ label, value, unit, type = 'number', step = 'any', min, max, onChange, options }) {
-  const id = `${label.replace(/[^a-z0-9]+/gi, '-')}-${Math.random().toString(36).slice(2)}`;
+function Field({ label, value, unit, type = 'number', step = 'any', min, max, onChange, options, checks = [] }) {
+  const reactId = useId().replace(/:/g, '');
+  const id = `${label.replace(/[^a-z0-9]+/gi, '-')}-${reactId}`;
+  const messages = Array.isArray(checks) ? checks : [checks].filter(Boolean);
+  const severity = messages.reduce((current, check) => (
+    severityRank[check.severity] < severityRank[current] ? check.severity : current
+  ), 'ok');
   return (
-    <label className="field" htmlFor={id}>
+    <label className={`field ${messages.length ? `has-${severity}` : ''}`} htmlFor={id}>
       <span>{label}</span>
       <div className="field-control">
         {options ? (
@@ -777,11 +1068,19 @@ function Field({ label, value, unit, type = 'number', step = 'any', min, max, on
             min={min}
             max={max}
             value={value ?? ''}
+            aria-invalid={severity === 'error'}
             onChange={(event) => onChange(type === 'number' ? numberValue(event.target.value) : event.target.value)}
           />
         )}
         {unit && <span className="unit">{unit}</span>}
       </div>
+      {messages.length > 0 && (
+        <div className="field-messages">
+          {messages.slice(0, 2).map((check) => (
+            <span className={`field-message ${check.severity}`} key={check.id}>{check.detail}</span>
+          ))}
+        </div>
+      )}
     </label>
   );
 }
@@ -1232,7 +1531,7 @@ function DesignAnalysis({ metrics, massBreakdown, config }) {
   );
 }
 
-function ComponentInspector({ component, updateComponent }) {
+function ComponentInspector({ component, updateComponent, fieldChecks = {} }) {
   if (!component) {
     return (
       <div className="empty-state">
@@ -1242,12 +1541,13 @@ function ComponentInspector({ component, updateComponent }) {
   }
 
   const set = (key, value) => updateComponent(component.id, { [key]: value });
+  const checks = (field) => fieldChecks[componentTarget(component, field)] || [];
   const commonFields = (
     <>
       <Field label="Name" type="text" value={component.name} onChange={(value) => set('name', value)} />
-      <Field label="Length" value={component.length} unit="mm" onChange={(value) => set('length', value)} />
-      <Field label="Diameter" value={component.diameter} unit="mm" onChange={(value) => set('diameter', value)} />
-      <Field label="Mass" value={componentMass(component)} unit="g" onChange={(value) => set(component.type === 'Motor' ? 'motorWeight' : 'weight', value)} />
+      <Field label="Length" value={component.length} unit="mm" checks={checks('length')} onChange={(value) => set('length', value)} />
+      <Field label="Diameter" value={component.diameter} unit="mm" checks={checks('diameter')} onChange={(value) => set('diameter', value)} />
+      <Field label="Mass" value={componentMass(component)} unit="g" checks={checks('mass')} onChange={(value) => set(component.type === 'Motor' ? 'motorWeight' : 'weight', value)} />
     </>
   );
 
@@ -1264,8 +1564,8 @@ function ComponentInspector({ component, updateComponent }) {
         {commonFields}
         {component.type === 'Transition' && (
           <>
-            <Field label="Top diameter" value={component.topDiameter} unit="mm" onChange={(value) => set('topDiameter', value)} />
-            <Field label="Bottom diameter" value={component.bottomDiameter} unit="mm" onChange={(value) => set('bottomDiameter', value)} />
+            <Field label="Top diameter" value={component.topDiameter} unit="mm" checks={checks('topDiameter')} onChange={(value) => set('topDiameter', value)} />
+            <Field label="Bottom diameter" value={component.bottomDiameter} unit="mm" checks={checks('bottomDiameter')} onChange={(value) => set('bottomDiameter', value)} />
           </>
         )}
         {component.type === 'Nose Cone' && (
@@ -1283,38 +1583,38 @@ function ComponentInspector({ component, updateComponent }) {
         )}
         {component.type === 'Fins' && (
           <>
-            <Field label="Fin count" value={component.finCount} onChange={(value) => set('finCount', value)} />
-            <Field label="Root chord" value={component.finWidth} unit="mm" onChange={(value) => set('finWidth', value)} />
-            <Field label="Span" value={component.finHeight} unit="mm" onChange={(value) => set('finHeight', value)} />
+            <Field label="Fin count" value={component.finCount} checks={checks('finCount')} onChange={(value) => set('finCount', value)} />
+            <Field label="Root chord" value={component.finWidth} unit="mm" checks={checks('finWidth')} onChange={(value) => set('finWidth', value)} />
+            <Field label="Span" value={component.finHeight} unit="mm" checks={checks('finHeight')} onChange={(value) => set('finHeight', value)} />
             <Field label="Sweep" value={component.finSweep} unit="mm" onChange={(value) => set('finSweep', value)} />
-            <Field label="Thickness" value={component.finThickness} unit="mm" onChange={(value) => set('finThickness', value)} />
+            <Field label="Thickness" value={component.finThickness} unit="mm" checks={checks('finThickness')} onChange={(value) => set('finThickness', value)} />
           </>
         )}
         {component.type === 'Active Airbrake' && (
           <>
-            <Field label="Surface count" value={component.surfaceCount} onChange={(value) => set('surfaceCount', value)} />
-            <Field label="Surface area" value={component.surfaceArea} unit="m2" step="0.0001" onChange={(value) => set('surfaceArea', value)} />
-            <Field label="Max angle" value={component.surfaceMaxAngle} unit="deg" onChange={(value) => set('surfaceMaxAngle', value)} />
+            <Field label="Surface count" value={component.surfaceCount} checks={checks('surfaceCount')} onChange={(value) => set('surfaceCount', value)} />
+            <Field label="Surface area" value={component.surfaceArea} unit="m2" step="0.0001" checks={checks('surfaceArea')} onChange={(value) => set('surfaceArea', value)} />
+            <Field label="Max angle" value={component.surfaceMaxAngle} unit="deg" checks={checks('surfaceMaxAngle')} onChange={(value) => set('surfaceMaxAngle', value)} />
           </>
         )}
         {component.type === 'Motor' && (
           <>
             <Field label="Manufacturer" type="text" value={component.motorType || ''} onChange={(value) => set('motorType', value)} />
             <Field label="Designation" type="text" value={component.motorModel || ''} onChange={(value) => set('motorModel', value)} />
-            <Field label="Avg thrust" value={component.motorThrust} unit="N" onChange={(value) => set('motorThrust', value)} />
-            <Field label="Burn time" value={component.motorBurnTime} unit="s" onChange={(value) => set('motorBurnTime', value)} />
-            <Field label="Total impulse" value={component.motorTotalImpulse} unit="Ns" onChange={(value) => set('motorTotalImpulse', value)} />
-            <Field label="Delay" value={component.motorDelay} unit="s" onChange={(value) => set('motorDelay', value)} />
+            <Field label="Avg thrust" value={component.motorThrust} unit="N" checks={checks('motorThrust')} onChange={(value) => set('motorThrust', value)} />
+            <Field label="Burn time" value={component.motorBurnTime} unit="s" checks={checks('motorBurnTime')} onChange={(value) => set('motorBurnTime', value)} />
+            <Field label="Total impulse" value={component.motorTotalImpulse} unit="Ns" checks={checks('motorTotalImpulse')} onChange={(value) => set('motorTotalImpulse', value)} />
+            <Field label="Delay" value={component.motorDelay} unit="s" checks={checks('motorDelay')} onChange={(value) => set('motorDelay', value)} />
           </>
         )}
         {component.type === 'Landing System' && (
           <>
-            <Field label="Deploy altitude" value={component.deployAltitude} unit="m" onChange={(value) => set('deployAltitude', value)} />
-            <Field label="Drag area" value={component.dragArea} unit="m2" step="0.01" onChange={(value) => set('dragArea', value)} />
-            <Field label="Drag coefficient" value={component.dragCoefficient} step="0.01" onChange={(value) => set('dragCoefficient', value)} />
-            <Field label="Drogue area" value={component.drogueDragArea ?? 0.04} unit="m2" step="0.005" onChange={(value) => set('drogueDragArea', value)} />
-            <Field label="Drogue Cd" value={component.drogueDragCoefficient ?? 1.25} step="0.01" onChange={(value) => set('drogueDragCoefficient', value)} />
-            <Field label="Safe touchdown" value={component.maxSafeVelocity} unit="m/s" step="0.1" onChange={(value) => set('maxSafeVelocity', value)} />
+            <Field label="Deploy altitude" value={component.deployAltitude} unit="m" checks={checks('deployAltitude')} onChange={(value) => set('deployAltitude', value)} />
+            <Field label="Drag area" value={component.dragArea} unit="m2" step="0.01" checks={checks('dragArea')} onChange={(value) => set('dragArea', value)} />
+            <Field label="Drag coefficient" value={component.dragCoefficient} step="0.01" checks={checks('dragCoefficient')} onChange={(value) => set('dragCoefficient', value)} />
+            <Field label="Drogue area" value={component.drogueDragArea ?? 0.04} unit="m2" step="0.005" checks={checks('drogueDragArea')} onChange={(value) => set('drogueDragArea', value)} />
+            <Field label="Drogue Cd" value={component.drogueDragCoefficient ?? 1.25} step="0.01" checks={checks('drogueDragCoefficient')} onChange={(value) => set('drogueDragCoefficient', value)} />
+            <Field label="Safe touchdown" value={component.maxSafeVelocity} unit="m/s" step="0.1" checks={checks('maxSafeVelocity')} onChange={(value) => set('maxSafeVelocity', value)} />
           </>
         )}
       </div>
@@ -1366,10 +1666,12 @@ function FlightSetup({
   applyLaunchSite,
   metrics,
   componentMetrics,
-  setRocketOverrides
+  setRocketOverrides,
+  fieldChecks = {}
 }) {
   const set = (key, value) => setConfig((current) => ({ ...current, [key]: value }));
   const guide = getLaunchGuideAnalysis(metrics, config);
+  const checks = (target) => fieldChecks[target] || [];
   const setOverride = (key, value) => setRocketOverrides((current) => ({
     ...current,
     [key]: value
@@ -1394,15 +1696,15 @@ function FlightSetup({
         </label>
         <Field label="Launch altitude" value={config.launchAltitude} unit="m" onChange={(value) => set('launchAltitude', value)} />
         <Field label="Temperature" value={config.temperature} unit="C" onChange={(value) => set('temperature', value)} />
-        <Field label="Pressure" value={config.pressure} unit="Pa" onChange={(value) => set('pressure', value)} />
+        <Field label="Pressure" value={config.pressure} unit="Pa" checks={checks('flight.pressure')} onChange={(value) => set('pressure', value)} />
         <Field label="Wind speed" value={config.windSpeed} unit="m/s" step="0.1" onChange={(value) => set('windSpeed', value)} />
         <Field label="Wind direction" value={config.windDirection} unit="deg" onChange={(value) => set('windDirection', value)} />
-        <Field label="Guide length" value={config.launchGuideLength} unit="m" step="0.1" onChange={(value) => set('launchGuideLength', value)} />
-        <Field label="Guide angle" value={config.launchGuideAngle} unit="deg" step="0.5" onChange={(value) => set('launchGuideAngle', value)} />
+        <Field label="Guide length" value={config.launchGuideLength} unit="m" step="0.1" checks={checks('flight.launchGuideLength')} onChange={(value) => set('launchGuideLength', value)} />
+        <Field label="Guide angle" value={config.launchGuideAngle} unit="deg" step="0.5" checks={checks('flight.launchGuideAngle')} onChange={(value) => set('launchGuideAngle', value)} />
         <Field label="Guide direction" value={config.launchGuideDirection} unit="deg" onChange={(value) => set('launchGuideDirection', value)} />
-        <Field label="Min guide speed" value={config.minRailExitVelocity} unit="m/s" step="0.5" onChange={(value) => set('minRailExitVelocity', value)} />
-        <Field label="Time step" value={config.timeStep} unit="s" step="0.005" onChange={(value) => set('timeStep', value)} />
-        <Field label="Max time" value={config.maxTime} unit="s" onChange={(value) => set('maxTime', value)} />
+        <Field label="Min guide speed" value={config.minRailExitVelocity} unit="m/s" step="0.5" checks={checks('flight.minRailExitVelocity')} onChange={(value) => set('minRailExitVelocity', value)} />
+        <Field label="Time step" value={config.timeStep} unit="s" step="0.005" checks={checks('flight.timeStep')} onChange={(value) => set('timeStep', value)} />
+        <Field label="Max time" value={config.maxTime} unit="s" checks={checks('flight.maxTime')} onChange={(value) => set('maxTime', value)} />
         <Field
           label="Controller mode"
           value={config.controller.mode}
@@ -1417,15 +1719,16 @@ function FlightSetup({
           label="Target apogee"
           value={config.controller.targetApogee}
           unit="m"
+          checks={checks('controller.targetApogee')}
           onChange={(value) => setConfig((current) => ({ ...current, controller: { ...current.controller, targetApogee: value } }))}
         />
       </div>
       <div className="sizing-card">
         <div className="comparison-title">Flight mass properties</div>
         <div className="field-grid single mass-property-fields">
-          <Field label="Flight mass" value={metrics.mass} unit="g" onChange={(value) => setOverride('weight', value)} />
-          <Field label="Flight CG" value={metrics.cg} unit="mm" onChange={(value) => setOverride('cg', value)} />
-          <Field label="Flight length" value={metrics.totalLength} unit="mm" onChange={(value) => setOverride('totalHeight', value)} />
+          <Field label="Flight mass" value={metrics.mass} unit="g" checks={checks('flight.mass')} onChange={(value) => setOverride('weight', value)} />
+          <Field label="Flight CG" value={metrics.cg} unit="mm" checks={checks('flight.cg')} onChange={(value) => setOverride('cg', value)} />
+          <Field label="Flight length" value={metrics.totalLength} unit="mm" checks={checks('flight.totalLength')} onChange={(value) => setOverride('totalHeight', value)} />
         </div>
         <div className="sizing-grid">
           <div><span>Component mass</span><strong>{formatNumber(componentMetrics.mass, 0)} g</strong></div>
@@ -1454,10 +1757,11 @@ function FlightSetup({
   );
 }
 
-function ActiveSetup({ config, setConfig, syncAirbrake, compileController, controllerCompileState }) {
+function ActiveSetup({ config, setConfig, syncAirbrake, compileController, controllerCompileState, fieldChecks = {} }) {
   const active = config.activeSystem;
   const controller = config.controller;
   const controllerLanguage = config.controllerLanguage || 'builtin';
+  const checks = (target) => fieldChecks[target] || [];
   const setActive = (key, value) => setConfig((current) => ({
     ...current,
     activePneumaticEnabled: key === 'enabled' ? value : current.activePneumaticEnabled,
@@ -1479,13 +1783,16 @@ function ActiveSetup({ config, setConfig, syncAirbrake, compileController, contr
         <p>Pneumatic surfaces, pressure limits, and apogee control.</p>
       </div>
       <Toggle checked={active.enabled} onChange={(value) => setActive('enabled', value)} label="Active pneumatic system" />
+      {checks('active.enabled').length > 0 && (
+        <div className="toggle-message">{checks('active.enabled')[0].detail}</div>
+      )}
       <div className="field-grid single">
-        <Field label="Tank pressure" value={active.tankPressure} unit="Pa" onChange={(value) => setActive('tankPressure', value)} />
-        <Field label="Tank volume" value={active.tankVolume} unit="L" step="0.01" onChange={(value) => setActive('tankVolume', value)} />
-        <Field label="Regulator pressure" value={active.regulatorPressure} unit="Pa" onChange={(value) => setActive('regulatorPressure', value)} />
-        <Field label="Valve flow" value={active.valveFlowRate} step="0.1" onChange={(value) => setActive('valveFlowRate', value)} />
-        <Field label="Cylinder bore" value={active.cylinderBore} unit="m" step="0.001" onChange={(value) => setActive('cylinderBore', value)} />
-        <Field label="Cylinder stroke" value={active.cylinderStroke} unit="m" step="0.001" onChange={(value) => setActive('cylinderStroke', value)} />
+        <Field label="Tank pressure" value={active.tankPressure} unit="Pa" checks={checks('active.tankPressure')} onChange={(value) => setActive('tankPressure', value)} />
+        <Field label="Tank volume" value={active.tankVolume} unit="L" step="0.01" checks={checks('active.tankVolume')} onChange={(value) => setActive('tankVolume', value)} />
+        <Field label="Regulator pressure" value={active.regulatorPressure} unit="Pa" checks={checks('active.regulatorPressure')} onChange={(value) => setActive('regulatorPressure', value)} />
+        <Field label="Valve flow" value={active.valveFlowRate} step="0.1" checks={checks('active.valveFlowRate')} onChange={(value) => setActive('valveFlowRate', value)} />
+        <Field label="Cylinder bore" value={active.cylinderBore} unit="m" step="0.001" checks={checks('active.cylinderBore')} onChange={(value) => setActive('cylinderBore', value)} />
+        <Field label="Cylinder stroke" value={active.cylinderStroke} unit="m" step="0.001" checks={checks('active.cylinderStroke')} onChange={(value) => setActive('cylinderStroke', value)} />
         <Field
           label="Controller source"
           value={controllerLanguage}
@@ -1495,10 +1802,10 @@ function ActiveSetup({ config, setConfig, syncAirbrake, compileController, contr
             { value: 'cpp', label: 'C++ controller' }
           ]}
         />
-        <Field label="Surface count" value={active.surfaceCount} onChange={(value) => { setActive('surfaceCount', value); syncAirbrake('surfaceCount', value); }} />
-        <Field label="Surface area" value={active.surfaceArea} unit="m2" step="0.0001" onChange={(value) => { setActive('surfaceArea', value); syncAirbrake('surfaceArea', value); }} />
-        <Field label="Max angle" value={active.surfaceMaxAngle} unit="deg" onChange={(value) => { setActive('surfaceMaxAngle', value); syncAirbrake('surfaceMaxAngle', value); }} />
-        <Field label="Deploy altitude" value={controller.deployAltitude} unit="m" onChange={(value) => setController('deployAltitude', value)} />
+        <Field label="Surface count" value={active.surfaceCount} checks={checks('active.surfaceCount')} onChange={(value) => { setActive('surfaceCount', value); syncAirbrake('surfaceCount', value); }} />
+        <Field label="Surface area" value={active.surfaceArea} unit="m2" step="0.0001" checks={checks('active.surfaceArea')} onChange={(value) => { setActive('surfaceArea', value); syncAirbrake('surfaceArea', value); }} />
+        <Field label="Max angle" value={active.surfaceMaxAngle} unit="deg" checks={checks('active.surfaceMaxAngle')} onChange={(value) => { setActive('surfaceMaxAngle', value); syncAirbrake('surfaceMaxAngle', value); }} />
+        <Field label="Deploy altitude" value={controller.deployAltitude} unit="m" checks={checks('controller.deployAltitude')} onChange={(value) => setController('deployAltitude', value)} />
         <Field label="Kp" value={controller.kp} step="0.001" onChange={(value) => setController('kp', value)} />
         <Field label="Kd" value={controller.kd} step="0.001" onChange={(value) => setController('kd', value)} />
       </div>
@@ -1525,7 +1832,7 @@ function ActiveSetup({ config, setConfig, syncAirbrake, compileController, contr
   );
 }
 
-function LandingSetup({ config, setConfig, syncLanding, metrics }) {
+function LandingSetup({ config, setConfig, syncLanding, metrics, fieldChecks = {} }) {
   const landing = config.landingSystem;
   const mainDeployEvent = landing.mainDeployEvent || landing.deployEvent || 'altitude';
   const drogueDeployEvent = landing.drogueDeployEvent || 'apogee';
@@ -1535,6 +1842,7 @@ function LandingSetup({ config, setConfig, syncLanding, metrics }) {
     dragCoefficient: landing.drogueDragCoefficient,
     maxSafeVelocity: 25
   });
+  const checks = (target) => fieldChecks[target] || [];
   const setLanding = (key, value) => {
     setConfig((current) => ({
       ...current,
@@ -1556,10 +1864,14 @@ function LandingSetup({ config, setConfig, syncLanding, metrics }) {
         <p>Recovery deployment and touchdown constraints.</p>
       </div>
       <Toggle checked={landing.enabled} onChange={(value) => setLanding('enabled', value)} label="Landing recovery enabled" />
+      {checks('landing.enabled').length > 0 && (
+        <div className="toggle-message">{checks('landing.enabled')[0].detail}</div>
+      )}
       <div className="field-grid single">
         <Field
           label="System type"
           value={landing.type}
+          checks={checks('landing.type')}
           onChange={(value) => setLanding('type', value)}
           options={[
             { value: 'main_parachute', label: 'Main parachute' },
@@ -1572,6 +1884,7 @@ function LandingSetup({ config, setConfig, syncLanding, metrics }) {
             <Field
               label="Drogue event"
               value={drogueDeployEvent}
+              checks={checks('landing.drogueDeployEvent')}
               onChange={(value) => setLanding('drogueDeployEvent', value)}
               options={recoveryDeployEvents}
             />
@@ -1580,6 +1893,7 @@ function LandingSetup({ config, setConfig, syncLanding, metrics }) {
                 label="Drogue altitude"
                 value={landing.drogueDeployAltitude ?? landing.deployAltitude}
                 unit="m"
+                checks={checks('landing.drogueDeployAltitude')}
                 onChange={(value) => setLanding('drogueDeployAltitude', value)}
               />
             )}
@@ -1588,21 +1902,22 @@ function LandingSetup({ config, setConfig, syncLanding, metrics }) {
         <Field
           label={landing.type === 'drogue_main' ? 'Main event' : 'Deploy event'}
           value={mainDeployEvent}
+          checks={checks('landing.mainDeployEvent')}
           onChange={(value) => setLanding('mainDeployEvent', value)}
           options={recoveryDeployEvents}
         />
         {mainDeployEvent === 'altitude' && (
-          <Field label={landing.type === 'drogue_main' ? 'Main altitude' : 'Deploy altitude'} value={landing.deployAltitude} unit="m" onChange={(value) => setLanding('deployAltitude', value)} />
+          <Field label={landing.type === 'drogue_main' ? 'Main altitude' : 'Deploy altitude'} value={landing.deployAltitude} unit="m" checks={checks('landing.deployAltitude')} onChange={(value) => setLanding('deployAltitude', value)} />
         )}
-        <Field label={landing.type === 'drogue_main' ? 'Main area' : 'Drag area'} value={landing.dragArea} unit="m2" step="0.01" onChange={(value) => setLanding('dragArea', value)} />
-        <Field label={landing.type === 'drogue_main' ? 'Main Cd' : 'Drag coefficient'} value={landing.dragCoefficient} step="0.01" onChange={(value) => setLanding('dragCoefficient', value)} />
+        <Field label={landing.type === 'drogue_main' ? 'Main area' : 'Drag area'} value={landing.dragArea} unit="m2" step="0.01" checks={checks('landing.dragArea')} onChange={(value) => setLanding('dragArea', value)} />
+        <Field label={landing.type === 'drogue_main' ? 'Main Cd' : 'Drag coefficient'} value={landing.dragCoefficient} step="0.01" checks={checks('landing.dragCoefficient')} onChange={(value) => setLanding('dragCoefficient', value)} />
         {landing.type === 'drogue_main' && (
           <>
-            <Field label="Drogue area" value={landing.drogueDragArea} unit="m2" step="0.005" onChange={(value) => setLanding('drogueDragArea', value)} />
-            <Field label="Drogue Cd" value={landing.drogueDragCoefficient} step="0.01" onChange={(value) => setLanding('drogueDragCoefficient', value)} />
+            <Field label="Drogue area" value={landing.drogueDragArea} unit="m2" step="0.005" checks={checks('landing.drogueDragArea')} onChange={(value) => setLanding('drogueDragArea', value)} />
+            <Field label="Drogue Cd" value={landing.drogueDragCoefficient} step="0.01" checks={checks('landing.drogueDragCoefficient')} onChange={(value) => setLanding('drogueDragCoefficient', value)} />
           </>
         )}
-        <Field label="Safe touchdown" value={landing.maxSafeVelocity} unit="m/s" step="0.1" onChange={(value) => setLanding('maxSafeVelocity', value)} />
+        <Field label="Safe touchdown" value={landing.maxSafeVelocity} unit="m/s" step="0.1" checks={checks('landing.maxSafeVelocity')} onChange={(value) => setLanding('maxSafeVelocity', value)} />
       </div>
       <div className="sizing-card">
         <div className="comparison-title">Recovery sequence</div>
@@ -1954,6 +2269,15 @@ function App() {
   const landingSizing = useMemo(() => getLandingSizing(metrics, config), [metrics, config]);
   const activeEnvelope = useMemo(() => getActiveEnvelope(metrics, config), [metrics, config]);
   const guideAnalysis = useMemo(() => getLaunchGuideAnalysis(metrics, config), [metrics, config]);
+  const designChecks = useMemo(() => getDesignChecks({
+    components,
+    metrics,
+    config,
+    landingSizing,
+    activeEnvelope,
+    guideAnalysis
+  }), [components, metrics, config, landingSizing, activeEnvelope, guideAnalysis]);
+  const fieldChecks = useMemo(() => getFieldCheckMap(designChecks), [designChecks]);
   const selectedComponent = components.find((component) => component.id === selectedId);
 
   const staleResults = () => {
@@ -2509,46 +2833,20 @@ function App() {
     setMessage(`${runCase.label} restored.`);
   };
 
-  const validationItems = [
-    {
-      label: 'Motor installed',
-      ok: Boolean(metrics.motor),
-      detail: metrics.motor ? metrics.motor.name : 'Add a motor'
-    },
-    {
-      label: 'Static margin',
-      ok: metrics.stability >= 1.0 && metrics.stability <= 3.5,
-      detail: `${formatNumber(metrics.stability, 2)} cal`
-    },
-    {
-      label: 'Lift off thrust',
-      ok: metrics.thrustToWeight >= 3,
-      detail: `${formatNumber(metrics.thrustToWeight, 2)} T/W`
-    },
-    {
-      label: 'Guide exit',
-      ok: guideAnalysis.ok,
-      detail: `${formatNumber(guideAnalysis.exitVelocity, 2)} / ${formatNumber(guideAnalysis.safeVelocity, 1)} m/s`
-    },
-    {
-      label: 'Landing enabled',
-      ok: config.landingSystem.enabled,
-      detail: `${formatNumber(config.landingSystem.deployAltitude, 0)} m deploy`
-    },
-    {
-      label: 'Recovery sized',
-      ok: !config.landingSystem.enabled || landingSizing.estimatedTerminalVelocity <= landingSizing.safeVelocity,
-      detail: `${formatNumber(landingSizing.estimatedTerminalVelocity, 2)} / ${formatNumber(landingSizing.safeVelocity, 1)} m/s`
-    },
-    {
-      label: 'Active control',
-      ok: config.activeSystem.enabled && activeEnvelope.cdIncrement > 0.5,
-      detail: `+${formatNumber(activeEnvelope.cdIncrement, 2)} Cd authority`
-    }
-  ];
+  const validationItems = designChecks.length
+    ? designChecks.slice(0, 8).map((check) => ({
+      label: check.label,
+      status: check.severity,
+      detail: check.detail
+    }))
+    : [{
+      label: 'Design ready',
+      status: 'ok',
+      detail: 'No live design issues found.'
+    }];
 
   const inspector = {
-    component: <ComponentInspector component={selectedComponent} updateComponent={updateComponent} />,
+    component: <ComponentInspector component={selectedComponent} updateComponent={updateComponent} fieldChecks={fieldChecks} />,
     motors: (
       <MotorBrowser
         motors={motors}
@@ -2568,6 +2866,7 @@ function App() {
         metrics={metrics}
         componentMetrics={componentMetrics}
         setRocketOverrides={setRocketOverridesAndInvalidate}
+        fieldChecks={fieldChecks}
       />
     ),
     active: (
@@ -2577,9 +2876,10 @@ function App() {
         syncAirbrake={syncAirbrake}
         compileController={compileController}
         controllerCompileState={controllerCompileState}
+        fieldChecks={fieldChecks}
       />
     ),
-    landing: <LandingSetup config={config} setConfig={setConfigAndInvalidate} syncLanding={syncLanding} metrics={metrics} />,
+    landing: <LandingSetup config={config} setConfig={setConfigAndInvalidate} syncLanding={syncLanding} metrics={metrics} fieldChecks={fieldChecks} />,
     results: (
       <ResultsPanel
         result={result}
@@ -2654,11 +2954,11 @@ function App() {
           <div className="lower-grid">
             <ComponentTable components={components} selectedId={selectedId} setSelectedId={setSelectedId} />
             <section className="checks-panel">
-              <div className="table-title">Readiness</div>
+              <div className="table-title">Design checks</div>
               <div className="check-list">
                 {validationItems.map((item) => (
-                  <div className={`check-row ${item.ok ? 'ok' : 'warn'}`} key={item.label}>
-                    <span>{item.ok ? 'Pass' : 'Check'}</span>
+                  <div className={`check-row ${item.status}`} key={`${item.status}-${item.label}-${item.detail}`}>
+                    <span>{item.status === 'error' ? 'Fix' : item.status === 'warn' ? 'Check' : item.status === 'info' ? 'Note' : 'Pass'}</span>
                     <strong>{item.label}</strong>
                     <em>{item.detail}</em>
                   </div>

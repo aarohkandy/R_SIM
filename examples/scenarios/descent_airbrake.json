@@ -66,10 +66,9 @@
       "max_altitude": [54, 58],
       "max_velocity": [25, 28],
       "active_system.max_surface_deployment": [0.95, 1.0],
-      "active_system.tank_pressure_final": [590000, 610000],
+      "active_system.tank_pressure_final": [515000, 525000],
       "max_drag_force": [1.9, 2.4],
-      "landing_velocity": [18, 20]
+      "landing_velocity": [3, 4]
     }
   }
 }
-

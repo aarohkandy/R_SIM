@@ -597,9 +597,31 @@ button:focus-visible {
   background: rgba(31, 143, 95, 0.1);
 }
 
+.check-row.error span {
+  color: var(--bad);
+  background: rgba(186, 45, 45, 0.1);
+}
+
 .check-row.warn span {
   color: var(--warn);
   background: rgba(194, 123, 31, 0.1);
+}
+
+.check-row.info span {
+  color: #3471a8;
+  background: rgba(52, 113, 168, 0.1);
+}
+
+.check-row.error {
+  border-color: rgba(186, 45, 45, 0.32);
+}
+
+.check-row.warn {
+  border-color: rgba(194, 123, 31, 0.32);
+}
+
+.check-row.info {
+  border-color: rgba(52, 113, 168, 0.28);
 }
 
 .check-row strong {
@@ -940,6 +962,58 @@ button:focus-visible {
   grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
   gap: 6px;
+}
+
+.field.has-error input,
+.field.has-error select {
+  border-color: rgba(186, 45, 45, 0.72);
+  background: rgba(186, 45, 45, 0.05);
+}
+
+.field.has-warn input,
+.field.has-warn select {
+  border-color: rgba(194, 123, 31, 0.62);
+  background: rgba(194, 123, 31, 0.05);
+}
+
+.field.has-info input,
+.field.has-info select {
+  border-color: rgba(52, 113, 168, 0.48);
+  background: rgba(52, 113, 168, 0.05);
+}
+
+.field-messages {
+  display: grid;
+  gap: 4px;
+}
+
+.field-message,
+.toggle-message {
+  border-radius: 6px;
+  padding: 6px 7px;
+  font-size: 11px;
+  line-height: 1.25;
+  font-weight: 700;
+}
+
+.field-message.error {
+  color: var(--bad);
+  background: rgba(186, 45, 45, 0.08);
+}
+
+.field-message.warn,
+.toggle-message {
+  color: #805111;
+  background: rgba(194, 123, 31, 0.09);
+}
+
+.field-message.info {
+  color: #2d5f8b;
+  background: rgba(52, 113, 168, 0.09);
+}
+
+.toggle-message {
+  margin: -4px 0 9px;
 }
 
 .field-control .unit {
