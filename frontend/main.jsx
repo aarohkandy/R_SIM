@@ -159,6 +159,10 @@ const defaultConfig = {
   humidity: 45,
   windSpeed: 2.5,
   windDirection: 20,
+  launchGuideLength: 2.0,
+  launchGuideAngle: 0,
+  launchGuideDirection: 0,
+  minRailExitVelocity: 12,
   timeStep: 0.02,
   maxTime: 55,
   solverType: 'pimpleFoam',
@@ -445,6 +449,59 @@ const getActiveEnvelope = (metrics, config) => {
     deployedArea,
     cdIncrement,
     maxDynamicPressure: numberValue(active.maxDynamicPressure, 0)
+  };
+};
+
+const impulseClasses = [
+  { label: '1/4A', max: 0.625 },
+  { label: '1/2A', max: 1.25 },
+  { label: 'A', max: 2.5 },
+  { label: 'B', max: 5 },
+  { label: 'C', max: 10 },
+  { label: 'D', max: 20 },
+  { label: 'E', max: 40 },
+  { label: 'F', max: 80 },
+  { label: 'G', max: 160 },
+  { label: 'H', max: 320 },
+  { label: 'I', max: 640 },
+  { label: 'J', max: 1280 },
+  { label: 'K', max: 2560 },
+  { label: 'L', max: 5120 },
+  { label: 'M', max: 10240 }
+];
+
+const getImpulseClass = (impulse) => {
+  const totalImpulse = numberValue(impulse, 0);
+  const found = impulseClasses.find((item) => totalImpulse <= item.max);
+  return found?.label || 'N+';
+};
+
+const getLaunchGuideAnalysis = (metrics, config) => {
+  const motor = metrics.motor || {};
+  const massKg = Math.max(metrics.mass / 1000, 0.001);
+  const burnTime = Math.max(numberValue(motor.motorBurnTime, 0), 0.001);
+  const averageThrust = Math.max(
+    numberValue(motor.motorThrust, 0),
+    numberValue(motor.motorTotalImpulse, 0) / burnTime
+  );
+  const guideLength = Math.max(numberValue(config.launchGuideLength, 1.5), 0);
+  const guideAngle = clamp(numberValue(config.launchGuideAngle, 0), 0, 30);
+  const acceleration = Math.max((averageThrust / massKg) - (9.80665 * Math.cos((guideAngle * Math.PI) / 180)), 0);
+  const exitVelocity = acceleration > 0 ? Math.sqrt(2 * acceleration * guideLength) : 0;
+  const exitTime = acceleration > 0 ? exitVelocity / acceleration : null;
+  const safeVelocity = numberValue(config.minRailExitVelocity, 12);
+  return {
+    averageThrust,
+    totalImpulse: numberValue(motor.motorTotalImpulse, 0),
+    impulseClass: getImpulseClass(motor.motorTotalImpulse),
+    guideLength,
+    guideAngle,
+    exitVelocity,
+    exitTime,
+    safeVelocity,
+    windRatio: exitVelocity > 0 ? numberValue(config.windSpeed, 0) / exitVelocity : Infinity,
+    burnFraction: exitTime && burnTime > 0 ? exitTime / burnTime : null,
+    ok: exitVelocity >= safeVelocity
   };
 };
 
@@ -845,6 +902,7 @@ function DesignAnalysis({ metrics, massBreakdown, config }) {
   const cgCpSeparation = metrics.cp - metrics.cg;
   const landingSizing = getLandingSizing(metrics, config);
   const activeEnvelope = getActiveEnvelope(metrics, config);
+  const guideAnalysis = getLaunchGuideAnalysis(metrics, config);
   const stabilityState = metrics.stability < 1
     ? { label: 'Low', tone: 'bad' }
     : metrics.stability > 3.5
@@ -903,6 +961,14 @@ function DesignAnalysis({ metrics, massBreakdown, config }) {
         <div>
           <span>Active deployed area</span>
           <strong>{formatNumber(activeEnvelope.deployedArea, 4)} m2</strong>
+        </div>
+        <div>
+          <span>Guide exit velocity</span>
+          <strong>{formatNumber(guideAnalysis.exitVelocity, 2)} m/s</strong>
+        </div>
+        <div>
+          <span>Motor impulse class</span>
+          <strong>{guideAnalysis.impulseClass} / {formatNumber(guideAnalysis.totalImpulse, 1)} Ns</strong>
         </div>
       </div>
       <div className="mass-breakdown" aria-label="Mass breakdown">
@@ -1049,8 +1115,9 @@ function MotorBrowser({ motors, loading, error, query, setQuery, addMotor }) {
   );
 }
 
-function FlightSetup({ config, setConfig, launchSites, applyLaunchSite }) {
+function FlightSetup({ config, setConfig, launchSites, applyLaunchSite, metrics }) {
   const set = (key, value) => setConfig((current) => ({ ...current, [key]: value }));
+  const guide = getLaunchGuideAnalysis(metrics, config);
   return (
     <div className="inspector-scroll">
       <div className="panel-copy">
@@ -1074,6 +1141,10 @@ function FlightSetup({ config, setConfig, launchSites, applyLaunchSite }) {
         <Field label="Pressure" value={config.pressure} unit="Pa" onChange={(value) => set('pressure', value)} />
         <Field label="Wind speed" value={config.windSpeed} unit="m/s" step="0.1" onChange={(value) => set('windSpeed', value)} />
         <Field label="Wind direction" value={config.windDirection} unit="deg" onChange={(value) => set('windDirection', value)} />
+        <Field label="Guide length" value={config.launchGuideLength} unit="m" step="0.1" onChange={(value) => set('launchGuideLength', value)} />
+        <Field label="Guide angle" value={config.launchGuideAngle} unit="deg" step="0.5" onChange={(value) => set('launchGuideAngle', value)} />
+        <Field label="Guide direction" value={config.launchGuideDirection} unit="deg" onChange={(value) => set('launchGuideDirection', value)} />
+        <Field label="Min guide speed" value={config.minRailExitVelocity} unit="m/s" step="0.5" onChange={(value) => set('minRailExitVelocity', value)} />
         <Field label="Time step" value={config.timeStep} unit="s" step="0.005" onChange={(value) => set('timeStep', value)} />
         <Field label="Max time" value={config.maxTime} unit="s" onChange={(value) => set('maxTime', value)} />
         <Field
@@ -1092,6 +1163,17 @@ function FlightSetup({ config, setConfig, launchSites, applyLaunchSite }) {
           unit="m"
           onChange={(value) => setConfig((current) => ({ ...current, controller: { ...current.controller, targetApogee: value } }))}
         />
+      </div>
+      <div className="sizing-card">
+        <div className="comparison-title">Launch guide</div>
+        <div className="sizing-grid">
+          <div><span>Exit velocity</span><strong>{formatNumber(guide.exitVelocity, 2)} m/s</strong></div>
+          <div><span>Status</span><strong>{guide.ok ? 'Safe' : 'Slow'}</strong></div>
+          <div><span>Clear time</span><strong>{guide.exitTime === null ? '--' : `${formatNumber(guide.exitTime, 2)} s`}</strong></div>
+          <div><span>Burn at clear</span><strong>{guide.burnFraction === null ? '--' : `${formatNumber(guide.burnFraction * 100, 0)}%`}</strong></div>
+          <div><span>Wind / exit</span><strong>{formatNumber(guide.windRatio * 100, 0)}%</strong></div>
+          <div><span>Impulse class</span><strong>{guide.impulseClass}</strong></div>
+        </div>
       </div>
     </div>
   );
@@ -1228,6 +1310,7 @@ function ResultsPanel({
   const activeHistory = data?.active_system?.history || [];
   const landingHistory = data?.landing_system?.history || [];
   const touchdown = data?.landing_system;
+  const launchGuide = data?.launch_guide;
   const events = data?.flight_events || [];
   const apogeeTrim = comparisonData ? comparisonData.max_altitude - data.max_altitude : null;
   const touchdownDelta = comparisonData ? comparisonData.landing_velocity - data.landing_velocity : null;
@@ -1284,6 +1367,7 @@ function ResultsPanel({
         <div className="metric-box"><span>Touchdown</span><strong>{formatNumber(data.landing_velocity, 2)} m/s</strong></div>
         <div className="metric-box"><span>Status</span><strong>{touchdown?.touchdown_status || 'n/a'}</strong></div>
         <div className="metric-box"><span>Downrange</span><strong>{formatNumber(data.downrange_distance, 1)} m</strong></div>
+        <div className="metric-box"><span>Guide exit</span><strong>{formatNumber(launchGuide?.simulated_exit_velocity_mps ?? launchGuide?.estimated_exit_velocity_mps, 2)} m/s</strong></div>
         <div className="metric-box"><span>Stability</span><strong>{formatNumber(metrics.stability, 2)} cal</strong></div>
       </div>
       {comparisonData && (
@@ -1424,6 +1508,7 @@ function App() {
   const massBreakdown = useMemo(() => getMassBreakdown(components), [components]);
   const landingSizing = useMemo(() => getLandingSizing(metrics, config), [metrics, config]);
   const activeEnvelope = useMemo(() => getActiveEnvelope(metrics, config), [metrics, config]);
+  const guideAnalysis = useMemo(() => getLaunchGuideAnalysis(metrics, config), [metrics, config]);
   const selectedComponent = components.find((component) => component.id === selectedId);
 
   const staleResults = () => {
@@ -1855,6 +1940,11 @@ function App() {
       detail: `${formatNumber(metrics.thrustToWeight, 2)} T/W`
     },
     {
+      label: 'Guide exit',
+      ok: guideAnalysis.ok,
+      detail: `${formatNumber(guideAnalysis.exitVelocity, 2)} / ${formatNumber(guideAnalysis.safeVelocity, 1)} m/s`
+    },
+    {
       label: 'Landing enabled',
       ok: config.landingSystem.enabled,
       detail: `${formatNumber(config.landingSystem.deployAltitude, 0)} m deploy`
@@ -1883,7 +1973,7 @@ function App() {
         addMotor={addMotor}
       />
     ),
-    flight: <FlightSetup config={config} setConfig={setConfigAndInvalidate} launchSites={launchSites} applyLaunchSite={applyLaunchSite} />,
+    flight: <FlightSetup config={config} setConfig={setConfigAndInvalidate} launchSites={launchSites} applyLaunchSite={applyLaunchSite} metrics={metrics} />,
     active: <ActiveSetup config={config} setConfig={setConfigAndInvalidate} syncAirbrake={syncAirbrake} />,
     landing: <LandingSetup config={config} setConfig={setConfigAndInvalidate} syncLanding={syncLanding} metrics={metrics} />,
     results: (

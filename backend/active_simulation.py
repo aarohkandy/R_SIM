@@ -175,6 +175,25 @@ class ActiveSimulationManager:
             if target_apogee <= 0:
                 errors.append("Target apogee must be positive.")
 
+        guide_length = self._as_float(
+            self._first_value(config, ["launchGuideLength", "launchRodLength", "railLength"], 1.5),
+            1.5,
+        )
+        guide_angle = self._as_float(
+            self._first_value(config, ["launchGuideAngle", "launchAngle", "railAngle"], 0.0),
+            0.0,
+        )
+        min_exit_velocity = self._as_float(
+            self._first_value(config, ["minRailExitVelocity", "minGuideExitVelocity"], 12.0),
+            12.0,
+        )
+        if guide_length <= 0:
+            errors.append("Launch guide length must be positive.")
+        if guide_angle < 0 or guide_angle > 30:
+            errors.append("Launch guide angle must be between 0 and 30 degrees.")
+        if min_exit_velocity <= 0:
+            errors.append("Minimum launch guide exit velocity must be positive.")
+
         landing = config.get("landingSystem") or config.get("recoverySystem") or {}
         landing_enabled = self._as_bool(landing.get("enabled"), True)
         if landing_enabled:
@@ -249,6 +268,12 @@ class ActiveSimulationManager:
         wind_direction_rad = math.radians(self._as_float(config.get("windDirection") or config.get("wind_direction"), 0.0))
         wind_x = wind_speed * math.cos(wind_direction_rad)
         wind_y = wind_speed * math.sin(wind_direction_rad)
+        launch_guide = self._build_launch_guide_config(config, mass_kg, thrust_n, burn_time_s)
+        launch_angle_rad = math.radians(launch_guide["angle_deg"])
+        launch_direction_rad = math.radians(launch_guide["direction_deg"])
+        launch_axis_x = math.sin(launch_angle_rad) * math.cos(launch_direction_rad)
+        launch_axis_y = math.sin(launch_angle_rad) * math.sin(launch_direction_rad)
+        launch_axis_z = math.cos(launch_angle_rad)
 
         dt = self._clamp(self._as_float(config.get("timeStep") or config.get("time_step"), 0.02), 0.005, 0.1)
         max_time = self._clamp(self._as_float(config.get("maxTime") or config.get("max_time"), 45.0), 3.0, 180.0)
@@ -295,6 +320,9 @@ class ActiveSimulationManager:
         apogee_time = 0.0
         landing_velocity = 0.0
         touchdown_time = None
+        guide_clear_time = None
+        guide_exit_velocity = None
+        guide_clear_altitude = None
         trajectory = []
         active_history = []
         landing_history = []
@@ -388,10 +416,13 @@ class ActiveSimulationManager:
             drag_x = drag_force * (speed_air_x / max(speed_air, 0.1))
             drag_y = drag_force * (speed_air_y / max(speed_air, 0.1))
             thrust = self._thrust_at_time(t, thrust_curve, thrust_n, burn_time_s)
+            thrust_x = thrust * launch_axis_x
+            thrust_y = thrust * launch_axis_y
+            thrust_z = thrust * launch_axis_z
             weight_force = mass_kg * gravity
-            accel_z = (thrust - mass_kg * gravity - drag_z) / mass_kg
-            accel_x = -drag_x / mass_kg
-            accel_y = -drag_y / mass_kg
+            accel_z = (thrust_z - mass_kg * gravity - drag_z) / mass_kg
+            accel_x = (thrust_x - drag_x) / mass_kg
+            accel_y = (thrust_y - drag_y) / mass_kg
             net_force_x = accel_x * mass_kg
             net_force_y = accel_y * mass_kg
             net_force_z = accel_z * mass_kg
@@ -416,6 +447,16 @@ class ActiveSimulationManager:
             x += vx * dt
             y += vy * dt
             prev_accel_z = accel_z
+            if guide_clear_time is None:
+                guide_distance = (
+                    x * launch_axis_x
+                    + y * launch_axis_y
+                    + max(0.0, altitude - launch_altitude_m) * launch_axis_z
+                )
+                if guide_distance >= launch_guide["length_m"]:
+                    guide_clear_time = t
+                    guide_exit_velocity = max(0.0, vx * launch_axis_x + vy * launch_axis_y + velocity_z * launch_axis_z)
+                    guide_clear_altitude = altitude
 
             if altitude >= max_altitude:
                 max_altitude = altitude
@@ -460,6 +501,9 @@ class ActiveSimulationManager:
                     "drag_force_y": round(-drag_y, 4),
                     "drag_force_z": round(-drag_z, 4),
                     "thrust_force": round(thrust, 4),
+                    "thrust_force_x": round(thrust_x, 4),
+                    "thrust_force_y": round(thrust_y, 4),
+                    "thrust_force_z": round(thrust_z, 4),
                     "weight_force": round(weight_force, 4),
                     "net_force_x": round(net_force_x, 4),
                     "net_force_y": round(net_force_y, 4),
@@ -532,6 +576,8 @@ class ActiveSimulationManager:
             warnings.append("Dynamic pressure exceeded configured active-system structural limit.")
         if landing["enabled"] and not landing_deployed:
             warnings.append("Landing system did not deploy before touchdown; raise max time or deploy altitude.")
+        if launch_guide["estimated_exit_velocity_mps"] < launch_guide["min_exit_velocity_mps"]:
+            warnings.append("Estimated launch guide exit velocity is below configured minimum.")
 
         total_time = max(t, burn_time_s)
         if touchdown_time is None and altitude <= 0.0:
@@ -582,6 +628,13 @@ class ActiveSimulationManager:
             "trajectory_data": "time_history_included",
             "trajectory": trajectory,
             "flight_events": flight_events,
+            "launch_guide": {
+                **launch_guide,
+                "simulated_exit_velocity_mps": guide_exit_velocity,
+                "clear_time_s": guide_clear_time,
+                "clear_altitude_m": guide_clear_altitude,
+                "status": "safe" if launch_guide["estimated_exit_velocity_mps"] >= launch_guide["min_exit_velocity_mps"] else "slow",
+            },
             "force_history": force_history,
             "moment_history": moment_history,
             "active_system": {
@@ -715,6 +768,39 @@ class ActiveSimulationManager:
             "base_cd": self._as_float(aero.get("baseDragCoefficient"), base_cd),
             "active_drag_table": table,
             "active_drag_model": "table" if table else "surface_area",
+        }
+
+    def _build_launch_guide_config(self, config: Dict, mass_kg: float, thrust_n: float, burn_time_s: float) -> Dict:
+        length_m = self._as_float(
+            self._first_value(config, ["launchGuideLength", "launchRodLength", "railLength"], 1.5),
+            1.5,
+        )
+        angle_deg = self._clamp(
+            self._as_float(self._first_value(config, ["launchGuideAngle", "launchAngle", "railAngle"], 0.0), 0.0),
+            0.0,
+            30.0,
+        )
+        direction_deg = self._as_float(
+            self._first_value(config, ["launchGuideDirection", "launchDirection", "railDirection"], 0.0),
+            0.0,
+        ) % 360
+        min_exit_velocity = self._as_float(
+            self._first_value(config, ["minRailExitVelocity", "minGuideExitVelocity"], 12.0),
+            12.0,
+        )
+        gravity_component = 9.80665 * math.cos(math.radians(angle_deg))
+        average_accel = max((thrust_n / max(mass_kg, 0.001)) - gravity_component, 0.0)
+        estimated_exit_velocity = math.sqrt(2.0 * average_accel * max(length_m, 0.0)) if average_accel > 0 else 0.0
+        estimated_clear_time = estimated_exit_velocity / average_accel if average_accel > 0 else None
+        return {
+            "length_m": length_m,
+            "angle_deg": angle_deg,
+            "direction_deg": direction_deg,
+            "min_exit_velocity_mps": min_exit_velocity,
+            "estimated_exit_velocity_mps": estimated_exit_velocity,
+            "estimated_clear_time_s": estimated_clear_time,
+            "average_acceleration_mps2": average_accel,
+            "burn_fraction_at_clear": (estimated_clear_time / burn_time_s) if estimated_clear_time and burn_time_s > 0 else None,
         }
 
     def _parse_active_drag_table(self, raw_table) -> List[Dict[str, float]]:

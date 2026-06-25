@@ -223,6 +223,36 @@ class ActiveSimulationTests(unittest.TestCase):
         self.assertFalse(result["success"])
         self.assertIn("Landing drag area must be positive.", result["validation_errors"])
 
+    def test_launch_guide_outputs_exit_velocity_and_tilted_downrange(self):
+        config = base_config()
+        config["launchGuideLength"] = 1.8
+        config["launchGuideAngle"] = 7
+        config["launchGuideDirection"] = 45
+        config["minRailExitVelocity"] = 4
+        manager = ActiveSimulationManager()
+        result = manager.submit_cfd_simulation(sample_rocket(), config)["results"]
+        guide = result["launch_guide"]
+
+        self.assertEqual(guide["angle_deg"], 7)
+        self.assertGreater(guide["estimated_exit_velocity_mps"], 0)
+        self.assertGreater(guide["simulated_exit_velocity_mps"], 0)
+        self.assertEqual(guide["status"], "safe")
+        self.assertGreater(result["downrange_distance"], 0.1)
+        self.assertIn("thrust_force_x", result["trajectory"][0])
+
+    def test_invalid_launch_guide_is_rejected(self):
+        config = base_config()
+        config["launchGuideLength"] = 0
+        config["launchGuideAngle"] = 45
+        config["minRailExitVelocity"] = 0
+        manager = ActiveSimulationManager()
+        result = manager.submit_cfd_simulation(sample_rocket(), config)
+
+        self.assertFalse(result["success"])
+        self.assertIn("Launch guide length must be positive.", result["validation_errors"])
+        self.assertIn("Launch guide angle must be between 0 and 30 degrees.", result["validation_errors"])
+        self.assertIn("Minimum launch guide exit velocity must be positive.", result["validation_errors"])
+
     def test_flight_events_include_active_and_landing_milestones(self):
         manager = ActiveSimulationManager()
         result = manager.submit_cfd_simulation(sample_rocket(), base_config(target_apogee=35))["results"]
