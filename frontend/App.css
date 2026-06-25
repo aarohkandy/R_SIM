@@ -512,7 +512,8 @@ button:focus-visible {
 .rocket-part:hover,
 .rocket-part.selected,
 .motor-core.selected,
-.mass-marker.selected {
+.mass-marker.selected,
+.parachute-marker.selected {
   stroke: var(--accent);
   stroke-width: 3;
 }
@@ -561,6 +562,20 @@ button:focus-visible {
   stroke: #b56576;
   stroke-width: 1.2;
   stroke-dasharray: 4 4;
+  pointer-events: none;
+}
+
+.parachute-marker {
+  fill: #ef476f;
+  stroke: #8f1f3f;
+  stroke-width: 1.4;
+  cursor: pointer;
+}
+
+.parachute-shroud {
+  stroke: #8f1f3f;
+  stroke-width: 1;
+  stroke-dasharray: 3 3;
   pointer-events: none;
 }
 

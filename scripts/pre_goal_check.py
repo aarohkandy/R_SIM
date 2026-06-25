@@ -95,11 +95,15 @@ def main() -> int:
     require("getAttachmentHost(component, components)" in frontend_source, "Component table is missing subpart attachment visibility.")
     require("Mass Component" in frontend_source, "Frontend is missing internal payload/ballast mass components.")
     require("mass-marker" in frontend_source and "mass-marker" in frontend_style, "Rocket drawing is missing internal mass markers.")
+    require("Parachute" in frontend_source, "Frontend is missing explicit recovery parachute components.")
+    require("parachute-marker" in frontend_source and "parachute-marker" in frontend_style, "Rocket drawing is missing parachute recovery markers.")
     require("rail-button-dot" in frontend_style, "Rocket drawing does not render rail button placement.")
     require("position_m" in active_sim_source, "Backend CP contributions do not expose fin axial placement.")
     require("attachment must reference" in active_sim_source, "Backend does not reject invalid subpart attachment references.")
     require("mass component" in active_sim_source and "internal_component_types" in active_sim_source, "Backend does not treat mass components as internal geometry.")
+    require("_apply_recovery_components_to_config" in active_sim_source, "Backend does not derive landing config from parachute components.")
     require("masscomponent" in openrocket_source, "OpenRocket import does not preserve mass components.")
+    require("parachute" in openrocket_source, "OpenRocket import does not preserve parachute components.")
     require("Airbrake station" in frontend_source, "Frontend is missing active airbrake station controls.")
     require("active.locationFromNose" in frontend_source, "Frontend design checks do not target active airbrake station.")
     require("moment_arm_m" in active_sim_source, "Backend active system does not report active airbrake moment arm.")
@@ -141,6 +145,7 @@ def main() -> int:
       <bodytube><name>Body</name><length>0.560</length><outerRadius>0.020</outerRadius><mass>0.135</mass>
         <subcomponents>
           <masscomponent><name>Tracker Battery</name><mass>0.065</mass><position>0.240</position><role>battery</role></masscomponent>
+          <parachute><name>Main Parachute</name><mass>0.038</mass><diameter>0.550</diameter><cd>1.60</cd><deployAltitude>0.080</deployAltitude></parachute>
           <trapezoidfinset><name>Fins</name><finCount>3</finCount><rootChord>0.090</rootChord><height>0.055</height><mass>0.045</mass></trapezoidfinset>
           <motor><manufacturer>Estes</manufacturer><designation>Estes C6-5</designation><diameter>0.018</diameter><length>0.070</length><burnTime>1.600</burnTime><totalImpulse>10.000</totalImpulse><averageThrust>6.000</averageThrust><mass>0.017</mass></motor>
         </subcomponents>
@@ -160,8 +165,10 @@ def main() -> int:
     require(len(imported_components) >= 4, f"OpenRocket import returned too few components: {imported}")
     imported_motor = next((component for component in imported_components if component.get("type") == "Motor"), {})
     imported_mass = next((component for component in imported_components if component.get("type") == "Mass Component"), {})
+    imported_parachute = next((component for component in imported_components if component.get("type") == "Parachute"), {})
     require(len(imported_motor.get("thrustCurve", [])) > 5, f"Imported motor was not enriched with thrust curve: {imported_motor}")
     require(imported_mass.get("massRole") == "battery", f"Imported OpenRocket mass component was not preserved: {imported_components}")
+    require(imported_parachute.get("dragArea", 0) > 0.2, f"Imported OpenRocket parachute was not preserved: {imported_components}")
 
     controller_code = r"""
 ControlOutput control_function(SensorData sensor_data) {
@@ -219,12 +226,13 @@ ControlOutput control_function(SensorData sensor_data) {
                 "attachedToComponent": 2,
             },
             {"id": 5, "type": "Mass Component", "name": "Tracker Battery", "weight": 65, "massRole": "battery", "axialPosition": 240, "attachedToComponent": 2},
+            {"id": 6, "type": "Parachute", "name": "Prep Main Parachute", "weight": 38, "recoveryRole": "main", "deployEvent": "altitude", "deployAltitude": 80, "dragArea": 0.18, "dragCoefficient": 1.55, "maxOpeningLoadG": 15, "axialPosition": 240, "attachedToComponent": 2},
         ],
         "rocketSplitPoints": [
             {"id": "prep-split", "afterComponentId": "1", "label": "Payload split"},
         ],
-        "rocketWeight": 297,
-        "rocketCG": 302,
+        "rocketWeight": 335,
+        "rocketCG": 296,
         "totalHeight": 680,
         "simulationConfig": {
             "timeStep": 0.02,
@@ -314,6 +322,8 @@ ControlOutput control_function(SensorData sensor_data) {
     require(len(results.get("trajectory", [])) > 5, "Trajectory history is missing or too short.")
     require(len(results.get("force_history", [])) > 5, "Force history is missing or too short.")
     require(len(results.get("moment_history", [])) > 5, "Moment history is missing or too short.")
+    landing_system = results.get("landing_system") or {}
+    require(abs(landing_system.get("drag_area_m2", 0) - 0.18) < 1e-9, f"Parachute component did not drive landing drag area: {landing_system}")
     stage_splits = results.get("stage_splits") or []
     require(len(stage_splits) == 1, f"Stage split markers were not preserved: {stage_splits}")
     require(stage_splits[0].get("label") == "Payload split", f"Stage split label was not preserved: {stage_splits}")

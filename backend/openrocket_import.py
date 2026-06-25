@@ -34,6 +34,10 @@ MASS_COMPONENT_TAGS = {
     "payload",
 }
 
+RECOVERY_COMPONENT_TAGS = {
+    "parachute",
+}
+
 
 @dataclass
 class ImportedOpenRocket:
@@ -66,6 +70,10 @@ def parse_openrocket_design(payload: bytes, filename: str = "design.ork") -> Imp
             next_id += 1
         elif tag in MASS_COMPONENT_TAGS:
             component = _parse_mass_component(element, next_id, last_body_id)
+            components.append(component)
+            next_id += 1
+        elif tag in RECOVERY_COMPONENT_TAGS:
+            component = _parse_recovery_component(element, next_id, last_body_id)
             components.append(component)
             next_id += 1
 
@@ -195,6 +203,35 @@ def _parse_mass_component(element: ET.Element, component_id: int, attached_to: O
         "weight": mass,
         "massRole": _first_text(element, ["role", "type"]) or "payload",
         "axialPosition": axial_position,
+        "attachedToComponent": attached_to,
+        "importSource": "openrocket",
+    }
+
+
+def _parse_recovery_component(element: ET.Element, component_id: int, attached_to: Optional[int]) -> Dict:
+    name = _first_text(element, ["name"]) or "Imported Parachute"
+    mass = _mass_g(_numeric_child(element, ["mass", "massoverride", "componentmass"]))
+    diameter_mm = _length_mm(_numeric_child(element, ["diameter"]))
+    area = _numeric_child(element, ["dragarea", "area"])
+    if not area and diameter_mm > 0:
+        area = 3.141592653589793 * (diameter_mm / 2000.0) ** 2
+    cd = _numeric_child(element, ["cd", "dragcoefficient"]) or 1.55
+    role = _first_text(element, ["role"]) or ("drogue" if "drogue" in name.lower() else "main")
+    deploy_altitude = _length_mm(_numeric_child(element, ["deployaltitude", "deploymentaltitude", "altitude"]))
+
+    return {
+        "id": component_id,
+        "type": "Parachute",
+        "name": name,
+        "length": 0,
+        "diameter": 0,
+        "weight": mass,
+        "recoveryRole": "drogue" if str(role).lower() == "drogue" else "main",
+        "deployEvent": _first_text(element, ["deployevent", "deploymentevent"]) or ("apogee" if str(role).lower() == "drogue" else "altitude"),
+        "deployAltitude": deploy_altitude or 120.0,
+        "dragArea": round(area or 0.18, 4),
+        "dragCoefficient": cd,
+        "maxOpeningLoadG": _numeric_child(element, ["maxopeningloadg", "openingloadlimitg"]) or 15.0,
         "attachedToComponent": attached_to,
         "importSource": "openrocket",
     }

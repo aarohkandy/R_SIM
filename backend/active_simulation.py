@@ -24,9 +24,9 @@ class ActiveSimulationManager:
     """Runs deterministic local active pneumatic rocket simulations."""
 
     model_version = "active_pneumatic_local_dynamics_v1"
-    attachment_child_types = {"fins", "motor", "rail button", "mass component"}
+    attachment_child_types = {"fins", "motor", "rail button", "mass component", "parachute"}
     attachment_host_types = {"body tube", "transition", "electronics bay", "recovery bay", "active airbrake"}
-    internal_component_types = {"fins", "motor", "rail button", "mass component"}
+    internal_component_types = {"fins", "motor", "rail button", "mass component", "parachute"}
 
     def __init__(self):
         self.simulations: Dict[str, Dict] = {}
@@ -101,6 +101,7 @@ class ActiveSimulationManager:
         simulation_id = f"active_{uuid.uuid4().hex[:12]}"
         started_at = time.time()
         config = self._normalize_config(simulation_config)
+        config = self._apply_recovery_components_to_config(rocket_data, config)
         validation = self.validate_inputs(rocket_data, config)
         if validation["errors"]:
             return {
@@ -133,6 +134,43 @@ class ActiveSimulationManager:
         if is_dataclass(simulation_config):
             return asdict(simulation_config)
         return simulation_config or {}
+
+    def _apply_recovery_components_to_config(self, rocket_data: Dict, config: Dict) -> Dict:
+        components = rocket_data.get("components", [])
+        parachutes = [
+            component for component in components
+            if isinstance(component, dict) and str(component.get("type", "")).lower() == "parachute"
+        ]
+        if not parachutes:
+            return config
+
+        def role(component: Dict) -> str:
+            raw = self._first_value(component, ["recoveryRole", "role"], "main")
+            return "drogue" if str(raw).lower() == "drogue" else "main"
+
+        landing = dict(config.get("landingSystem") or config.get("recoverySystem") or {})
+        main = next((component for component in parachutes if role(component) == "main"), parachutes[0])
+        drogue = next((component for component in parachutes if role(component) == "drogue"), None)
+        landing.update({
+            "enabled": True,
+            "type": "drogue_main" if drogue else "main_parachute",
+            "mainDeployEvent": self._first_value(main, ["deployEvent", "deploymentEvent", "mainDeployEvent"], landing.get("mainDeployEvent", "altitude")),
+            "deployAltitude": self._first_value(main, ["deployAltitude", "deploymentAltitude"], landing.get("deployAltitude", 120.0)),
+            "dragArea": self._first_value(main, ["dragArea", "area"], landing.get("dragArea", 0.18)),
+            "dragCoefficient": self._first_value(main, ["dragCoefficient", "cd"], landing.get("dragCoefficient", 1.55)),
+            "maxOpeningLoadG": self._first_value(main, ["maxOpeningLoadG", "openingLoadLimitG"], landing.get("maxOpeningLoadG", 15.0)),
+        })
+        if drogue:
+            landing.update({
+                "drogueDeployEvent": self._first_value(drogue, ["deployEvent", "deploymentEvent", "drogueDeployEvent"], landing.get("drogueDeployEvent", "apogee")),
+                "drogueDeployAltitude": self._first_value(drogue, ["deployAltitude", "deploymentAltitude"], landing.get("drogueDeployAltitude", landing["deployAltitude"])),
+                "drogueDragArea": self._first_value(drogue, ["dragArea", "area"], landing.get("drogueDragArea", 0.04)),
+                "drogueDragCoefficient": self._first_value(drogue, ["dragCoefficient", "cd"], landing.get("drogueDragCoefficient", 1.25)),
+            })
+        return {
+            **config,
+            "landingSystem": landing,
+        }
 
     def validate_inputs(self, rocket_data: Dict, config: Dict) -> Dict[str, List[str]]:
         errors: List[str] = []
@@ -190,27 +228,46 @@ class ActiveSimulationManager:
             component for component in components
             if str(component.get("type", "")).lower() in self.attachment_host_types
         ]
+        valid_recovery_events = {"apogee", "altitude", "motor_ejection"}
         for component in components:
             if not isinstance(component, dict):
                 continue
             component_type = str(component.get("type", "")).lower()
-            if component_type not in self.attachment_child_types:
-                continue
-            attached_to = self._first_value(
-                component,
-                ["attachedToComponent", "attached_to_component", "attached_to"],
-                None,
-            )
             name = component.get("name") or component.get("type") or "Subpart"
-            if attached_to in (None, ""):
-                if attachment_hosts:
-                    warnings.append(f"{name} is not attached to a structural airframe host.")
-                else:
-                    errors.append(f"{name} needs a body tube, transition, or bay attachment host.")
-                continue
-            host = components_by_id.get(str(attached_to))
-            if host is None or str(host.get("type", "")).lower() not in self.attachment_host_types:
-                errors.append(f"{name} attachment must reference a body tube, transition, electronics bay, recovery bay, or active airbrake.")
+            if component_type in self.attachment_child_types:
+                attached_to = self._first_value(
+                    component,
+                    ["attachedToComponent", "attached_to_component", "attached_to"],
+                    None,
+                )
+                if attached_to in (None, ""):
+                    if attachment_hosts:
+                        warnings.append(f"{name} is not attached to a structural airframe host.")
+                    else:
+                        errors.append(f"{name} needs a body tube, transition, or bay attachment host.")
+                    continue
+                host = components_by_id.get(str(attached_to))
+                if host is None or str(host.get("type", "")).lower() not in self.attachment_host_types:
+                    errors.append(f"{name} attachment must reference a body tube, transition, electronics bay, recovery bay, or active airbrake.")
+            if component_type == "parachute":
+                deploy_event = self._normalize_deploy_event(
+                    self._first_value(component, ["deployEvent", "deploymentEvent"], "altitude"),
+                    "altitude",
+                )
+                if deploy_event not in valid_recovery_events:
+                    errors.append(f"{name} deploy event must be apogee, altitude, or motor_ejection.")
+                if deploy_event == "altitude":
+                    deploy_altitude = self._as_float(self._first_value(component, ["deployAltitude", "deploymentAltitude"], 0.0), 0.0)
+                    if deploy_altitude <= 0:
+                        errors.append(f"{name} deploy altitude must be positive.")
+                if deploy_event == "motor_ejection" and motor_delay <= 0:
+                    warnings.append(f"{name} uses motor ejection but motor delay is not set.")
+                if self._as_float(self._first_value(component, ["dragArea", "area"], 0.0), 0.0) <= 0:
+                    errors.append(f"{name} drag area must be positive.")
+                if self._as_float(self._first_value(component, ["dragCoefficient", "cd"], 0.0), 0.0) <= 0:
+                    errors.append(f"{name} drag coefficient must be positive.")
+                if self._as_float(self._first_value(component, ["maxOpeningLoadG", "openingLoadLimitG"], 15.0), 15.0) <= 0:
+                    errors.append(f"{name} opening load limit must be positive.")
 
         dt_raw = self._as_float(config.get("timeStep") or config.get("time_step"), 0.02)
         max_time_raw = self._as_float(config.get("maxTime") or config.get("max_time"), 45.0)

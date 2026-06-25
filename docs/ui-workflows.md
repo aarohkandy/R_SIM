@@ -11,6 +11,7 @@
 - Let users set axial placement for fins, motors, and rail buttons, and reflect those positions in drawing, mass, and CP analysis.
 - Let users choose the airframe host for fins, motors, and rail buttons, and show that attachment in the component table.
 - Let users add payload, avionics, battery, ballast, and recovery-hardware mass components with editable station, host, role, and mass.
+- Let users add main and drogue parachutes as attached recovery components, then edit deployment event, altitude, drag area, Cd, and opening-load limits from the component inspector.
 - Let users add and remove split markers only between structural parts, with red markers in both the design tree and rocket side view.
 - Let users set the active airbrake force station and see its moment arm against CG before and after simulation.
 - Provide a built-in active demo rocket and accept full scenario JSON files with both `rocketData` and `simulationConfig`.

@@ -119,6 +119,23 @@ class OpenRocketImportTests(unittest.TestCase):
         self.assertEqual(mass_component["massRole"], "battery")
         self.assertEqual(mass_component["attachedToComponent"], body["id"])
 
+    def test_parse_openrocket_parachute_component(self):
+        xml = SAMPLE_OPENROCKET_XML.replace(
+            b"<trapezoidfinset>",
+            b"<parachute><name>Main Parachute</name><mass>0.038</mass><diameter>0.550</diameter><cd>1.60</cd><deployAltitude>0.120</deployAltitude></parachute><trapezoidfinset>",
+        )
+        imported = parse_openrocket_design(xml, "recovery.ork")
+        parachute = next(component for component in imported.rocket_data["components"] if component["type"] == "Parachute")
+        body = next(component for component in imported.rocket_data["components"] if component["type"] == "Body Tube")
+
+        self.assertEqual(parachute["name"], "Main Parachute")
+        self.assertEqual(parachute["recoveryRole"], "main")
+        self.assertEqual(parachute["deployEvent"], "altitude")
+        self.assertAlmostEqual(parachute["deployAltitude"], 120.0)
+        self.assertAlmostEqual(parachute["dragCoefficient"], 1.6)
+        self.assertGreater(parachute["dragArea"], 0.2)
+        self.assertEqual(parachute["attachedToComponent"], body["id"])
+
     def test_import_endpoint_rejects_non_openrocket_extension(self):
         client = app.test_client()
         response = client.post(

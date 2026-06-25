@@ -42,7 +42,8 @@ const componentColor = {
   Motor: '#343a40',
   'Landing System': '#7b61ff',
   'Rail Button': '#6c757d',
-  'Mass Component': '#b56576'
+  'Mass Component': '#b56576',
+  Parachute: '#ef476f'
 };
 
 const componentDefaults = {
@@ -159,6 +160,20 @@ const componentDefaults = {
     weight: 75,
     massRole: 'payload',
     material: 'internal'
+  },
+  Parachute: {
+    type: 'Parachute',
+    name: 'Main parachute',
+    length: 0,
+    diameter: 0,
+    weight: 38,
+    recoveryRole: 'main',
+    deployEvent: 'altitude',
+    deployAltitude: 120,
+    dragArea: 0.24,
+    dragCoefficient: 1.55,
+    maxOpeningLoadG: 15,
+    material: 'ripstop nylon'
   }
 };
 
@@ -180,6 +195,7 @@ const defaultControllerCode = `ControlOutput control_function(SensorData sensor_
 const defaultComponents = [
   { ...componentDefaults['Nose Cone'], id: 'nose-1' },
   { ...componentDefaults['Recovery Bay'], id: 'recovery-1' },
+  { ...componentDefaults.Parachute, id: 'parachute-1', attachedToComponent: 'recovery-1', axialPosition: 210 },
   { ...componentDefaults['Landing System'], id: 'landing-1' },
   { ...componentDefaults['Body Tube'], id: 'tube-1', name: 'Forward airframe', length: 360, weight: 110 },
   { ...componentDefaults['Electronics Bay'], id: 'avbay-1' },
@@ -345,14 +361,14 @@ const componentMass = (component) => {
 
 const getDiameter = (component) => numberValue(component.diameter ?? component.bottomDiameter ?? component.topDiameter, 0);
 
-const internalMassTypes = new Set(['Mass Component']);
+const internalMassTypes = new Set(['Mass Component', 'Parachute']);
 
 const getStructuralLength = (components) => components
   .filter((component) => structuralTypes.has(component.type) && component.type !== 'Rail Button')
   .reduce((sum, component) => sum + Math.max(0, numberValue(component.length)), 0);
 
-const positionalTypes = new Set(['Fins', 'Motor', 'Rail Button', 'Mass Component']);
-const attachmentChildTypes = new Set(['Fins', 'Motor', 'Rail Button', 'Mass Component']);
+const positionalTypes = new Set(['Fins', 'Motor', 'Rail Button', 'Mass Component', 'Parachute']);
+const attachmentChildTypes = new Set(['Fins', 'Motor', 'Rail Button', 'Mass Component', 'Parachute']);
 const attachmentHostTypes = new Set(['Body Tube', 'Transition', 'Electronics Bay', 'Recovery Bay', 'Active Airbrake']);
 
 const normalizeAttachmentId = (value) => (value === null || value === undefined ? '' : String(value));
@@ -391,6 +407,9 @@ const getComponentAxialPosition = (component, totalLength) => {
   }
   if (component.type === 'Mass Component') {
     return clamp(totalLength * 0.45, 0, totalLength);
+  }
+  if (component.type === 'Parachute') {
+    return clamp(totalLength * 0.2, 0, totalLength);
   }
   return 0;
 };
@@ -577,6 +596,8 @@ const getMetrics = (components) => {
       position = getComponentAxialPosition(component, totalLength);
     } else if (component.type === 'Mass Component') {
       position = getComponentAxialPosition(component, totalLength);
+    } else if (component.type === 'Parachute') {
+      position = getComponentAxialPosition(component, totalLength);
     } else {
       const segment = structural.find((item) => item.id === component.id);
       if (segment) position = segment.start + segment.length / 2;
@@ -617,7 +638,7 @@ const massGroups = [
   { key: 'motor', label: 'Motor', color: '#343a40', types: ['Motor'] },
   { key: 'payload', label: 'Payload and ballast', color: '#b56576', types: ['Mass Component'] },
   { key: 'active', label: 'Active control', color: '#f2a541', types: ['Active Airbrake'] },
-  { key: 'landing', label: 'Landing', color: '#7b61ff', types: ['Landing System'] }
+  { key: 'landing', label: 'Landing', color: '#7b61ff', types: ['Landing System', 'Parachute'] }
 ];
 
 const getMassBreakdown = (components) => {
@@ -729,6 +750,36 @@ const recoveryEventDetail = (event, altitude) => (
     ? `${formatNumber(altitude, 0)} m on descent`
     : recoveryEventLabel(event)
 );
+
+const getParachuteRole = (component) => (
+  String(component.recoveryRole || component.role || 'main').toLowerCase() === 'drogue' ? 'drogue' : 'main'
+);
+
+const getRecoveryDevices = (components) => components.filter((component) => component.type === 'Parachute');
+
+const buildLandingSystemFromRecoveryDevices = (components, currentLanding) => {
+  const devices = getRecoveryDevices(components);
+  if (!devices.length) return currentLanding;
+  const main = devices.find((component) => getParachuteRole(component) === 'main') || devices[0];
+  const drogue = devices.find((component) => getParachuteRole(component) === 'drogue');
+  const next = {
+    ...currentLanding,
+    enabled: true,
+    type: drogue ? 'drogue_main' : 'main_parachute',
+    mainDeployEvent: main.deployEvent || currentLanding.mainDeployEvent || 'altitude',
+    deployAltitude: numberValue(main.deployAltitude, currentLanding.deployAltitude),
+    dragArea: numberValue(main.dragArea, currentLanding.dragArea),
+    dragCoefficient: numberValue(main.dragCoefficient, currentLanding.dragCoefficient),
+    maxOpeningLoadG: numberValue(main.maxOpeningLoadG, currentLanding.maxOpeningLoadG)
+  };
+  if (drogue) {
+    next.drogueDeployEvent = drogue.deployEvent || currentLanding.drogueDeployEvent || 'apogee';
+    next.drogueDeployAltitude = numberValue(drogue.deployAltitude, currentLanding.drogueDeployAltitude ?? next.deployAltitude);
+    next.drogueDragArea = numberValue(drogue.dragArea, currentLanding.drogueDragArea);
+    next.drogueDragCoefficient = numberValue(drogue.dragCoefficient, currentLanding.drogueDragCoefficient);
+  }
+  return next;
+};
 
 const getImpulseClass = (impulse) => {
   const totalImpulse = numberValue(impulse, 0);
@@ -876,6 +927,31 @@ const getDesignChecks = ({ components, splitPoints = [], metrics, config, landin
       }
       if (numberValue(component.finThickness, 0) <= 0) {
         add('warn', 'Fin thickness', 'Add fin thickness for mass and drag realism.', componentTarget(component, 'finThickness'));
+      }
+    }
+
+    if (component.type === 'Parachute') {
+      const deployEvent = component.deployEvent || (getParachuteRole(component) === 'drogue' ? 'apogee' : 'altitude');
+      if (!['apogee', 'altitude', 'motor_ejection'].includes(deployEvent)) {
+        add('error', 'Recovery event', 'Deploy event must be apogee, altitude, or motor ejection.', componentTarget(component, 'deployEvent'));
+      }
+      if (deployEvent === 'altitude' && numberValue(component.deployAltitude, 0) <= 0) {
+        add('error', 'Deploy altitude', 'Parachute deploy altitude must be positive.', componentTarget(component, 'deployAltitude'));
+      }
+      if (deployEvent === 'motor_ejection' && motorDelay <= 0) {
+        add('warn', 'Parachute motor ejection', 'Set a positive motor delay for motor ejection.', [
+          componentTarget(component, 'deployEvent'),
+          componentTarget(motor, 'motorDelay')
+        ]);
+      }
+      if (numberValue(component.dragArea, 0) <= 0) {
+        add('error', 'Parachute area', 'Parachute drag area must be positive.', componentTarget(component, 'dragArea'));
+      }
+      if (numberValue(component.dragCoefficient, 0) <= 0) {
+        add('error', 'Parachute Cd', 'Parachute drag coefficient must be positive.', componentTarget(component, 'dragCoefficient'));
+      }
+      if (numberValue(component.maxOpeningLoadG, 0) <= 0) {
+        add('error', 'Opening load', 'Parachute opening-load limit must be positive.', componentTarget(component, 'maxOpeningLoadG'));
       }
     }
 
@@ -1875,6 +1951,22 @@ function RocketDrawing({ components, splitPoints, selectedId, setSelectedId, met
             </g>
           );
         })}
+        {components.filter((component) => component.type === 'Parachute').map((parachute, index) => {
+          const x = xFor(getComponentAxialPosition(parachute, length));
+          const selected = selectedId === parachute.id;
+          const canopyY = centerY - heightFor(maxDiameter) / 2 - 44 - (index % 2) * 16;
+          return (
+            <g key={parachute.id} onClick={() => setSelectedId(parachute.id)}>
+              <path
+                className={`parachute-marker ${selected ? 'selected' : ''}`}
+                d={`M ${x - 18} ${canopyY + 12} Q ${x} ${canopyY - 14} ${x + 18} ${canopyY + 12} Z`}
+              />
+              <line x1={x - 12} x2={x} y1={canopyY + 12} y2={centerY} className="parachute-shroud" />
+              <line x1={x + 12} x2={x} y1={canopyY + 12} y2={centerY} className="parachute-shroud" />
+              <title>{parachute.name}</title>
+            </g>
+          );
+        })}
         {splitViews.map((split, index) => {
           const splitX = xFor(split.positionMm);
           const labelOffset = index % 2 === 0 ? 0 : 18;
@@ -1987,7 +2079,7 @@ function ComponentPalette({ addComponent }) {
     ['Airframe', ['Nose Cone', 'Body Tube', 'Transition', 'Electronics Bay', 'Recovery Bay']],
     ['Payload', ['Mass Component']],
     ['Control', ['Active Airbrake', 'Fins', 'Rail Button']],
-    ['Propulsion and landing', ['Motor', 'Landing System']]
+    ['Propulsion and landing', ['Motor', 'Parachute', 'Landing System']]
   ];
 
   return (
@@ -2009,6 +2101,22 @@ function ComponentPalette({ addComponent }) {
     </section>
   );
 }
+
+const getComponentDetailText = (component) => {
+  if (component.type === 'Motor') {
+    return `${formatNumber(component.motorThrust, 1)} N, ${formatNumber(component.motorTotalImpulse, 1)} Ns`;
+  }
+  if (component.type === 'Fins') {
+    return `${component.finCount} fins, ${formatNumber(component.finHeight, 0)} mm span`;
+  }
+  if (component.type === 'Mass Component') {
+    return component.massRole || 'payload';
+  }
+  if (component.type === 'Parachute') {
+    return `${getParachuteRole(component)} ${formatNumber(component.dragArea, 3)} m2`;
+  }
+  return component.material || 'configured';
+};
 
 function ComponentTable({ components, selectedId, setSelectedId }) {
   return (
@@ -2037,18 +2145,12 @@ function ComponentTable({ components, selectedId, setSelectedId }) {
               >
                 <td>{component.name}</td>
                 <td>{component.type}</td>
-                <td>{component.type === 'Mass Component' ? '--' : `${formatNumber(component.length, 0)} mm`}</td>
-                <td>{component.type === 'Mass Component' ? '--' : `${formatNumber(getDiameter(component), 0)} mm`}</td>
+                <td>{internalMassTypes.has(component.type) ? '--' : `${formatNumber(component.length, 0)} mm`}</td>
+                <td>{internalMassTypes.has(component.type) ? '--' : `${formatNumber(getDiameter(component), 0)} mm`}</td>
                 <td>{positionalTypes.has(component.type) ? `${formatNumber(getComponentAxialPosition(component, getStructuralLength(components)), 0)} mm` : '--'}</td>
                 <td>{attachmentChildTypes.has(component.type) ? getAttachmentHost(component, components)?.name || 'Unattached' : '--'}</td>
                 <td>{formatNumber(componentMass(component), 0)} g</td>
-                <td>{component.type === 'Motor'
-                  ? `${formatNumber(component.motorThrust, 1)} N, ${formatNumber(component.motorTotalImpulse, 1)} Ns`
-                  : component.type === 'Fins'
-                    ? `${component.finCount} fins, ${formatNumber(component.finHeight, 0)} mm span`
-                    : component.type === 'Mass Component'
-                      ? component.massRole || 'payload'
-                    : component.material || 'configured'}</td>
+                <td>{getComponentDetailText(component)}</td>
               </tr>
             ))}
           </tbody>
@@ -2288,10 +2390,13 @@ function ComponentInspector({ component, components = [], updateComponent, metri
     ? getComponentAxialPosition(component, metrics?.totalLength || numberValue(component.axialPosition, 0))
     : 0;
   const attachmentHosts = getAttachmentHosts(components);
+  const parachuteDeployEvent = component.type === 'Parachute'
+    ? component.deployEvent || (getParachuteRole(component) === 'drogue' ? 'apogee' : 'altitude')
+    : 'altitude';
   const commonFields = (
     <>
       <Field label="Name" type="text" value={component.name} onChange={(value) => set('name', value)} />
-      {component.type !== 'Mass Component' && (
+      {!internalMassTypes.has(component.type) && (
         <>
           <Field label="Length" value={component.length} unit="mm" checks={checks('length')} onChange={(value) => set('length', value)} />
           <Field label="Diameter" value={component.diameter} unit="mm" checks={checks('diameter')} onChange={(value) => set('diameter', value)} />
@@ -2377,6 +2482,31 @@ function ComponentInspector({ component, components = [], updateComponent, metri
               { value: 'recovery', label: 'Recovery hardware' }
             ]}
           />
+        )}
+        {component.type === 'Parachute' && (
+          <>
+            <Field
+              label="Recovery role"
+              value={component.recoveryRole || 'main'}
+              onChange={(value) => set('recoveryRole', value)}
+              options={[
+                { value: 'main', label: 'Main' },
+                { value: 'drogue', label: 'Drogue' }
+              ]}
+            />
+            <Field
+              label="Deploy event"
+              value={parachuteDeployEvent}
+              onChange={(value) => set('deployEvent', value)}
+              options={recoveryDeployEvents}
+            />
+            {parachuteDeployEvent === 'altitude' && (
+              <Field label="Deploy altitude" value={component.deployAltitude} unit="m" checks={checks('deployAltitude')} onChange={(value) => set('deployAltitude', value)} />
+            )}
+            <Field label="Drag area" value={component.dragArea} unit="m2" step="0.005" checks={checks('dragArea')} onChange={(value) => set('dragArea', value)} />
+            <Field label="Drag coefficient" value={component.dragCoefficient} step="0.01" checks={checks('dragCoefficient')} onChange={(value) => set('dragCoefficient', value)} />
+            <Field label="Max opening load" value={component.maxOpeningLoadG ?? 15} unit="g" step="0.5" checks={checks('maxOpeningLoadG')} onChange={(value) => set('maxOpeningLoadG', value)} />
+          </>
         )}
         {component.type === 'Active Airbrake' && (
           <>
@@ -3401,7 +3531,7 @@ function App() {
         surfaceArea: numberValue(airbrake.surfaceArea, current.activeSystem.surfaceArea),
         surfaceMaxAngle: numberValue(airbrake.surfaceMaxAngle, current.activeSystem.surfaceMaxAngle)
       } : current.activeSystem,
-      landingSystem: landing ? {
+      landingSystem: buildLandingSystemFromRecoveryDevices(components, landing ? {
         ...current.landingSystem,
         mainDeployEvent: landing.mainDeployEvent || current.landingSystem.mainDeployEvent,
         drogueDeployEvent: landing.drogueDeployEvent || current.landingSystem.drogueDeployEvent,
@@ -3413,7 +3543,7 @@ function App() {
         drogueDragCoefficient: numberValue(landing.drogueDragCoefficient, current.landingSystem.drogueDragCoefficient),
         maxSafeVelocity: numberValue(landing.maxSafeVelocity, current.landingSystem.maxSafeVelocity),
         maxOpeningLoadG: numberValue(landing.maxOpeningLoadG, current.landingSystem.maxOpeningLoadG)
-      } : current.landingSystem
+      } : current.landingSystem)
     }));
   }, [components]);
 
@@ -3459,11 +3589,22 @@ function App() {
 
   const addComponent = (type) => {
     const next = cloneComponent(type);
+    if (type === 'Parachute' && components.some((component) => component.type === 'Parachute' && getParachuteRole(component) === 'main')) {
+      next.name = 'Drogue parachute';
+      next.recoveryRole = 'drogue';
+      next.deployEvent = 'apogee';
+      next.deployAltitude = 120;
+      next.dragArea = 0.04;
+      next.dragCoefficient = 1.25;
+      next.weight = 18;
+    }
     if (attachmentChildTypes.has(type)) {
-      const host = getDefaultAttachmentHost(components);
+      const host = type === 'Parachute'
+        ? components.find((component) => component.type === 'Recovery Bay') || getDefaultAttachmentHost(components)
+        : getDefaultAttachmentHost(components);
       if (host) {
         next.attachedToComponent = host.id;
-        if (type === 'Mass Component') {
+        if (type === 'Mass Component' || type === 'Parachute') {
           next.axialPosition = getAttachmentHostCenter(host, components, componentMetrics.totalLength * 0.45);
         }
       }
