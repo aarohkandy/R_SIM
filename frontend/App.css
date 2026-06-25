@@ -544,6 +544,7 @@ button:focus-visible {
 
 .rocket-part:hover,
 .rocket-part.selected,
+.fin-tab-marker.selected,
 .motor-core.selected,
 .tube-coupler-marker.selected,
 .bulkhead-marker.selected,
@@ -557,6 +558,13 @@ button:focus-visible {
 
 .fin {
   opacity: 0.95;
+}
+
+.fin-tab-marker {
+  fill: rgba(42, 157, 143, 0.26);
+  stroke: #1d675e;
+  stroke-width: 1;
+  cursor: pointer;
 }
 
 .airbrake-tab {

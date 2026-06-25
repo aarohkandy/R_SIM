@@ -201,13 +201,24 @@ def _parse_linear_component(element: ET.Element, component_id: int, component_ty
 
 
 def _parse_fin_component(element: ET.Element, component_id: int, attached_to: Optional[int]) -> Dict:
+    tag = _tag(element)
+    fin_shape = {
+        "trapezoidfinset": "trapezoidal",
+        "ellipticalfinset": "elliptical",
+        "freeformfinset": "freeform",
+    }.get(tag, "trapezoidal")
     fin_count = int(_numeric_child(element, ["fincount", "count", "numberoffins"]) or 3)
     height = _length_mm(_numeric_child(element, ["height", "span", "semispan"]))
     root_chord = _length_mm(_numeric_child(element, ["rootchord", "rootChord", "width", "length"]))
     tip_chord = _length_mm(_numeric_child(element, ["tipchord", "tipChord"]))
     thickness = _length_mm(_numeric_child(element, ["thickness"]))
     sweep = _length_mm(_numeric_child(element, ["sweep", "sweeplength", "sweepLength"]))
+    tab_length = _length_mm(_numeric_child(element, ["tabLength", "tablength", "finTabLength"]))
+    tab_height = _length_mm(_numeric_child(element, ["tabHeight", "tabheight", "finTabHeight"]))
+    cant_angle = _numeric_child(element, ["cant", "cantAngle", "cantangle"]) or 0.0
+    cross_section = _first_text(element, ["crossSection", "crosssection", "section"]) or "square"
     width = root_chord or tip_chord
+    tip = tip_chord or max(width * 0.45, width - sweep, width * 0.2)
     mass = _mass_g(_numeric_child(element, ["mass", "massoverride", "componentmass"]))
 
     return {
@@ -223,12 +234,17 @@ def _parse_fin_component(element: ET.Element, component_id: int, attached_to: Op
         "topDiameterInput": "0",
         "bottomDiameterInput": "0",
         "weight": mass,
-        "finShape": "trapezoidal",
+        "finShape": fin_shape,
         "finCount": fin_count,
         "finHeight": height,
         "finWidth": width,
+        "finTipChord": tip,
         "finThickness": thickness,
         "finSweep": sweep,
+        "finTabLength": tab_length,
+        "finTabHeight": tab_height,
+        "finCantAngle": cant_angle,
+        "finCrossSection": str(cross_section).lower(),
         "attachedToComponent": attached_to,
         "importSource": "openrocket",
     }

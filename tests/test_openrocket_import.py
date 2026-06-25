@@ -74,8 +74,38 @@ class OpenRocketImportTests(unittest.TestCase):
         self.assertAlmostEqual(rocket["weight"], 232.0)
         self.assertAlmostEqual(rocket["cg"], 319.6)
         self.assertEqual(components[2]["finCount"], 3)
+        self.assertEqual(components[2]["finShape"], "trapezoidal")
+        self.assertAlmostEqual(components[2]["finTipChord"], 45.0)
+        self.assertAlmostEqual(components[2]["finThickness"], 3.0)
+        self.assertAlmostEqual(components[2]["finSweep"], 20.0)
         self.assertEqual(components[2]["attachedToComponent"], components[1]["id"])
         self.assertEqual(components[3]["motorModel"], "Estes C6-5")
+
+    def test_parse_openrocket_rich_fin_geometry(self):
+        xml = SAMPLE_OPENROCKET_XML.replace(
+            b"<trapezoidfinset>",
+            (
+                b"<ellipticalfinset><name>Elliptical Canted Fins</name><finCount>4</finCount>"
+                b"<rootChord>0.110</rootChord><tipChord>0.035</tipChord><height>0.065</height>"
+                b"<thickness>0.004</thickness><sweep>0.018</sweep><tabLength>0.045</tabLength>"
+                b"<tabHeight>0.016</tabHeight><cantAngle>2.5</cantAngle><crossSection>airfoil</crossSection>"
+                b"<mass>0.052</mass></ellipticalfinset><trapezoidfinset>"
+            ),
+        )
+        imported = parse_openrocket_design(xml, "rich-fins.ork")
+        fins = next(component for component in imported.rocket_data["components"] if component["name"] == "Elliptical Canted Fins")
+
+        self.assertEqual(fins["finShape"], "elliptical")
+        self.assertEqual(fins["finCount"], 4)
+        self.assertAlmostEqual(fins["finWidth"], 110.0)
+        self.assertAlmostEqual(fins["finTipChord"], 35.0)
+        self.assertAlmostEqual(fins["finHeight"], 65.0)
+        self.assertAlmostEqual(fins["finThickness"], 4.0)
+        self.assertAlmostEqual(fins["finSweep"], 18.0)
+        self.assertAlmostEqual(fins["finTabLength"], 45.0)
+        self.assertAlmostEqual(fins["finTabHeight"], 16.0)
+        self.assertAlmostEqual(fins["finCantAngle"], 2.5)
+        self.assertEqual(fins["finCrossSection"], "airfoil")
 
     def test_parse_zipped_ork_archive(self):
         archive_bytes = io.BytesIO()

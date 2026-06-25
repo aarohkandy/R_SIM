@@ -108,6 +108,11 @@ def main() -> int:
     require("Attached to" in frontend_source, "Component inspector is missing subpart attachment editing.")
     require("getAttachmentHost(component, components)" in frontend_source, "Component table is missing subpart attachment visibility.")
     require("getTreeAttachmentGroups" in frontend_source and "tree-children" in frontend_style, "Frontend design tree does not nest attached subparts under their host.")
+    require("Tip chord" in frontend_source and "finTipChord" in frontend_source, "Frontend fin inspector is missing editable tip chord.")
+    require("Tab length" in frontend_source and "finTabLength" in frontend_source, "Frontend fin inspector is missing through-wall tab geometry.")
+    require("Cant angle" in frontend_source and "finCantAngle" in frontend_source, "Frontend fin inspector is missing fin cant angle.")
+    require("Cross-section" in frontend_source and "finCrossSection" in frontend_source, "Frontend fin inspector is missing fin cross-section controls.")
+    require("fin-tab-marker" in frontend_source and "fin-tab-marker" in frontend_style, "Rocket drawing is missing fin tab markers.")
     require("Mass Component" in frontend_source, "Frontend is missing internal payload/ballast mass components.")
     require("mass-marker" in frontend_source and "mass-marker" in frontend_style, "Rocket drawing is missing internal mass markers.")
     require("Tube Coupler" in frontend_source, "Frontend is missing internal tube coupler components.")
@@ -161,6 +166,7 @@ def main() -> int:
     require("harness_limit_n" in active_sim_source and "effective_opening_load_limit_g" in active_sim_source, "Backend recovery safety does not apply shock-cord harness limits.")
     require("stage_splits" in active_sim_source, "Backend does not report stage/split marker output.")
     require("drift_after_main_deploy_m" in active_sim_source, "Backend does not report recovery drift after main deployment.")
+    require("finTipChord" in active_sim_source and "fin tab dimensions" in active_sim_source, "Backend does not validate richer fin geometry.")
     database_motor = next(
         (motor for motor in motors.get("motors", []) if motor.get("designation") == "Estes C6-5"),
         motors["motors"][0],
@@ -192,7 +198,7 @@ def main() -> int:
           <railbutton><name>1010 Rail Buttons</name><mass>0.008</mass><diameter>0.010</diameter><height>0.012</height><instanceCount>2</instanceCount><buttonSpacing>0.170</buttonSpacing></railbutton>
           <innertube><name>Motor Mount Tube</name><mass>0.036</mass><length>0.160</length><innerRadius>0.0145</innerRadius><outerRadius>0.017</outerRadius></innertube>
           <centeringring><name>Centering Rings</name><mass>0.018</mass><ringCount>2</ringCount><innerRadius>0.017</innerRadius><outerRadius>0.020</outerRadius><thickness>0.004</thickness></centeringring>
-          <trapezoidfinset><name>Fins</name><finCount>3</finCount><rootChord>0.090</rootChord><height>0.055</height><mass>0.045</mass></trapezoidfinset>
+          <trapezoidfinset><name>Fins</name><finCount>3</finCount><rootChord>0.090</rootChord><tipChord>0.040</tipChord><height>0.055</height><thickness>0.003</thickness><sweep>0.018</sweep><tabLength>0.045</tabLength><tabHeight>0.014</tabHeight><cantAngle>1.5</cantAngle><crossSection>airfoil</crossSection><mass>0.045</mass></trapezoidfinset>
           <motor><manufacturer>Estes</manufacturer><designation>Estes C6-5</designation><diameter>0.018</diameter><length>0.070</length><burnTime>1.600</burnTime><totalImpulse>10.000</totalImpulse><averageThrust>6.000</averageThrust><mass>0.017</mass></motor>
         </subcomponents>
       </bodytube>
@@ -220,6 +226,7 @@ def main() -> int:
     imported_bulkhead = next((component for component in imported_components if component.get("type") == "Bulkhead"), {})
     imported_launch_lug = next((component for component in imported_components if component.get("type") == "Launch Lug"), {})
     imported_rail_button = next((component for component in imported_components if component.get("type") == "Rail Button"), {})
+    imported_fins = next((component for component in imported_components if component.get("type") == "Fins"), {})
     require(len(imported_motor.get("thrustCurve", [])) > 5, f"Imported motor was not enriched with thrust curve: {imported_motor}")
     require(imported_mass.get("massRole") == "battery", f"Imported OpenRocket mass component was not preserved: {imported_components}")
     require(imported_parachute.get("dragArea", 0) > 0.2, f"Imported OpenRocket parachute was not preserved: {imported_components}")
@@ -231,6 +238,7 @@ def main() -> int:
     require(imported_bulkhead.get("thickness") == 5, f"Imported OpenRocket bulkhead was not preserved: {imported_components}")
     require(imported_launch_lug.get("innerDiameter") == 5, f"Imported OpenRocket launch lug was not preserved: {imported_components}")
     require(imported_rail_button.get("buttonSpacing") == 170, f"Imported OpenRocket rail button was not preserved: {imported_components}")
+    require(imported_fins.get("finTipChord") == 40 and imported_fins.get("finTabLength") == 45, f"Imported OpenRocket fin geometry was not preserved: {imported_components}")
 
     controller_code = r"""
 ControlOutput control_function(SensorData sensor_data) {
@@ -268,7 +276,7 @@ ControlOutput control_function(SensorData sensor_data) {
         "rocketComponents": [
             {"id": 1, "type": "Nose Cone", "name": "Prep Nose", "length": 120, "diameter": 40, "weight": 35},
             {"id": 2, "type": "Body Tube", "name": "Prep Body", "length": 560, "diameter": 40, "weight": 135},
-            {"id": 3, "type": "Fins", "name": "Prep Fins", "finCount": 3, "finHeight": 55, "finWidth": 90, "weight": 45, "attachedToComponent": 2},
+            {"id": 3, "type": "Fins", "name": "Prep Fins", "finCount": 3, "finHeight": 55, "finWidth": 90, "finTipChord": 40, "finThickness": 3, "finSweep": 18, "finTabLength": 45, "finTabHeight": 14, "finCantAngle": 1.5, "finCrossSection": "airfoil", "weight": 45, "attachedToComponent": 2},
             {
                 "id": 4,
                 "type": "Motor",

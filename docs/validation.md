@@ -46,6 +46,7 @@ The active scenario matrix uses importable files in `examples/scenarios/`:
 - Frontend motor import is wired to `/api/environment/motors/import` and backend smoke tests preserve imported `.eng`/`.rse` thrust-curve points.
 - Frontend design tree and rocket side-view drawing expose structural split markers.
 - Frontend inspector/table expose subpart attachment hosts for fins, motors, rail buttons, and launch lugs.
+- Frontend inspector/table/side-view drawing expose richer fin planform fields: root/tip chord, span, sweep, thickness, tabs, cant, cross-section, material, and imported `.ork` values.
 - Frontend design tree nests attached subparts beneath their host airframe part and separates unattached subparts.
 - Frontend palette, inspector, table, mass breakdown, and side-view drawing expose internal mass components, tube couplers, bulkheads, motor mount tubes, and centering rings.
 - Frontend palette, inspector, table, mass breakdown, and side-view drawing expose rail buttons and launch lugs as launch-guide hardware.

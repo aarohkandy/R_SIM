@@ -8,7 +8,7 @@
     "components": [
       {"id": 1, "type": "Nose Cone", "name": "Curve Nose", "length": 120, "diameter": 40, "weight": 35},
       {"id": 2, "type": "Body Tube", "name": "Curve Body", "length": 560, "diameter": 40, "weight": 135},
-      {"id": 3, "type": "Fins", "name": "Curve Fins", "finCount": 3, "finHeight": 55, "finWidth": 90, "weight": 45, "attachedToComponent": 2},
+      {"id": 3, "type": "Fins", "name": "Curve Fins", "finCount": 3, "finHeight": 55, "finWidth": 90, "finTipChord": 40, "finThickness": 3, "finSweep": 18, "finTabLength": 45, "finTabHeight": 14, "finCantAngle": 0, "finCrossSection": "airfoil", "weight": 45, "attachedToComponent": 2},
       {
         "id": 4,
         "type": "Motor",

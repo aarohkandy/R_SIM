@@ -294,10 +294,33 @@ class ActiveSimulationManager:
                         warnings.append(f"{name} is not attached to a structural airframe host.")
                     else:
                         errors.append(f"{name} needs a body tube, transition, or bay attachment host.")
-                    continue
-                host = components_by_id.get(str(attached_to))
-                if host is None or str(host.get("type", "")).lower() not in self.attachment_host_types:
-                    errors.append(f"{name} attachment must reference a body tube, transition, electronics bay, recovery bay, or active airbrake.")
+                else:
+                    host = components_by_id.get(str(attached_to))
+                    if host is None or str(host.get("type", "")).lower() not in self.attachment_host_types:
+                        errors.append(f"{name} attachment must reference a body tube, transition, electronics bay, recovery bay, or active airbrake.")
+            if component_type == "fins":
+                fin_count = self._as_float(self._first_value(component, ["finCount", "fin_count"], 3), 3.0)
+                span = self._as_float(self._first_value(component, ["finHeight", "span"], 0.0), 0.0)
+                root_chord = self._as_float(self._first_value(component, ["finWidth", "rootChord"], 0.0), 0.0)
+                tip_chord = self._as_float(self._first_value(component, ["finTipChord", "tipChord"], root_chord * 0.45), root_chord * 0.45)
+                thickness = self._as_float(self._first_value(component, ["finThickness", "thickness"], 0.0), 0.0)
+                tab_length = self._as_float(self._first_value(component, ["finTabLength", "tabLength"], 0.0), 0.0)
+                tab_height = self._as_float(self._first_value(component, ["finTabHeight", "tabHeight"], 0.0), 0.0)
+                cant_angle = self._as_float(self._first_value(component, ["finCantAngle", "cantAngle", "cant"], 0.0), 0.0)
+                if fin_count < 1:
+                    errors.append(f"{name} fin count must be positive.")
+                if span <= 0:
+                    errors.append(f"{name} fin span must be positive.")
+                if root_chord <= 0:
+                    errors.append(f"{name} fin root chord must be positive.")
+                if tip_chord <= 0:
+                    errors.append(f"{name} fin tip chord must be positive.")
+                if thickness <= 0:
+                    warnings.append(f"{name} fin thickness should be positive for mass and drag realism.")
+                if tab_length < 0 or tab_height < 0:
+                    errors.append(f"{name} fin tab dimensions cannot be negative.")
+                if abs(cant_angle) > 15:
+                    warnings.append(f"{name} fin cant is outside the usual +/-15 degree range.")
             if component_type in self.launch_hardware_types:
                 hardware_length = self._as_float(
                     self._first_value(component, ["length", "lugLength", "buttonHeight"], 0.0),
@@ -2250,14 +2273,16 @@ class ActiveSimulationManager:
             fin_count = max(self._as_float(self._first_value(component, ["finCount", "fin_count"], 3), 3), 1)
             span = max(self._as_float(self._first_value(component, ["finHeight", "span"], 0.0), 0.0), 1.0)
             root = max(self._as_float(self._first_value(component, ["finWidth", "rootChord"], 0.0), 0.0), 1.0)
+            tip = max(self._as_float(self._first_value(component, ["finTipChord", "tipChord"], root * 0.45), root * 0.45), 1.0)
             sweep = max(self._as_float(self._first_value(component, ["finSweep", "sweep"], 0.0), 0.0), 0.0)
             if span > 1:
                 span /= 1000.0
             if root > 1:
                 root /= 1000.0
+            if tip > 1:
+                tip /= 1000.0
             if sweep > 1:
                 sweep /= 1000.0
-            tip = max(root * 0.45, root - sweep, root * 0.2)
             mid_chord = math.sqrt(span**2 + (sweep + (root - tip) / 2.0) ** 2)
             denominator = 1.0 + math.sqrt(1.0 + ((2.0 * mid_chord) / max(root + tip, 1e-6)) ** 2)
             normal_force = 1.8 * fin_count * ((span / reference_diameter) ** 2) / denominator

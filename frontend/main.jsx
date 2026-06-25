@@ -116,8 +116,14 @@ const componentDefaults = {
     finCount: 3,
     finHeight: 72,
     finWidth: 118,
+    finTipChord: 54,
     finSweep: 36,
     finThickness: 3,
+    finTabLength: 48,
+    finTabHeight: 18,
+    finCantAngle: 0,
+    finCrossSection: 'airfoil',
+    finShape: 'trapezoidal',
     material: 'plywood'
   },
   'Tube Coupler': {
@@ -660,7 +666,7 @@ const getCpAnalysis = (components) => {
       const span = Math.max(numberValue(component.finHeight, 0), 1);
       const rootChord = Math.max(numberValue(component.finWidth, 0), 1);
       const sweep = Math.max(numberValue(component.finSweep, 0), 0);
-      const tipChord = Math.max(rootChord * 0.45, rootChord - sweep, rootChord * 0.2);
+      const tipChord = Math.max(numberValue(component.finTipChord ?? component.tipChord, rootChord * 0.45), 1);
       const midChord = Math.sqrt(span ** 2 + (sweep + (rootChord - tipChord) / 2) ** 2);
       const denominator = 1 + Math.sqrt(1 + ((2 * midChord) / (rootChord + tipChord)) ** 2);
       const normalForce = 1.8 * finCount * ((span / referenceDiameter) ** 2) / denominator;
@@ -1099,11 +1105,23 @@ const getDesignChecks = ({ components, splitPoints = [], metrics, config, landin
       if (numberValue(component.finWidth, 0) <= 0) {
         add('error', 'Fin root chord', 'Root chord must be positive.', componentTarget(component, 'finWidth'));
       }
+      if (numberValue(component.finTipChord ?? component.tipChord, numberValue(component.finWidth, 0) * 0.45) <= 0) {
+        add('error', 'Fin tip chord', 'Tip chord must be positive.', componentTarget(component, 'finTipChord'));
+      }
       if (numberValue(component.finHeight, 0) <= 0) {
         add('error', 'Fin span', 'Fin span must be positive.', componentTarget(component, 'finHeight'));
       }
       if (numberValue(component.finThickness, 0) <= 0) {
         add('warn', 'Fin thickness', 'Add fin thickness for mass and drag realism.', componentTarget(component, 'finThickness'));
+      }
+      if (numberValue(component.finCantAngle, 0) < -15 || numberValue(component.finCantAngle, 0) > 15) {
+        add('warn', 'Fin cant', 'Fin cant is usually kept within +/-15 degrees.', componentTarget(component, 'finCantAngle'));
+      }
+      if (numberValue(component.finTabLength, 0) < 0 || numberValue(component.finTabHeight, 0) < 0) {
+        add('error', 'Fin tabs', 'Fin tab dimensions cannot be negative.', [
+          componentTarget(component, 'finTabLength'),
+          componentTarget(component, 'finTabHeight')
+        ]);
       }
     }
 
@@ -2228,17 +2246,35 @@ function RocketDrawing({ components, splitPoints, selectedId, setSelectedId, met
             {[-1, 1].map((side) => {
               const finStart = getComponentAxialPosition(finSet, length);
               const rootChord = numberValue(finSet.finWidth, 100);
+              const tipChord = Math.max(1, numberValue(finSet.finTipChord ?? finSet.tipChord, rootChord * 0.45));
+              const sweep = Math.max(0, numberValue(finSet.finSweep, 25));
               const baseX = xFor(finStart);
               const tailX = xFor(clamp(finStart + rootChord, 0, length));
               const rootY = centerY + side * heightFor(maxDiameter) / 2;
               const tipY = rootY + side * clamp(numberValue(finSet.finHeight, 60), 22, 90);
+              const tipLeadingX = xFor(clamp(finStart + sweep, 0, length));
+              const tipTrailingX = xFor(clamp(finStart + sweep + tipChord, 0, length));
+              const tabLength = Math.min(Math.max(0, numberValue(finSet.finTabLength, 0)), rootChord);
+              const tabHeight = Math.min(Math.max(0, numberValue(finSet.finTabHeight, 0)), maxDiameter / 2);
+              const tabX = baseX + ((rootChord - tabLength) / 2) * pxPerMm;
+              const tabY = side < 0 ? rootY : rootY - tabHeight * pxPerMm;
               return (
-                <polygon
-                  key={side}
-                  className={`rocket-part fin ${selectedId === finSet.id ? 'selected' : ''}`}
-                  fill={componentColor.Fins}
-                  points={`${baseX},${rootY} ${tailX},${rootY} ${tailX - numberValue(finSet.finSweep, 25) * pxPerMm},${tipY}`}
-                />
+                <React.Fragment key={side}>
+                  {tabLength > 0 && tabHeight > 0 && (
+                    <rect
+                      className={`fin-tab-marker ${selectedId === finSet.id ? 'selected' : ''}`}
+                      x={tabX}
+                      y={tabY}
+                      width={tabLength * pxPerMm}
+                      height={tabHeight * pxPerMm}
+                    />
+                  )}
+                  <polygon
+                    className={`rocket-part fin ${selectedId === finSet.id ? 'selected' : ''}`}
+                    fill={componentColor.Fins}
+                    points={`${baseX},${rootY} ${tailX},${rootY} ${tipTrailingX},${tipY} ${tipLeadingX},${tipY}`}
+                  />
+                </React.Fragment>
               );
             })}
             <title>{finSet.name}</title>
@@ -2687,7 +2723,7 @@ const getComponentDetailText = (component) => {
     return `${formatNumber(component.innerDiameter, 0)} mm ID, ${formatNumber(component.length, 0)} mm`;
   }
   if (component.type === 'Fins') {
-    return `${component.finCount} fins, ${formatNumber(component.finHeight, 0)} mm span`;
+    return `${component.finCount} ${component.finShape || 'trapezoidal'} fins, ${formatNumber(component.finHeight, 0)} mm span`;
   }
   if (component.type === 'Mass Component') {
     return component.massRole || 'payload';
@@ -3054,11 +3090,36 @@ function ComponentInspector({ component, components = [], updateComponent, metri
         )}
         {component.type === 'Fins' && (
           <>
+            <Field
+              label="Planform"
+              value={component.finShape || 'trapezoidal'}
+              onChange={(value) => set('finShape', value)}
+              options={[
+                { value: 'trapezoidal', label: 'Trapezoidal' },
+                { value: 'elliptical', label: 'Elliptical' },
+                { value: 'freeform', label: 'Freeform' }
+              ]}
+            />
             <Field label="Fin count" value={component.finCount} checks={checks('finCount')} onChange={(value) => set('finCount', value)} />
             <Field label="Root chord" value={component.finWidth} unit="mm" checks={checks('finWidth')} onChange={(value) => set('finWidth', value)} />
+            <Field label="Tip chord" value={component.finTipChord ?? component.tipChord ?? 54} unit="mm" checks={checks('finTipChord')} onChange={(value) => set('finTipChord', value)} />
             <Field label="Span" value={component.finHeight} unit="mm" checks={checks('finHeight')} onChange={(value) => set('finHeight', value)} />
             <Field label="Sweep" value={component.finSweep} unit="mm" onChange={(value) => set('finSweep', value)} />
             <Field label="Thickness" value={component.finThickness} unit="mm" checks={checks('finThickness')} onChange={(value) => set('finThickness', value)} />
+            <Field label="Tab length" value={component.finTabLength ?? 0} unit="mm" checks={checks('finTabLength')} onChange={(value) => set('finTabLength', value)} />
+            <Field label="Tab height" value={component.finTabHeight ?? 0} unit="mm" checks={checks('finTabHeight')} onChange={(value) => set('finTabHeight', value)} />
+            <Field label="Cant angle" value={component.finCantAngle ?? 0} unit="deg" checks={checks('finCantAngle')} onChange={(value) => set('finCantAngle', value)} />
+            <Field
+              label="Cross-section"
+              value={component.finCrossSection || 'airfoil'}
+              onChange={(value) => set('finCrossSection', value)}
+              options={[
+                { value: 'square', label: 'Square' },
+                { value: 'rounded', label: 'Rounded' },
+                { value: 'airfoil', label: 'Airfoil' }
+              ]}
+            />
+            <Field label="Material" type="text" value={component.material || ''} onChange={(value) => set('material', value)} />
           </>
         )}
         {component.type === 'Rail Button' && (

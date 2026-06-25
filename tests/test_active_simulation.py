@@ -746,6 +746,38 @@ class ActiveSimulationTests(unittest.TestCase):
         self.assertGreater(aft["center_of_pressure_m"], forward["center_of_pressure_m"])
         self.assertGreater(aft["stability_margin"], forward["stability_margin"])
 
+    def test_fin_tip_chord_changes_center_of_pressure(self):
+        manager = ActiveSimulationManager()
+        narrow_tip_rocket = sample_rocket()
+        broad_tip_rocket = sample_rocket()
+        next(component for component in narrow_tip_rocket["components"] if component["type"] == "Fins")["finTipChord"] = 20
+        next(component for component in broad_tip_rocket["components"] if component["type"] == "Fins")["finTipChord"] = 80
+
+        narrow_tip = manager.submit_cfd_simulation(narrow_tip_rocket, base_config())["results"]
+        broad_tip = manager.submit_cfd_simulation(broad_tip_rocket, base_config())["results"]
+        narrow_fin_contribution = next(item for item in narrow_tip["cp_contributions"] if item["type"] == "Fins")
+        broad_fin_contribution = next(item for item in broad_tip["cp_contributions"] if item["type"] == "Fins")
+
+        self.assertNotAlmostEqual(narrow_fin_contribution["cp_m"], broad_fin_contribution["cp_m"])
+        self.assertNotAlmostEqual(narrow_tip["center_of_pressure_m"], broad_tip["center_of_pressure_m"])
+
+    def test_invalid_fin_geometry_is_rejected(self):
+        manager = ActiveSimulationManager()
+        rocket = sample_rocket()
+        fin_set = next(component for component in rocket["components"] if component["type"] == "Fins")
+        fin_set.update({
+            "name": "Broken fin set",
+            "finTipChord": 0,
+            "finTabLength": -1,
+            "finTabHeight": -1,
+        })
+
+        result = manager.submit_cfd_simulation(rocket, base_config())
+
+        self.assertFalse(result["success"])
+        self.assertTrue(any("Broken fin set fin tip chord" in error for error in result["validation_errors"]))
+        self.assertTrue(any("Broken fin set fin tab dimensions" in error for error in result["validation_errors"]))
+
     def test_landing_system_reduces_touchdown_velocity(self):
         manager = ActiveSimulationManager()
         with_landing = manager.submit_cfd_simulation(sample_rocket(), base_config())["results"]
