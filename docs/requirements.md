@@ -33,6 +33,7 @@
 - Builder split markers must appear in the design tree and side-view drawing, persist through save/export/import, and be reported in simulation output.
 - Builder subparts must expose their airframe attachment host in the inspector/table, auto-attach to a valid host when added, and reject invalid subpart-to-subpart references during simulation validation.
 - Builder design tree must nest attached subparts below their host airframe components and flag unattached subparts separately.
+- Builder components must expose OpenRocket-style material presets, density, wall thickness for shell components, and a mass override toggle; when override is off, geometry-backed parts must derive mass from density and editable dimensions.
 - Fin sets must expose OpenRocket-style planform controls including shape, root chord, tip chord, span, sweep, thickness, through-wall tab length/height, cant angle, cross-section, material, and host station. Imported `.ork` fin geometry must preserve those fields and use tip chord in CP analysis.
 - Internal mass components must expose station, host, role, and mass controls; affect component mass/CG calculations; render in the side view; and remain excluded from external length, diameter, and aerodynamic geometry.
 - Tube couplers, bulkheads, motor mount tubes, and centering rings must expose host, station, mass, material, and fit dimensions; render in the side view; import from OpenRocket files; and remain excluded from external length, diameter, and aerodynamic geometry.

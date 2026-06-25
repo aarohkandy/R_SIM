@@ -283,6 +283,13 @@ class ActiveSimulationManager:
                 continue
             component_type = str(component.get("type", "")).lower()
             name = component.get("name") or component.get("type") or "Subpart"
+            if component_type != "motor" and not self._as_bool(component.get("massOverride"), True):
+                density = self._as_float(
+                    self._first_value(component, ["materialDensity", "densityKgM3", "density"], 0.0),
+                    0.0,
+                )
+                if density <= 0:
+                    errors.append(f"{name} material density must be positive when mass override is off.")
             if component_type in self.attachment_child_types:
                 attached_to = self._first_value(
                     component,

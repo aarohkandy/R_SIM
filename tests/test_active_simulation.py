@@ -778,6 +778,22 @@ class ActiveSimulationTests(unittest.TestCase):
         self.assertTrue(any("Broken fin set fin tip chord" in error for error in result["validation_errors"]))
         self.assertTrue(any("Broken fin set fin tab dimensions" in error for error in result["validation_errors"]))
 
+    def test_auto_material_mass_requires_density(self):
+        manager = ActiveSimulationManager()
+        rocket = sample_rocket()
+        body = next(component for component in rocket["components"] if component["type"] == "Body Tube")
+        body.update({
+            "name": "Densityless body",
+            "massOverride": False,
+            "material": "custom composite",
+            "materialDensity": 0,
+        })
+
+        result = manager.submit_cfd_simulation(rocket, base_config())
+
+        self.assertFalse(result["success"])
+        self.assertTrue(any("Densityless body material density" in error for error in result["validation_errors"]))
+
     def test_landing_system_reduces_touchdown_velocity(self):
         manager = ActiveSimulationManager()
         with_landing = manager.submit_cfd_simulation(sample_rocket(), base_config())["results"]

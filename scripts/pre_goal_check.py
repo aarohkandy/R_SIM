@@ -113,6 +113,10 @@ def main() -> int:
     require("Cant angle" in frontend_source and "finCantAngle" in frontend_source, "Frontend fin inspector is missing fin cant angle.")
     require("Cross-section" in frontend_source and "finCrossSection" in frontend_source, "Frontend fin inspector is missing fin cross-section controls.")
     require("fin-tab-marker" in frontend_source and "fin-tab-marker" in frontend_style, "Rocket drawing is missing fin tab markers.")
+    require("materialPresets" in frontend_source and "materialDensity" in frontend_source, "Frontend is missing OpenRocket-style material presets and density fields.")
+    require("Mass override" in frontend_source and "estimateComponentMass" in frontend_source, "Frontend material mass estimation is missing mass override controls.")
+    require("Wall thickness" in frontend_source and "wallThickness" in frontend_source, "Frontend shell components are missing wall-thickness controls.")
+    require("material-estimate" in frontend_source and "material-estimate" in frontend_style, "Frontend is missing material mass estimate styling.")
     require("Mass Component" in frontend_source, "Frontend is missing internal payload/ballast mass components.")
     require("mass-marker" in frontend_source and "mass-marker" in frontend_style, "Rocket drawing is missing internal mass markers.")
     require("Tube Coupler" in frontend_source, "Frontend is missing internal tube coupler components.")
@@ -146,6 +150,8 @@ def main() -> int:
     require("tubecoupler" in openrocket_source and "bulkhead" in openrocket_source, "OpenRocket import does not preserve airframe internal hardware.")
     require("launch lug" in active_sim_source and "rail button" in active_sim_source, "Backend does not treat launch-guide hardware as internal geometry.")
     require("launchlug" in openrocket_source and "railbutton" in openrocket_source, "OpenRocket import does not preserve launch-guide hardware.")
+    require("_material_fields" in openrocket_source and "materialDensity" in openrocket_source, "OpenRocket import does not preserve material density metadata.")
+    require("material density must be positive" in active_sim_source, "Backend does not validate density-driven material mass inputs.")
     require("Airbrake station" in frontend_source, "Frontend is missing active airbrake station controls.")
     require("active.locationFromNose" in frontend_source, "Frontend design checks do not target active airbrake station.")
     require("moment_arm_m" in active_sim_source, "Backend active system does not report active airbrake moment arm.")
@@ -186,7 +192,7 @@ def main() -> int:
     <name>Pre Goal Imported Rocket</name>
     <subcomponents><stage><subcomponents>
       <nosecone><name>Nose</name><length>0.120</length><aftRadius>0.020</aftRadius><mass>0.035</mass></nosecone>
-      <bodytube><name>Body</name><length>0.560</length><outerRadius>0.020</outerRadius><mass>0.135</mass>
+      <bodytube><name>Body</name><length>0.560</length><outerRadius>0.020</outerRadius><innerRadius>0.018</innerRadius><material density="760">Kraft paper</material><mass>0.135</mass>
         <subcomponents>
           <masscomponent><name>Tracker Battery</name><mass>0.065</mass><position>0.240</position><role>battery</role></masscomponent>
           <parachute><name>Main Parachute</name><mass>0.038</mass><diameter>0.550</diameter><cd>1.60</cd><deployAltitude>0.080</deployAltitude></parachute>
@@ -198,7 +204,7 @@ def main() -> int:
           <railbutton><name>1010 Rail Buttons</name><mass>0.008</mass><diameter>0.010</diameter><height>0.012</height><instanceCount>2</instanceCount><buttonSpacing>0.170</buttonSpacing></railbutton>
           <innertube><name>Motor Mount Tube</name><mass>0.036</mass><length>0.160</length><innerRadius>0.0145</innerRadius><outerRadius>0.017</outerRadius></innertube>
           <centeringring><name>Centering Rings</name><mass>0.018</mass><ringCount>2</ringCount><innerRadius>0.017</innerRadius><outerRadius>0.020</outerRadius><thickness>0.004</thickness></centeringring>
-          <trapezoidfinset><name>Fins</name><finCount>3</finCount><rootChord>0.090</rootChord><tipChord>0.040</tipChord><height>0.055</height><thickness>0.003</thickness><sweep>0.018</sweep><tabLength>0.045</tabLength><tabHeight>0.014</tabHeight><cantAngle>1.5</cantAngle><crossSection>airfoil</crossSection><mass>0.045</mass></trapezoidfinset>
+          <trapezoidfinset><name>Fins</name><material density="540">Plywood</material><finCount>3</finCount><rootChord>0.090</rootChord><tipChord>0.040</tipChord><height>0.055</height><thickness>0.003</thickness><sweep>0.018</sweep><tabLength>0.045</tabLength><tabHeight>0.014</tabHeight><cantAngle>1.5</cantAngle><crossSection>airfoil</crossSection><mass>0.045</mass></trapezoidfinset>
           <motor><manufacturer>Estes</manufacturer><designation>Estes C6-5</designation><diameter>0.018</diameter><length>0.070</length><burnTime>1.600</burnTime><totalImpulse>10.000</totalImpulse><averageThrust>6.000</averageThrust><mass>0.017</mass></motor>
         </subcomponents>
       </bodytube>
@@ -227,6 +233,7 @@ def main() -> int:
     imported_launch_lug = next((component for component in imported_components if component.get("type") == "Launch Lug"), {})
     imported_rail_button = next((component for component in imported_components if component.get("type") == "Rail Button"), {})
     imported_fins = next((component for component in imported_components if component.get("type") == "Fins"), {})
+    imported_body = next((component for component in imported_components if component.get("type") == "Body Tube"), {})
     require(len(imported_motor.get("thrustCurve", [])) > 5, f"Imported motor was not enriched with thrust curve: {imported_motor}")
     require(imported_mass.get("massRole") == "battery", f"Imported OpenRocket mass component was not preserved: {imported_components}")
     require(imported_parachute.get("dragArea", 0) > 0.2, f"Imported OpenRocket parachute was not preserved: {imported_components}")
@@ -239,6 +246,8 @@ def main() -> int:
     require(imported_launch_lug.get("innerDiameter") == 5, f"Imported OpenRocket launch lug was not preserved: {imported_components}")
     require(imported_rail_button.get("buttonSpacing") == 170, f"Imported OpenRocket rail button was not preserved: {imported_components}")
     require(imported_fins.get("finTipChord") == 40 and imported_fins.get("finTabLength") == 45, f"Imported OpenRocket fin geometry was not preserved: {imported_components}")
+    require(imported_body.get("materialDensity") == 760 and imported_body.get("wallThickness") == 2, f"Imported OpenRocket body material was not preserved: {imported_components}")
+    require(imported_fins.get("materialDensity") == 540 and imported_fins.get("material") == "Plywood", f"Imported OpenRocket fin material was not preserved: {imported_components}")
 
     controller_code = r"""
 ControlOutput control_function(SensorData sensor_data) {
@@ -275,7 +284,7 @@ ControlOutput control_function(SensorData sensor_data) {
     payload = {
         "rocketComponents": [
             {"id": 1, "type": "Nose Cone", "name": "Prep Nose", "length": 120, "diameter": 40, "weight": 35},
-            {"id": 2, "type": "Body Tube", "name": "Prep Body", "length": 560, "diameter": 40, "weight": 135},
+            {"id": 2, "type": "Body Tube", "name": "Prep Body", "length": 560, "diameter": 40, "weight": 135, "material": "cardboard", "materialDensity": 680, "massOverride": False, "wallThickness": 2},
             {"id": 3, "type": "Fins", "name": "Prep Fins", "finCount": 3, "finHeight": 55, "finWidth": 90, "finTipChord": 40, "finThickness": 3, "finSweep": 18, "finTabLength": 45, "finTabHeight": 14, "finCantAngle": 1.5, "finCrossSection": "airfoil", "weight": 45, "attachedToComponent": 2},
             {
                 "id": 4,

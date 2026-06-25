@@ -1234,6 +1234,25 @@ button:focus-visible {
   gap: 4px;
 }
 
+.material-estimate {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 38px;
+  padding: 9px 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: #f8fafb;
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 720;
+}
+
+.material-estimate strong {
+  color: var(--ink);
+}
+
 .field-message,
 .toggle-message {
   border-radius: 6px;

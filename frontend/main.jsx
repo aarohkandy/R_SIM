@@ -53,6 +53,125 @@ const componentColor = {
   'Shock Cord': '#118ab2'
 };
 
+const materialPresets = [
+  { value: 'cardboard', label: 'Cardboard', density: 680 },
+  { value: 'kraft paper', label: 'Kraft paper', density: 760 },
+  { value: 'phenolic', label: 'Phenolic', density: 1370 },
+  { value: 'fiberglass', label: 'Fiberglass', density: 1850 },
+  { value: 'carbon fiber', label: 'Carbon fiber', density: 1600 },
+  { value: 'plywood', label: 'Plywood', density: 540 },
+  { value: 'birch plywood', label: 'Birch plywood', density: 650 },
+  { value: 'balsa', label: 'Balsa', density: 160 },
+  { value: 'plastic', label: 'Plastic', density: 1050 },
+  { value: 'nylon', label: 'Nylon', density: 1150 },
+  { value: 'ripstop nylon', label: 'Ripstop nylon', density: 920 },
+  { value: 'mylar', label: 'Mylar', density: 1390 },
+  { value: 'aluminum', label: 'Aluminum', density: 2700 },
+  { value: 'steel', label: 'Steel', density: 7850 },
+  { value: 'internal', label: 'Internal item', density: 1000 }
+];
+
+const normalizeMaterialKey = (value = '') => String(value).trim().toLowerCase();
+const materialPresetByValue = new Map(materialPresets.map((preset) => [normalizeMaterialKey(preset.value), preset]));
+const materialOptions = materialPresets.map((preset) => ({
+  value: preset.value,
+  label: `${preset.label} (${preset.density} kg/m3)`
+}));
+
+const getMaterialPreset = (material) => materialPresetByValue.get(normalizeMaterialKey(material)) || null;
+const getMaterialDensity = (component) => {
+  const explicit = numberValue(component?.materialDensity ?? component?.densityKgM3, NaN);
+  if (Number.isFinite(explicit) && explicit > 0) return explicit;
+  return getMaterialPreset(component?.material)?.density || 0;
+};
+
+const materialOptionsFor = (material) => {
+  const preset = getMaterialPreset(material);
+  if (!material || preset) return [...materialOptions, { value: 'custom', label: 'Custom' }];
+  return [
+    { value: 'custom', label: `${material} (custom)` },
+    ...materialOptions
+  ];
+};
+
+const materialMassTypes = new Set([
+  'Nose Cone',
+  'Body Tube',
+  'Transition',
+  'Electronics Bay',
+  'Recovery Bay',
+  'Active Airbrake',
+  'Fins',
+  'Tube Coupler',
+  'Bulkhead',
+  'Motor Mount',
+  'Centering Ring',
+  'Rail Button',
+  'Launch Lug',
+  'Shock Cord'
+]);
+const shellWallTypes = new Set(['Nose Cone', 'Body Tube', 'Transition', 'Electronics Bay', 'Recovery Bay', 'Active Airbrake']);
+
+const mm3ToGrams = (volumeMm3, densityKgM3) => volumeMm3 * 1e-6 * densityKgM3;
+const diskAreaMm2 = (diameterMm) => Math.PI * (diameterMm / 2) ** 2;
+const annulusAreaMm2 = (outerDiameterMm, innerDiameterMm) => Math.max(0, diskAreaMm2(outerDiameterMm) - diskAreaMm2(innerDiameterMm));
+const tubeVolumeMm3 = (lengthMm, outerDiameterMm, innerDiameterMm) => Math.max(0, lengthMm) * annulusAreaMm2(outerDiameterMm, innerDiameterMm);
+const getWallThickness = (component, fallback = 2) => Math.max(0, numberValue(component.wallThickness, fallback));
+
+const estimateComponentMass = (component) => {
+  if (!component || !materialMassTypes.has(component.type)) return 0;
+  const density = getMaterialDensity(component);
+  if (density <= 0) return 0;
+  let volume = 0;
+
+  if (['Body Tube', 'Electronics Bay', 'Recovery Bay', 'Active Airbrake'].includes(component.type)) {
+    const outer = getDiameter(component);
+    const wall = getWallThickness(component);
+    volume = tubeVolumeMm3(numberValue(component.length, 0), outer, Math.max(0, outer - 2 * wall));
+  } else if (component.type === 'Nose Cone') {
+    const length = Math.max(0, numberValue(component.length, 0));
+    const radius = Math.max(0, getDiameter(component) / 2);
+    const wall = getWallThickness(component, 1.8);
+    const slant = Math.sqrt(length ** 2 + radius ** 2);
+    volume = Math.PI * radius * slant * wall * 0.78;
+  } else if (component.type === 'Transition') {
+    const length = Math.max(0, numberValue(component.length, 0));
+    const front = Math.max(0, numberValue(component.topDiameter, component.diameter) / 2);
+    const rear = Math.max(0, numberValue(component.bottomDiameter, component.diameter) / 2);
+    const wall = getWallThickness(component);
+    const slant = Math.sqrt(length ** 2 + (rear - front) ** 2);
+    volume = Math.PI * (front + rear) * slant * wall;
+  } else if (component.type === 'Fins') {
+    const count = Math.max(1, numberValue(component.finCount, 1));
+    const root = Math.max(0, numberValue(component.finWidth, 0));
+    const tip = Math.max(0, numberValue(component.finTipChord ?? component.tipChord, root * 0.45));
+    const span = Math.max(0, numberValue(component.finHeight, 0));
+    const thickness = Math.max(0, numberValue(component.finThickness, 0));
+    const tabArea = Math.max(0, numberValue(component.finTabLength, 0)) * Math.max(0, numberValue(component.finTabHeight, 0));
+    volume = count * ((((root + tip) / 2) * span + tabArea) * thickness);
+  } else if (component.type === 'Tube Coupler') {
+    volume = tubeVolumeMm3(numberValue(component.couplerLength, 0), numberValue(component.outerDiameter, 0), numberValue(component.innerDiameter, 0));
+  } else if (component.type === 'Motor Mount') {
+    volume = tubeVolumeMm3(numberValue(component.mountLength, 0), numberValue(component.outerDiameter, 0), numberValue(component.innerDiameter, 0));
+  } else if (component.type === 'Bulkhead') {
+    volume = diskAreaMm2(numberValue(component.outerDiameter, 0)) * Math.max(0, numberValue(component.thickness, 0));
+  } else if (component.type === 'Centering Ring') {
+    volume = Math.max(1, numberValue(component.ringCount, 1))
+      * annulusAreaMm2(numberValue(component.outerDiameter, 0), numberValue(component.innerDiameter, 0))
+      * Math.max(0, numberValue(component.thickness, 0));
+  } else if (component.type === 'Launch Lug') {
+    volume = tubeVolumeMm3(numberValue(component.length, 0), numberValue(component.diameter, 0), numberValue(component.innerDiameter, 0));
+  } else if (component.type === 'Rail Button') {
+    volume = Math.max(1, numberValue(component.instanceCount, 1))
+      * diskAreaMm2(numberValue(component.diameter, 0))
+      * Math.max(0, numberValue(component.length, 0));
+  } else if (component.type === 'Shock Cord') {
+    volume = diskAreaMm2(numberValue(component.cordDiameter, 0)) * Math.max(0, numberValue(component.cordLength, 0) * 1000);
+  }
+
+  return volume > 0 ? Number(mm3ToGrams(volume, density).toFixed(1)) : 0;
+};
+
 const componentDefaults = {
   'Nose Cone': {
     type: 'Nose Cone',
@@ -61,6 +180,7 @@ const componentDefaults = {
     diameter: 54,
     weight: 110,
     material: 'plastic',
+    wallThickness: 1.8,
     shape: 'ogive'
   },
   'Body Tube': {
@@ -69,7 +189,8 @@ const componentDefaults = {
     length: 520,
     diameter: 54,
     weight: 155,
-    material: 'cardboard'
+    material: 'cardboard',
+    wallThickness: 2.4
   },
   Transition: {
     type: 'Transition',
@@ -79,7 +200,8 @@ const componentDefaults = {
     topDiameter: 54,
     bottomDiameter: 38,
     weight: 42,
-    material: 'fiberglass'
+    material: 'fiberglass',
+    wallThickness: 1.8
   },
   'Electronics Bay': {
     type: 'Electronics Bay',
@@ -87,7 +209,8 @@ const componentDefaults = {
     length: 90,
     diameter: 54,
     weight: 95,
-    material: 'fiberglass'
+    material: 'fiberglass',
+    wallThickness: 2.2
   },
   'Recovery Bay': {
     type: 'Recovery Bay',
@@ -95,7 +218,8 @@ const componentDefaults = {
     length: 130,
     diameter: 54,
     weight: 72,
-    material: 'cardboard'
+    material: 'cardboard',
+    wallThickness: 2.6
   },
   'Active Airbrake': {
     type: 'Active Airbrake',
@@ -103,6 +227,8 @@ const componentDefaults = {
     length: 38,
     diameter: 54,
     weight: 70,
+    material: 'aluminum',
+    wallThickness: 1.4,
     surfaceCount: 3,
     surfaceArea: 0.0024,
     surfaceMaxAngle: 65
@@ -199,7 +325,8 @@ const componentDefaults = {
     drogueDragArea: 0.04,
     drogueDragCoefficient: 1.25,
     maxSafeVelocity: 7.5,
-    maxOpeningLoadG: 15
+    maxOpeningLoadG: 15,
+    material: 'internal'
   },
   'Rail Button': {
     type: 'Rail Button',
@@ -461,6 +588,10 @@ const cloneComponent = (type) => ({
 
 const componentMass = (component) => {
   if (component.type === 'Motor') return numberValue(component.motorWeight ?? component.weight, 0);
+  if (component.massOverride === false) {
+    const estimated = estimateComponentMass(component);
+    if (estimated > 0) return estimated;
+  }
   return numberValue(component.weight, 0);
 };
 
@@ -1027,6 +1158,35 @@ const getDesignChecks = ({ components, splitPoints = [], metrics, config, landin
     const mass = componentMass(component);
     if (mass <= 0) {
       add('error', 'Mass missing', `${component.name} needs a positive mass.`, componentTarget(component, 'mass'));
+    }
+    if (component.type !== 'Motor') {
+      const density = getMaterialDensity(component);
+      if (!component.material) {
+        add('warn', 'Material missing', `${component.name} should have a material selected.`, componentTarget(component, 'material'));
+      }
+      if (component.massOverride === false) {
+        if (density <= 0) {
+          add('error', 'Material density', `${component.name} needs positive material density for automatic mass.`, componentTarget(component, 'materialDensity'));
+        }
+        if (materialMassTypes.has(component.type) && estimateComponentMass(component) <= 0) {
+          add('error', 'Material geometry', `${component.name} needs valid geometry for automatic material mass.`, componentTarget(component, 'mass'));
+        }
+      }
+      if (shellWallTypes.has(component.type)) {
+        const wall = numberValue(component.wallThickness, 0);
+        const diameter = getDiameter(component);
+        if (wall < 0) {
+          add('error', 'Wall thickness', 'Wall thickness cannot be negative.', componentTarget(component, 'wallThickness'));
+        } else if (component.massOverride === false && wall <= 0) {
+          add('error', 'Wall thickness', 'Wall thickness must be positive for automatic mass.', componentTarget(component, 'wallThickness'));
+        }
+        if (diameter > 0 && wall * 2 >= diameter) {
+          add('error', 'Wall thickness', 'Wall thickness must leave a positive inner diameter.', [
+            componentTarget(component, 'wallThickness'),
+            componentTarget(component, 'diameter')
+          ]);
+        }
+      }
     }
 
     if (structuralTypes.has(component.type) && !launchHardwareTypes.has(component.type) && numberValue(component.length, 0) <= 0) {
@@ -3013,6 +3173,35 @@ function ComponentInspector({ component, components = [], updateComponent, metri
   const recoveryDeployEvent = isRecoveryDevice
     ? component.deployEvent || (getRecoveryRole(component) === 'drogue' ? 'apogee' : 'altitude')
     : 'altitude';
+  const materialPreset = getMaterialPreset(component.material);
+  const materialSelectValue = materialPreset ? materialPreset.value : 'custom';
+  const materialDensity = getMaterialDensity(component);
+  const canEstimateMass = materialMassTypes.has(component.type);
+  const autoMass = estimateComponentMass(component);
+  const setMass = (value) => updateComponent(component.id, {
+    [component.type === 'Motor' ? 'motorWeight' : 'weight']: value,
+    ...(component.type === 'Motor' ? {} : { massOverride: true })
+  });
+  const setMaterial = (value) => {
+    if (value === 'custom') {
+      updateComponent(component.id, {
+        material: materialPreset ? 'custom' : (component.material || 'custom'),
+        materialDensity: materialDensity || 1000
+      });
+      return;
+    }
+    const preset = getMaterialPreset(value);
+    updateComponent(component.id, {
+      material: value,
+      materialDensity: preset?.density || materialDensity
+    });
+  };
+  const setMassOverride = (enabled) => {
+    updateComponent(component.id, {
+      massOverride: enabled,
+      ...(enabled ? { weight: componentMass(component) } : {})
+    });
+  };
   const setStreamerGeometry = (key, value) => {
     const streamerLength = key === 'streamerLength' ? value : numberValue(component.streamerLength, 1.2);
     const streamerWidth = key === 'streamerWidth' ? value : numberValue(component.streamerWidth, 0.08);
@@ -3030,7 +3219,31 @@ function ComponentInspector({ component, components = [], updateComponent, metri
           <Field label="Diameter" value={component.diameter} unit="mm" checks={checks('diameter')} onChange={(value) => set('diameter', value)} />
         </>
       )}
-      <Field label="Mass" value={componentMass(component)} unit="g" checks={checks('mass')} onChange={(value) => set(component.type === 'Motor' ? 'motorWeight' : 'weight', value)} />
+      <Field label="Mass" value={componentMass(component)} unit="g" checks={checks('mass')} onChange={setMass} />
+      {component.type !== 'Motor' && (
+        <>
+          {canEstimateMass && (
+            <Toggle checked={component.massOverride !== false} onChange={setMassOverride} label="Mass override" />
+          )}
+          <Field
+            label="Material"
+            value={materialSelectValue}
+            checks={checks('material')}
+            onChange={setMaterial}
+            options={materialOptionsFor(component.material)}
+          />
+          {materialSelectValue === 'custom' && (
+            <Field label="Custom material" type="text" value={component.material || ''} checks={checks('material')} onChange={(value) => set('material', value)} />
+          )}
+          <Field label="Density" value={materialDensity || ''} unit="kg/m3" checks={checks('materialDensity')} onChange={(value) => set('materialDensity', value)} />
+          {canEstimateMass && component.massOverride === false && (
+            <div className="material-estimate">
+              <span>Estimated mass</span>
+              <strong>{autoMass > 0 ? `${formatNumber(autoMass, 1)} g` : '--'}</strong>
+            </div>
+          )}
+        </>
+      )}
     </>
   );
 
@@ -3068,6 +3281,9 @@ function ComponentInspector({ component, components = [], updateComponent, metri
               }))
             ]}
           />
+        )}
+        {shellWallTypes.has(component.type) && (
+          <Field label="Wall thickness" value={component.wallThickness ?? 2} unit="mm" checks={checks('wallThickness')} onChange={(value) => set('wallThickness', value)} />
         )}
         {component.type === 'Transition' && (
           <>
@@ -3119,7 +3335,6 @@ function ComponentInspector({ component, components = [], updateComponent, metri
                 { value: 'airfoil', label: 'Airfoil' }
               ]}
             />
-            <Field label="Material" type="text" value={component.material || ''} onChange={(value) => set('material', value)} />
           </>
         )}
         {component.type === 'Rail Button' && (
@@ -3127,14 +3342,12 @@ function ComponentInspector({ component, components = [], updateComponent, metri
             <Field label="Button count" value={component.instanceCount ?? 2} checks={checks('instanceCount')} onChange={(value) => set('instanceCount', value)} />
             <Field label="Button spacing" value={component.buttonSpacing ?? 170} unit="mm" checks={checks('buttonSpacing')} onChange={(value) => set('buttonSpacing', value)} />
             <Field label="Stand-off height" value={component.standoffHeight ?? 4} unit="mm" checks={checks('standoffHeight')} onChange={(value) => set('standoffHeight', value)} />
-            <Field label="Material" type="text" value={component.material || ''} onChange={(value) => set('material', value)} />
           </>
         )}
         {component.type === 'Launch Lug' && (
           <>
             <Field label="Inner diameter" value={component.innerDiameter ?? 5} unit="mm" checks={checks('innerDiameter')} onChange={(value) => set('innerDiameter', value)} />
             <Field label="Stand-off height" value={component.standoffHeight ?? 3} unit="mm" checks={checks('standoffHeight')} onChange={(value) => set('standoffHeight', value)} />
-            <Field label="Material" type="text" value={component.material || ''} onChange={(value) => set('material', value)} />
           </>
         )}
         {component.type === 'Mass Component' && (
@@ -3156,7 +3369,6 @@ function ComponentInspector({ component, components = [], updateComponent, metri
             <Field label="Cord length" value={component.cordLength ?? 3} unit="m" step="0.1" checks={checks('cordLength')} onChange={(value) => set('cordLength', value)} />
             <Field label="Cord diameter" value={component.cordDiameter ?? 3} unit="mm" step="0.1" checks={checks('cordDiameter')} onChange={(value) => set('cordDiameter', value)} />
             <Field label="Rated strength" value={component.maxTensionN ?? 450} unit="N" step="10" checks={checks('maxTensionN')} onChange={(value) => set('maxTensionN', value)} />
-            <Field label="Material" type="text" value={component.material || ''} onChange={(value) => set('material', value)} />
           </>
         )}
         {component.type === 'Tube Coupler' && (
@@ -3164,14 +3376,12 @@ function ComponentInspector({ component, components = [], updateComponent, metri
             <Field label="Coupler length" value={component.couplerLength ?? 84} unit="mm" checks={checks('couplerLength')} onChange={(value) => set('couplerLength', value)} />
             <Field label="Inner diameter" value={component.innerDiameter ?? 48} unit="mm" checks={checks('innerDiameter')} onChange={(value) => set('innerDiameter', value)} />
             <Field label="Outer diameter" value={component.outerDiameter ?? 52} unit="mm" checks={checks('outerDiameter')} onChange={(value) => set('outerDiameter', value)} />
-            <Field label="Material" type="text" value={component.material || ''} onChange={(value) => set('material', value)} />
           </>
         )}
         {component.type === 'Bulkhead' && (
           <>
             <Field label="Outer diameter" value={component.outerDiameter ?? 54} unit="mm" checks={checks('outerDiameter')} onChange={(value) => set('outerDiameter', value)} />
             <Field label="Thickness" value={component.thickness ?? 5} unit="mm" checks={checks('thickness')} onChange={(value) => set('thickness', value)} />
-            <Field label="Material" type="text" value={component.material || ''} onChange={(value) => set('material', value)} />
           </>
         )}
         {component.type === 'Motor Mount' && (
@@ -3179,7 +3389,6 @@ function ComponentInspector({ component, components = [], updateComponent, metri
             <Field label="Mount length" value={component.mountLength ?? 170} unit="mm" checks={checks('mountLength')} onChange={(value) => set('mountLength', value)} />
             <Field label="Inner diameter" value={component.innerDiameter ?? 29} unit="mm" checks={checks('innerDiameter')} onChange={(value) => set('innerDiameter', value)} />
             <Field label="Outer diameter" value={component.outerDiameter ?? 34} unit="mm" checks={checks('outerDiameter')} onChange={(value) => set('outerDiameter', value)} />
-            <Field label="Material" type="text" value={component.material || ''} onChange={(value) => set('material', value)} />
           </>
         )}
         {component.type === 'Centering Ring' && (
@@ -3188,7 +3397,6 @@ function ComponentInspector({ component, components = [], updateComponent, metri
             <Field label="Inner diameter" value={component.innerDiameter ?? 34} unit="mm" checks={checks('innerDiameter')} onChange={(value) => set('innerDiameter', value)} />
             <Field label="Outer diameter" value={component.outerDiameter ?? 54} unit="mm" checks={checks('outerDiameter')} onChange={(value) => set('outerDiameter', value)} />
             <Field label="Thickness" value={component.thickness ?? 4} unit="mm" checks={checks('thickness')} onChange={(value) => set('thickness', value)} />
-            <Field label="Material" type="text" value={component.material || ''} onChange={(value) => set('material', value)} />
           </>
         )}
         {isRecoveryDevice && (

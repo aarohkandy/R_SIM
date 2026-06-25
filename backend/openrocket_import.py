@@ -170,9 +170,14 @@ def _parse_linear_component(element: ET.Element, component_id: int, component_ty
     radius = _numeric_child(element, ["radius", "outerradius", "aftradius", "bottomradius", "foreRadius"])
     fore_radius = _numeric_child(element, ["foreradius", "topradius"])
     aft_radius = _numeric_child(element, ["aftradius", "bottomradius", "outerradius", "radius"])
+    inner_radius = _direct_numeric_child(element, ["innerradius", "foreinnerradius", "aftinnerradius"])
     diameter = _diameter_mm(radius)
     top_diameter = _diameter_mm(fore_radius) or diameter
     bottom_diameter = _diameter_mm(aft_radius) or diameter
+    inner_diameter = _diameter_mm(inner_radius)
+    wall_thickness = _length_mm(_direct_numeric_child(element, ["wallthickness", "thickness"]))
+    if not wall_thickness and diameter and inner_diameter:
+        wall_thickness = max(0.0, (diameter - inner_diameter) / 2.0)
     mass = _mass_g(_numeric_child(element, ["mass", "massoverride", "componentmass"]))
 
     return {
@@ -188,6 +193,7 @@ def _parse_linear_component(element: ET.Element, component_id: int, component_ty
         "topDiameterInput": _string_number(top_diameter),
         "bottomDiameterInput": _string_number(bottom_diameter),
         "weight": mass,
+        "wallThickness": wall_thickness or None,
         "noseShape": _first_text(element, ["shape"]) if component_type == "Nose Cone" else None,
         "finShape": None,
         "finCount": None,
@@ -197,6 +203,7 @@ def _parse_linear_component(element: ET.Element, component_id: int, component_ty
         "finSweep": None,
         "attachedToComponent": None,
         "importSource": "openrocket",
+        **_material_fields(element, _default_material_for_type(component_type), mass),
     }
 
 
@@ -247,6 +254,7 @@ def _parse_fin_component(element: ET.Element, component_id: int, attached_to: Op
         "finCrossSection": str(cross_section).lower(),
         "attachedToComponent": attached_to,
         "importSource": "openrocket",
+        **_material_fields(element, "plywood", mass),
     }
 
 
@@ -266,6 +274,7 @@ def _parse_mass_component(element: ET.Element, component_id: int, attached_to: O
         "axialPosition": axial_position,
         "attachedToComponent": attached_to,
         "importSource": "openrocket",
+        **_material_fields(element, "internal", mass),
     }
 
 
@@ -303,6 +312,7 @@ def _parse_recovery_component(element: ET.Element, component_id: int, attached_t
             "maxOpeningLoadG": _numeric_child(element, ["maxopeningloadg", "openingloadlimitg"]) or 12.0,
             "attachedToComponent": attached_to,
             "importSource": "openrocket",
+            **_material_fields(element, "mylar", mass),
         }
 
     diameter_mm = _length_mm(_numeric_child(element, ["diameter"]))
@@ -325,6 +335,7 @@ def _parse_recovery_component(element: ET.Element, component_id: int, attached_t
         "maxOpeningLoadG": _numeric_child(element, ["maxopeningloadg", "openingloadlimitg"]) or 15.0,
         "attachedToComponent": attached_to,
         "importSource": "openrocket",
+        **_material_fields(element, "ripstop nylon", mass),
     }
 
 
@@ -345,9 +356,9 @@ def _parse_shock_cord_component(element: ET.Element, component_id: int, attached
         "cordLength": cord_length or 3.0,
         "cordDiameter": cord_diameter or 3.0,
         "maxTensionN": max_tension or 450.0,
-        "material": _first_text(element, ["material"]) or "nylon",
         "attachedToComponent": attached_to,
         "importSource": "openrocket",
+        **_material_fields(element, "nylon", mass),
     }
 
 
@@ -380,10 +391,10 @@ def _parse_motor_mount_component(element: ET.Element, component_id: int, attache
         "mountLength": mount_length or 120.0,
         "innerDiameter": inner_diameter or 29.0,
         "outerDiameter": outer_diameter or 34.0,
-        "material": _first_text(element, ["material"]) or "phenolic",
         "axialPosition": axial_position or None,
         "attachedToComponent": attached_to,
         "importSource": "openrocket",
+        **_material_fields(element, "phenolic", mass),
     }
 
 
@@ -413,10 +424,10 @@ def _parse_centering_ring_component(element: ET.Element, component_id: int, atta
         "innerDiameter": inner_diameter or 29.0,
         "outerDiameter": outer_diameter or 40.0,
         "thickness": thickness or 3.0,
-        "material": _first_text(element, ["material"]) or "plywood",
         "axialPosition": axial_position or None,
         "attachedToComponent": attached_to,
         "importSource": "openrocket",
+        **_material_fields(element, "plywood", mass),
     }
 
 
@@ -442,10 +453,10 @@ def _parse_airframe_hardware_component(element: ET.Element, component_id: int, a
             "weight": mass,
             "outerDiameter": outer_diameter or 40.0,
             "thickness": thickness or 3.0,
-            "material": _first_text(element, ["material"]) or "plywood",
             "axialPosition": axial_position or None,
             "attachedToComponent": attached_to,
             "importSource": "openrocket",
+            **_material_fields(element, "plywood", mass),
         }
 
     coupler_length = _length_mm(_numeric_child(element, ["length", "couplerLength", "tubeCouplerLength"]))
@@ -468,10 +479,10 @@ def _parse_airframe_hardware_component(element: ET.Element, component_id: int, a
         "couplerLength": coupler_length or 80.0,
         "innerDiameter": inner_diameter or 48.0,
         "outerDiameter": outer_diameter or 52.0,
-        "material": _first_text(element, ["material"]) or "phenolic",
         "axialPosition": axial_position or None,
         "attachedToComponent": attached_to,
         "importSource": "openrocket",
+        **_material_fields(element, "phenolic", mass),
     }
 
 
@@ -506,10 +517,10 @@ def _parse_launch_hardware_component(element: ET.Element, component_id: int, att
             "weight": mass,
             "innerDiameter": inner_diameter or 4.0,
             "standoffHeight": standoff_height or 0.0,
-            "material": _first_text(element, ["material"]) or "phenolic",
             "axialPosition": axial_position or None,
             "attachedToComponent": attached_to,
             "importSource": "openrocket",
+            **_material_fields(element, "phenolic", mass),
         }
 
     button_diameter = (
@@ -530,10 +541,10 @@ def _parse_launch_hardware_component(element: ET.Element, component_id: int, att
         "instanceCount": max(1, instance_count),
         "buttonSpacing": button_spacing or 160.0,
         "standoffHeight": standoff_height or 4.0,
-        "material": _first_text(element, ["material"]) or "nylon",
         "axialPosition": axial_position or None,
         "attachedToComponent": attached_to,
         "importSource": "openrocket",
+        **_material_fields(element, "nylon", mass),
     }
 
 
@@ -604,6 +615,57 @@ def _first_text(element: ET.Element, names: List[str]) -> Optional[str]:
         if _tag(child) in wanted and child.text and child.text.strip():
             return child.text.strip()
     return None
+
+
+def _default_material_for_type(component_type: str) -> str:
+    return {
+        "Nose Cone": "plastic",
+        "Body Tube": "cardboard",
+        "Transition": "fiberglass",
+        "Electronics Bay": "fiberglass",
+        "Recovery Bay": "cardboard",
+    }.get(component_type, "cardboard")
+
+
+def _material_fields(element: ET.Element, fallback: str, mass_g: float = 0.0) -> Dict:
+    material_child = next((child for child in _iter_children(element) if _tag(child) == "material"), None)
+    material = fallback
+    density = 0.0
+    if material_child is not None:
+        material = (
+            (material_child.text or "").strip()
+            or material_child.attrib.get("name")
+            or material_child.attrib.get("digest")
+            or material_child.attrib.get("type")
+            or fallback
+        )
+        density = _density_kg_m3(
+            material_child.attrib.get("density")
+            or material_child.attrib.get("densityKgM3")
+            or material_child.attrib.get("density_kg_m3")
+        )
+    if not density:
+        density = _density_kg_m3(_numeric_child(element, ["materialdensity", "density", "densitykgm3"]))
+
+    fields = {
+        "material": material,
+        "massOverride": bool(mass_g),
+    }
+    if density:
+        fields["materialDensity"] = density
+    return fields
+
+
+def _density_kg_m3(value) -> float:
+    if value in (None, ""):
+        return 0.0
+    try:
+        density = float(str(value).strip().split()[0])
+    except (TypeError, ValueError, IndexError):
+        return 0.0
+    if density <= 0:
+        return 0.0
+    return round(density * 1000.0, 4) if density <= 20 else round(density, 4)
 
 
 def _numeric_child(element: ET.Element, names: List[str]) -> Optional[float]:

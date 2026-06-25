@@ -11,6 +11,7 @@
 - Let users set axial placement for fins, motors, rail buttons, launch lugs, tube couplers, bulkheads, motor mount tubes, and centering rings, and reflect those positions in drawing, mass, and CP analysis.
 - Let users choose the airframe host for fins, motors, rail buttons, and launch lugs, and show that attachment in the component table.
 - Show fins, motors, rail buttons, launch lugs, tube couplers, bulkheads, motor mount tubes, centering rings, internal masses, parachutes, streamers, and shock cords nested under their selected host in the design tree, with unattached subparts separated for repair.
+- Let users choose material presets, edit material density, toggle manual mass override, and use wall thickness plus geometry to estimate mass for physical airframe, fin, internal hardware, launch-guide, and shock-cord parts.
 - Let users add payload, avionics, battery, ballast, recovery-hardware mass components, tube couplers, bulkheads, motor mount tubes, and centering rings with editable station, host, dimensions, material, and mass.
 - Let users add launch lugs and rail buttons with editable station, host, guide dimensions, spacing/count, material, and mass.
 - Let users edit fin planform shape, root/tip chord, span, sweep, thickness, through-wall tab dimensions, cant angle, cross-section, material, host, and station from the component inspector.

@@ -107,6 +107,25 @@ class OpenRocketImportTests(unittest.TestCase):
         self.assertAlmostEqual(fins["finCantAngle"], 2.5)
         self.assertEqual(fins["finCrossSection"], "airfoil")
 
+    def test_parse_openrocket_material_density_and_wall_thickness(self):
+        xml = SAMPLE_OPENROCKET_XML.replace(
+            b"<bodytube>",
+            b"<bodytube><material density=\"760\">Kraft paper</material><innerRadius>0.018</innerRadius>",
+        ).replace(
+            b"<trapezoidfinset>",
+            b"<trapezoidfinset><material density=\"540\">Plywood</material>",
+        )
+        imported = parse_openrocket_design(xml, "materials.ork")
+        body = next(component for component in imported.rocket_data["components"] if component["type"] == "Body Tube")
+        fins = next(component for component in imported.rocket_data["components"] if component["type"] == "Fins")
+
+        self.assertEqual(body["material"], "Kraft paper")
+        self.assertAlmostEqual(body["materialDensity"], 760.0)
+        self.assertAlmostEqual(body["wallThickness"], 2.0)
+        self.assertTrue(body["massOverride"])
+        self.assertEqual(fins["material"], "Plywood")
+        self.assertAlmostEqual(fins["materialDensity"], 540.0)
+
     def test_parse_zipped_ork_archive(self):
         archive_bytes = io.BytesIO()
         with zipfile.ZipFile(archive_bytes, "w") as archive:
