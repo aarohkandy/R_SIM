@@ -612,6 +612,25 @@ button:focus-visible {
   pointer-events: none;
 }
 
+.streamer-marker {
+  fill: none;
+  stroke: #ff9f1c;
+  stroke-width: 4;
+  stroke-linecap: round;
+  cursor: pointer;
+}
+
+.streamer-marker.selected {
+  stroke: var(--accent);
+}
+
+.streamer-tether {
+  stroke: #a45f00;
+  stroke-width: 1;
+  stroke-dasharray: 3 3;
+  pointer-events: none;
+}
+
 .cg-line,
 .cp-line,
 .landing-line,

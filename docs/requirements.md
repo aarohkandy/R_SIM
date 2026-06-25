@@ -32,7 +32,7 @@
 - Builder subparts must expose their airframe attachment host in the inspector/table, auto-attach to a valid aft host when added, and reject invalid subpart-to-subpart references during simulation validation.
 - Builder design tree must nest attached subparts below their host airframe components and flag unattached subparts separately.
 - Internal mass components must expose station, host, role, and mass controls; affect component mass/CG calculations; render in the side view; and remain excluded from external length, diameter, and aerodynamic geometry.
-- Parachute components must expose main/drogue role, host, station, deploy event, deploy altitude, drag area, Cd, and opening-load controls; render in the side view; import from OpenRocket files; and drive the landing/recovery simulation config.
+- Parachute and streamer recovery components must expose main/drogue role, host, station, deploy event, deploy altitude, drag area, Cd, and opening-load controls; render in the side view; import from OpenRocket files; and drive the landing/recovery simulation config. Streamers must also expose strip length/width controls that can compute drag area.
 - Frontend motor search must use the local backend motor database, not hardcoded placeholder motor data, and support designation, impulse class, manufacturer, diameter, and TARC filters.
 - Motor imports must accept common `.eng` and `.rse` thrust-curve files, compute impulse/burn/average/peak values from the curve, and make the imported motor selectable from the Motors tab.
 - C++ controller code must compile before it is used by an active simulation.

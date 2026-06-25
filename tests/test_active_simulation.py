@@ -206,6 +206,73 @@ class ActiveSimulationTests(unittest.TestCase):
         self.assertAlmostEqual(landing["drag_area_m2"], 0.22)
         self.assertAlmostEqual(landing["drogue_drag_area_m2"], 0.035)
 
+    def test_streamer_component_can_drive_drogue_landing_configuration(self):
+        manager = ActiveSimulationManager()
+        rocket = sample_rocket()
+        rocket["components"].extend([
+            {
+                "id": 5,
+                "type": "Parachute",
+                "name": "Main chute",
+                "weight": 35,
+                "recoveryRole": "main",
+                "deployEvent": "altitude",
+                "deployAltitude": 60,
+                "dragArea": 0.22,
+                "dragCoefficient": 1.6,
+                "maxOpeningLoadG": 14,
+                "attachedToComponent": 2,
+            },
+            {
+                "id": 6,
+                "type": "Streamer",
+                "name": "Drogue streamer",
+                "weight": 16,
+                "recoveryRole": "drogue",
+                "deployEvent": "apogee",
+                "streamerLength": 1.2,
+                "streamerWidth": 0.08,
+                "dragCoefficient": 1.05,
+                "maxOpeningLoadG": 12,
+                "attachedToComponent": 2,
+            },
+        ])
+        config = base_config()
+        config["landingSystem"]["enabled"] = False
+
+        result = manager.submit_cfd_simulation(rocket, config)["results"]
+        landing = result["landing_system"]
+
+        self.assertTrue(landing["enabled"])
+        self.assertEqual(landing["type"], "drogue_main")
+        self.assertEqual(landing["drogue_deploy_event"], "apogee")
+        self.assertAlmostEqual(landing["drag_area_m2"], 0.22)
+        self.assertAlmostEqual(landing["drogue_drag_area_m2"], 0.096)
+        self.assertAlmostEqual(landing["drogue_drag_coefficient"], 1.05)
+
+    def test_invalid_streamer_component_is_rejected(self):
+        manager = ActiveSimulationManager()
+        rocket = sample_rocket()
+        rocket["components"].append({
+            "id": 5,
+            "type": "Streamer",
+            "name": "Broken streamer",
+            "weight": 10,
+            "recoveryRole": "drogue",
+            "deployEvent": "barometric_guess",
+            "streamerLength": 0,
+            "streamerWidth": 0,
+            "dragCoefficient": 0,
+            "attachedToComponent": 2,
+        })
+
+        result = manager.submit_cfd_simulation(rocket, base_config())
+
+        self.assertFalse(result["success"])
+        self.assertTrue(any("Broken streamer deploy event" in error for error in result["validation_errors"]))
+        self.assertTrue(any("Broken streamer streamer length" in error for error in result["validation_errors"]))
+        self.assertTrue(any("Broken streamer drag area" in error for error in result["validation_errors"]))
+
     def test_invalid_parachute_component_is_rejected(self):
         manager = ActiveSimulationManager()
         rocket = sample_rocket()

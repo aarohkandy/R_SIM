@@ -136,6 +136,24 @@ class OpenRocketImportTests(unittest.TestCase):
         self.assertGreater(parachute["dragArea"], 0.2)
         self.assertEqual(parachute["attachedToComponent"], body["id"])
 
+    def test_parse_openrocket_streamer_component(self):
+        xml = SAMPLE_OPENROCKET_XML.replace(
+            b"<trapezoidfinset>",
+            b"<streamer><name>Drogue Streamer</name><mass>0.016</mass><stripLength>1.200</stripLength><stripWidth>0.080</stripWidth><cd>1.05</cd><deployEvent>apogee</deployEvent></streamer><trapezoidfinset>",
+        )
+        imported = parse_openrocket_design(xml, "streamer.ork")
+        streamer = next(component for component in imported.rocket_data["components"] if component["type"] == "Streamer")
+        body = next(component for component in imported.rocket_data["components"] if component["type"] == "Body Tube")
+
+        self.assertEqual(streamer["name"], "Drogue Streamer")
+        self.assertEqual(streamer["recoveryRole"], "drogue")
+        self.assertEqual(streamer["deployEvent"], "apogee")
+        self.assertAlmostEqual(streamer["streamerLength"], 1.2)
+        self.assertAlmostEqual(streamer["streamerWidth"], 0.08)
+        self.assertAlmostEqual(streamer["dragArea"], 0.096)
+        self.assertAlmostEqual(streamer["dragCoefficient"], 1.05)
+        self.assertEqual(streamer["attachedToComponent"], body["id"])
+
     def test_import_endpoint_rejects_non_openrocket_extension(self):
         client = app.test_client()
         response = client.post(

@@ -36,6 +36,7 @@ MASS_COMPONENT_TAGS = {
 
 RECOVERY_COMPONENT_TAGS = {
     "parachute",
+    "streamer",
 }
 
 
@@ -73,7 +74,7 @@ def parse_openrocket_design(payload: bytes, filename: str = "design.ork") -> Imp
             components.append(component)
             next_id += 1
         elif tag in RECOVERY_COMPONENT_TAGS:
-            component = _parse_recovery_component(element, next_id, last_body_id)
+            component = _parse_recovery_component(element, next_id, last_body_id, tag)
             components.append(component)
             next_id += 1
 
@@ -208,16 +209,46 @@ def _parse_mass_component(element: ET.Element, component_id: int, attached_to: O
     }
 
 
-def _parse_recovery_component(element: ET.Element, component_id: int, attached_to: Optional[int]) -> Dict:
-    name = _first_text(element, ["name"]) or "Imported Parachute"
+def _parse_recovery_component(element: ET.Element, component_id: int, attached_to: Optional[int], tag: str) -> Dict:
+    is_streamer = tag == "streamer"
+    component_type = "Streamer" if is_streamer else "Parachute"
+    name = _first_text(element, ["name"]) or f"Imported {component_type}"
     mass = _mass_g(_numeric_child(element, ["mass", "massoverride", "componentmass"]))
+    role = _first_text(element, ["role"]) or ("drogue" if "drogue" in name.lower() else "main")
+    deploy_altitude = _length_mm(_numeric_child(element, ["deployaltitude", "deploymentaltitude", "altitude"]))
+    cd = _numeric_child(element, ["cd", "dragcoefficient"]) or (1.05 if is_streamer else 1.55)
+
+    if is_streamer:
+        streamer_length = _length_m(_numeric_child(element, ["striplength", "streamerlength", "length"]))
+        streamer_width = _length_m(_numeric_child(element, ["stripwidth", "streamerwidth", "width"]))
+        area = _numeric_child(element, ["dragarea", "area"])
+        if not area and streamer_length > 0 and streamer_width > 0:
+            area = streamer_length * streamer_width
+        streamer_length = streamer_length or 1.2
+        streamer_width = streamer_width or 0.08
+        return {
+            "id": component_id,
+            "type": "Streamer",
+            "name": name,
+            "length": 0,
+            "diameter": 0,
+            "weight": mass,
+            "recoveryRole": "drogue" if str(role).lower() == "drogue" else "main",
+            "deployEvent": _first_text(element, ["deployevent", "deploymentevent"]) or ("apogee" if str(role).lower() == "drogue" else "altitude"),
+            "deployAltitude": deploy_altitude or 120.0,
+            "streamerLength": streamer_length,
+            "streamerWidth": streamer_width,
+            "dragArea": round(area or (streamer_length * streamer_width), 4),
+            "dragCoefficient": cd,
+            "maxOpeningLoadG": _numeric_child(element, ["maxopeningloadg", "openingloadlimitg"]) or 12.0,
+            "attachedToComponent": attached_to,
+            "importSource": "openrocket",
+        }
+
     diameter_mm = _length_mm(_numeric_child(element, ["diameter"]))
     area = _numeric_child(element, ["dragarea", "area"])
     if not area and diameter_mm > 0:
         area = 3.141592653589793 * (diameter_mm / 2000.0) ** 2
-    cd = _numeric_child(element, ["cd", "dragcoefficient"]) or 1.55
-    role = _first_text(element, ["role"]) or ("drogue" if "drogue" in name.lower() else "main")
-    deploy_altitude = _length_mm(_numeric_child(element, ["deployaltitude", "deploymentaltitude", "altitude"]))
 
     return {
         "id": component_id,
@@ -324,6 +355,12 @@ def _length_mm(value: Optional[float]) -> float:
     if value is None:
         return 0.0
     return round(value * 1000.0, 4) if abs(value) <= 5 else round(value, 4)
+
+
+def _length_m(value: Optional[float]) -> float:
+    if value is None:
+        return 0.0
+    return round(value / 1000.0, 4) if abs(value) > 20 else round(value, 4)
 
 
 def _diameter_mm(radius_value: Optional[float]) -> float:

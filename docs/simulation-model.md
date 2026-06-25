@@ -19,7 +19,7 @@ This local model is not CFD and is not flight certification. Its output is marke
 - Output includes `stage_splits` as structural split/stage marker metadata derived from builder boundaries; the current local model does not separate stages in flight.
 - Input validation treats fins, motors, and rail buttons as attached subparts. Missing host references warn, while references to non-airframe hosts block the run.
 - Internal mass components are accepted as payload/avionics/battery/ballast/recovery mass inputs. They are validated as attached subparts, included in frontend mass/CG, and ignored by backend external geometry and aerodynamic-center calculations.
-- Parachute components are accepted as attached recovery devices. Main and drogue parachute parts are translated into the landing-system config before validation and simulation, while remaining internal to external geometry and aerodynamic-center calculations.
+- Parachute and streamer components are accepted as attached recovery devices. Main and drogue recovery parts are translated into the landing-system config before validation and simulation, while remaining internal to external geometry and aerodynamic-center calculations. Streamer drag area can come from explicit area or strip length multiplied by strip width.
 
 ## Target Model Direction
 

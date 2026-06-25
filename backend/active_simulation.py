@@ -24,9 +24,10 @@ class ActiveSimulationManager:
     """Runs deterministic local active pneumatic rocket simulations."""
 
     model_version = "active_pneumatic_local_dynamics_v1"
-    attachment_child_types = {"fins", "motor", "rail button", "mass component", "parachute"}
+    recovery_component_types = {"parachute", "streamer"}
+    attachment_child_types = {"fins", "motor", "rail button", "mass component"} | recovery_component_types
     attachment_host_types = {"body tube", "transition", "electronics bay", "recovery bay", "active airbrake"}
-    internal_component_types = {"fins", "motor", "rail button", "mass component", "parachute"}
+    internal_component_types = {"fins", "motor", "rail button", "mass component"} | recovery_component_types
 
     def __init__(self):
         self.simulations: Dict[str, Dict] = {}
@@ -61,6 +62,22 @@ class ActiveSimulationManager:
             if key in component and component[key] not in (None, ""):
                 return component[key]
         return default
+
+    def _recovery_drag_area(self, component: Dict, default: float = 0.0) -> float:
+        area = self._as_float(self._first_value(component, ["dragArea", "area"], None), 0.0)
+        if area > 0:
+            return area
+        if str(component.get("type", "")).lower() == "streamer":
+            streamer_length = self._as_float(
+                self._first_value(component, ["streamerLength", "stripLength", "streamer_length"], 0.0),
+                0.0,
+            )
+            streamer_width = self._as_float(
+                self._first_value(component, ["streamerWidth", "stripWidth", "streamer_width"], 0.0),
+                0.0,
+            )
+            return max(0.0, streamer_length * streamer_width)
+        return self._as_float(default, 0.0)
 
     @staticmethod
     def _clamp(value: float, low: float, high: float) -> float:
@@ -137,11 +154,11 @@ class ActiveSimulationManager:
 
     def _apply_recovery_components_to_config(self, rocket_data: Dict, config: Dict) -> Dict:
         components = rocket_data.get("components", [])
-        parachutes = [
+        recovery_devices = [
             component for component in components
-            if isinstance(component, dict) and str(component.get("type", "")).lower() == "parachute"
+            if isinstance(component, dict) and str(component.get("type", "")).lower() in self.recovery_component_types
         ]
-        if not parachutes:
+        if not recovery_devices:
             return config
 
         def role(component: Dict) -> str:
@@ -149,14 +166,14 @@ class ActiveSimulationManager:
             return "drogue" if str(raw).lower() == "drogue" else "main"
 
         landing = dict(config.get("landingSystem") or config.get("recoverySystem") or {})
-        main = next((component for component in parachutes if role(component) == "main"), parachutes[0])
-        drogue = next((component for component in parachutes if role(component) == "drogue"), None)
+        main = next((component for component in recovery_devices if role(component) == "main"), recovery_devices[0])
+        drogue = next((component for component in recovery_devices if component is not main and role(component) == "drogue"), None)
         landing.update({
             "enabled": True,
             "type": "drogue_main" if drogue else "main_parachute",
             "mainDeployEvent": self._first_value(main, ["deployEvent", "deploymentEvent", "mainDeployEvent"], landing.get("mainDeployEvent", "altitude")),
             "deployAltitude": self._first_value(main, ["deployAltitude", "deploymentAltitude"], landing.get("deployAltitude", 120.0)),
-            "dragArea": self._first_value(main, ["dragArea", "area"], landing.get("dragArea", 0.18)),
+            "dragArea": self._recovery_drag_area(main, landing.get("dragArea", 0.18)),
             "dragCoefficient": self._first_value(main, ["dragCoefficient", "cd"], landing.get("dragCoefficient", 1.55)),
             "maxOpeningLoadG": self._first_value(main, ["maxOpeningLoadG", "openingLoadLimitG"], landing.get("maxOpeningLoadG", 15.0)),
         })
@@ -164,7 +181,7 @@ class ActiveSimulationManager:
             landing.update({
                 "drogueDeployEvent": self._first_value(drogue, ["deployEvent", "deploymentEvent", "drogueDeployEvent"], landing.get("drogueDeployEvent", "apogee")),
                 "drogueDeployAltitude": self._first_value(drogue, ["deployAltitude", "deploymentAltitude"], landing.get("drogueDeployAltitude", landing["deployAltitude"])),
-                "drogueDragArea": self._first_value(drogue, ["dragArea", "area"], landing.get("drogueDragArea", 0.04)),
+                "drogueDragArea": self._recovery_drag_area(drogue, landing.get("drogueDragArea", 0.04)),
                 "drogueDragCoefficient": self._first_value(drogue, ["dragCoefficient", "cd"], landing.get("drogueDragCoefficient", 1.25)),
             })
         return {
@@ -249,7 +266,7 @@ class ActiveSimulationManager:
                 host = components_by_id.get(str(attached_to))
                 if host is None or str(host.get("type", "")).lower() not in self.attachment_host_types:
                     errors.append(f"{name} attachment must reference a body tube, transition, electronics bay, recovery bay, or active airbrake.")
-            if component_type == "parachute":
+            if component_type in self.recovery_component_types:
                 deploy_event = self._normalize_deploy_event(
                     self._first_value(component, ["deployEvent", "deploymentEvent"], "altitude"),
                     "altitude",
@@ -262,7 +279,20 @@ class ActiveSimulationManager:
                         errors.append(f"{name} deploy altitude must be positive.")
                 if deploy_event == "motor_ejection" and motor_delay <= 0:
                     warnings.append(f"{name} uses motor ejection but motor delay is not set.")
-                if self._as_float(self._first_value(component, ["dragArea", "area"], 0.0), 0.0) <= 0:
+                if component_type == "streamer":
+                    streamer_length = self._as_float(
+                        self._first_value(component, ["streamerLength", "stripLength", "streamer_length"], 0.0),
+                        0.0,
+                    )
+                    streamer_width = self._as_float(
+                        self._first_value(component, ["streamerWidth", "stripWidth", "streamer_width"], 0.0),
+                        0.0,
+                    )
+                    if streamer_length <= 0:
+                        errors.append(f"{name} streamer length must be positive.")
+                    if streamer_width <= 0:
+                        errors.append(f"{name} streamer width must be positive.")
+                if self._recovery_drag_area(component, 0.0) <= 0:
                     errors.append(f"{name} drag area must be positive.")
                 if self._as_float(self._first_value(component, ["dragCoefficient", "cd"], 0.0), 0.0) <= 0:
                     errors.append(f"{name} drag coefficient must be positive.")
