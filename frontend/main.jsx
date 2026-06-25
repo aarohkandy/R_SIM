@@ -614,6 +614,27 @@ const summarizeRun = ({ label, active, passive = null }) => {
   };
 };
 
+const csvCell = (value) => {
+  if (value === null || value === undefined) return '';
+  const text = String(value);
+  return /[",\n]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
+};
+
+const rowsToCsv = (rows, headers) => [
+  headers.join(','),
+  ...rows.map((row) => headers.map((key) => csvCell(row[key])).join(','))
+].join('\n');
+
+const mergeRowsByTime = (...collections) => {
+  const merged = new Map();
+  collections.flat().forEach((row) => {
+    if (!row || row.time === undefined || row.time === null) return;
+    const key = String(row.time);
+    merged.set(key, { ...(merged.get(key) || {}), ...row });
+  });
+  return [...merged.values()].sort((a, b) => numberValue(a.time) - numberValue(b.time));
+};
+
 function Field({ label, value, unit, type = 'number', step = 'any', min, max, onChange, options }) {
   const id = `${label.replace(/[^a-z0-9]+/gi, '-')}-${Math.random().toString(36).slice(2)}`;
   return (
@@ -1432,6 +1453,9 @@ function ResultsPanel({
   const trajectory = data?.trajectory || [];
   const activeHistory = data?.active_system?.history || [];
   const landingHistory = data?.landing_system?.history || [];
+  const controllerHistory = data?.controller?.history || [];
+  const forceHistory = data?.force_history || [];
+  const momentHistory = data?.moment_history || [];
   const touchdown = data?.landing_system;
   const launchGuide = data?.launch_guide;
   const recoveryTiming = data?.recovery_timing;
@@ -1602,6 +1626,17 @@ function ResultsPanel({
       />
       <LineChart
         compact
+        title="Force balance"
+        yUnit="N"
+        series={[
+          { label: 'Thrust', color: '#343a40', points: forceHistory.map((row) => ({ x: row.time, y: row.thrust_force })) },
+          { label: 'Drag', color: '#d9514e', points: forceHistory.map((row) => ({ x: row.time, y: row.drag_force })) },
+          { label: 'Weight', color: '#8b97a6', points: forceHistory.map((row) => ({ x: row.time, y: row.weight_force })) },
+          { label: 'Net Z', color: '#2a9d8f', points: forceHistory.map((row) => ({ x: row.time, y: row.net_force_z })) }
+        ]}
+      />
+      <LineChart
+        compact
         title="Active and landing deployment"
         yUnit="%"
         series={[
@@ -1611,9 +1646,42 @@ function ResultsPanel({
           { label: 'Main', color: '#d9514e', points: landingHistory.map((row) => ({ x: row.time, y: (row.main_deployment || 0) * 100 })) }
         ]}
       />
+      <LineChart
+        compact
+        title="Pneumatic and aero pressure"
+        yUnit="kPa"
+        series={[
+          { label: 'Tank', color: '#f2a541', points: activeHistory.map((row) => ({ x: row.time, y: row.tank_pressure / 1000 })) },
+          { label: 'Actuator', color: '#7b61ff', points: activeHistory.map((row) => ({ x: row.time, y: row.actuator_pressure / 1000 })) },
+          { label: 'Dynamic q', color: '#4d908e', points: forceHistory.map((row) => ({ x: row.time, y: row.dynamic_pressure / 1000 })) }
+        ]}
+      />
+      <LineChart
+        compact
+        title="Controller and drag"
+        yUnit="Cd / %"
+        series={[
+          { label: 'Drag Cd', color: '#d9514e', points: trajectory.map((row) => ({ x: row.time, y: row.drag_coefficient })) },
+          { label: 'Command', color: '#343a40', points: controllerHistory.map((row) => ({ x: row.time, y: row.command * 100 })) },
+          { label: 'Target', color: '#f2a541', points: controllerHistory.map((row) => ({ x: row.time, y: row.surface_target * 100 })) }
+        ]}
+      />
+      <LineChart
+        compact
+        title="Attitude moments"
+        yUnit="Nm"
+        series={[
+          { label: 'Pitch', color: '#d9514e', points: momentHistory.map((row) => ({ x: row.time, y: row.pitch_moment })) },
+          { label: 'Yaw', color: '#4d908e', points: momentHistory.map((row) => ({ x: row.time, y: row.yaw_moment })) },
+          { label: 'Roll', color: '#343a40', points: momentHistory.map((row) => ({ x: row.time, y: row.roll_moment })) }
+        ]}
+      />
       <div className="result-actions">
         <button type="button" onClick={() => exportResults('json')}>Export JSON</button>
-        <button type="button" onClick={() => exportResults('csv')}>Export trajectory CSV</button>
+        <button type="button" onClick={() => exportResults('trajectory')}>Trajectory CSV</button>
+        <button type="button" onClick={() => exportResults('forces')}>Force/moment CSV</button>
+        <button type="button" onClick={() => exportResults('active')}>Active CSV</button>
+        <button type="button" onClick={() => exportResults('recovery')}>Recovery CSV</button>
       </div>
       {data.warnings?.length ? (
         <div className="warning-list">
@@ -1988,14 +2056,83 @@ function App() {
     let content = '';
     let type = 'application/json';
     let filename = 'active-rocket-results.json';
-    if (format === 'csv') {
-      const headers = ['time', 'altitude', 'velocity_z', 'speed', 'dynamic_pressure', 'surface_deployment', 'landing_deployment', 'drogue_deployment', 'main_deployment'];
-      content = [
-        headers.join(','),
-        ...(result.results.trajectory || []).map((row) => headers.map((key) => row[key] ?? '').join(','))
-      ].join('\n');
+    if (format !== 'json') {
       type = 'text/csv';
-      filename = 'active-rocket-trajectory.csv';
+      if (format === 'trajectory') {
+        const headers = [
+          'time',
+          'altitude',
+          'downrange_x',
+          'crossrange_y',
+          'velocity_z',
+          'speed',
+          'acceleration_z',
+          'pitch_deg',
+          'yaw_deg',
+          'roll_deg',
+          'dynamic_pressure',
+          'drag_coefficient',
+          'surface_deployment',
+          'landing_deployment',
+          'drogue_deployment',
+          'main_deployment'
+        ];
+        content = rowsToCsv(result.results.trajectory || [], headers);
+        filename = 'active-rocket-trajectory.csv';
+      } else if (format === 'forces') {
+        const rows = mergeRowsByTime(result.results.force_history || [], result.results.moment_history || []);
+        const headers = [
+          'time',
+          'thrust_force',
+          'drag_force',
+          'weight_force',
+          'net_force_x',
+          'net_force_y',
+          'net_force_z',
+          'dynamic_pressure',
+          'drag_coefficient',
+          'pitch_moment',
+          'yaw_moment',
+          'roll_moment',
+          'pitch_rate_deg_s',
+          'yaw_rate_deg_s',
+          'roll_rate_deg_s'
+        ];
+        content = rowsToCsv(rows, headers);
+        filename = 'active-rocket-forces-moments.csv';
+      } else if (format === 'active') {
+        const rows = mergeRowsByTime(result.results.active_system?.history || [], result.results.controller?.history || []);
+        const headers = [
+          'time',
+          'tank_pressure',
+          'actuator_pressure',
+          'stroke_m',
+          'surface_deployment',
+          'surface_angle_deg',
+          'valve_command',
+          'mode',
+          'predicted_apogee',
+          'command',
+          'surface_target'
+        ];
+        content = rowsToCsv(rows, headers);
+        filename = 'active-rocket-active-system.csv';
+      } else if (format === 'recovery') {
+        const headers = [
+          'time',
+          'phase',
+          'altitude',
+          'velocity_z',
+          'deployed',
+          'deployment',
+          'drogue_deployed',
+          'drogue_deployment',
+          'main_deployed',
+          'main_deployment'
+        ];
+        content = rowsToCsv(result.results.landing_system?.history || [], headers);
+        filename = 'active-rocket-recovery.csv';
+      }
     } else {
       content = JSON.stringify({ active: result, passive: comparisonResult }, null, 2);
     }
