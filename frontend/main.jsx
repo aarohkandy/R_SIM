@@ -1434,6 +1434,7 @@ function ResultsPanel({
   const landingHistory = data?.landing_system?.history || [];
   const touchdown = data?.landing_system;
   const launchGuide = data?.launch_guide;
+  const recoveryTiming = data?.recovery_timing;
   const events = data?.flight_events || [];
   const apogeeTrim = comparisonData ? comparisonData.max_altitude - data.max_altitude : null;
   const touchdownDelta = comparisonData ? comparisonData.landing_velocity - data.landing_velocity : null;
@@ -1467,7 +1468,18 @@ function ResultsPanel({
         label: 'Landing margin',
         status: landingMargin >= 1 ? 'good' : landingMargin >= 0 ? 'warn' : 'bad',
         detail: `${formatNumber(landingMargin, 2)} m/s below limit`
+      },
+    recoveryTiming
+      ? {
+        label: 'Motor delay',
+        status: recoveryTiming.status === 'optimal'
+          ? 'good'
+          : Math.abs(recoveryTiming.timing_error_s) <= 2.5
+            ? 'warn'
+            : 'bad',
+        detail: `${recoveryTiming.timing_error_s >= 0 ? '+' : ''}${formatNumber(recoveryTiming.timing_error_s, 2)} s from apogee; optimal ${formatNumber(recoveryTiming.optimal_delay_s, 1)} s`
       }
+      : null
   ].filter(Boolean);
 
   if (!data) {
@@ -1491,6 +1503,7 @@ function ResultsPanel({
         <div className="metric-box"><span>Status</span><strong>{touchdown?.touchdown_status || 'n/a'}</strong></div>
         <div className="metric-box"><span>Downrange</span><strong>{formatNumber(data.downrange_distance, 1)} m</strong></div>
         <div className="metric-box"><span>Guide exit</span><strong>{formatNumber(launchGuide?.simulated_exit_velocity_mps ?? launchGuide?.estimated_exit_velocity_mps, 2)} m/s</strong></div>
+        <div className="metric-box"><span>Motor delay</span><strong>{formatNumber(recoveryTiming?.motor_delay_s, 1)} s</strong></div>
         <div className="metric-box"><span>Stability</span><strong>{formatNumber(metrics.stability, 2)} cal</strong></div>
       </div>
       {comparisonData && (

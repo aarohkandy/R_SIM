@@ -180,6 +180,30 @@ class ActiveSimulationTests(unittest.TestCase):
         self.assertGreater(result["thrust_profile"]["integrated_impulse"], 0)
         self.assertGreater(len(thrust_values), 2)
 
+    def test_motor_delay_recovery_timing_is_reported(self):
+        rocket = sample_rocket()
+        motor = next(component for component in rocket["components"] if component["type"] == "Motor")
+        motor["motorDelay"] = 4.0
+        manager = ActiveSimulationManager()
+        result = manager.submit_cfd_simulation(rocket, base_config())["results"]
+        timing = result["recovery_timing"]
+        event_names = [event["name"] for event in result["flight_events"]]
+
+        self.assertIn("Motor ejection", event_names)
+        self.assertAlmostEqual(timing["ejection_time_s"], result["motor_burn_time"] + 4.0, places=5)
+        self.assertIn(timing["status"], {"optimal", "early", "late"})
+        self.assertGreaterEqual(timing["optimal_delay_s"], 0)
+
+    def test_negative_motor_delay_is_rejected(self):
+        rocket = sample_rocket()
+        motor = next(component for component in rocket["components"] if component["type"] == "Motor")
+        motor["motorDelay"] = -1
+        manager = ActiveSimulationManager()
+        result = manager.submit_cfd_simulation(rocket, base_config())
+
+        self.assertFalse(result["success"])
+        self.assertIn("Motor delay must not be negative.", result["validation_errors"])
+
     def test_aero_drag_table_changes_effective_drag(self):
         manager = ActiveSimulationManager()
         baseline_config = base_config(target_apogee=35)

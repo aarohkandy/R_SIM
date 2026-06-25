@@ -119,10 +119,13 @@ class ActiveSimulationManager:
             burn_time = self._as_float(self._first_value(motor, ["motorBurnTime", "burn_time", "burnTime"], 0.0), 0.0)
             thrust = self._as_float(self._first_value(motor, ["motorThrust", "average_thrust", "averageThrust"], 0.0), 0.0)
             impulse = self._as_float(self._first_value(motor, ["motorTotalImpulse", "total_impulse", "totalImpulse"], 0.0), 0.0)
+            delay = self._as_float(self._first_value(motor, ["motorDelay", "delay_time", "delay"], 0.0), 0.0)
             if burn_time <= 0:
                 errors.append("Motor burn time must be positive.")
             if thrust <= 0 and impulse <= 0:
                 errors.append("Motor thrust or total impulse must be positive.")
+            if delay < 0:
+                errors.append("Motor delay must not be negative.")
 
         if self._rocket_diameter_m(components) <= 0.01 and components:
             warnings.append("Rocket diameter is very small; check units.")
@@ -252,6 +255,10 @@ class ActiveSimulationManager:
         burn_time_s = self._as_float(
             self._first_value(motor, ["motorBurnTime", "burn_time", "burnTime"], 1.6),
             1.6,
+        )
+        motor_delay_s = self._as_float(
+            self._first_value(motor, ["motorDelay", "delay_time", "delay"], 0.0),
+            0.0,
         )
         total_impulse_ns = self._as_float(
             self._first_value(motor, ["motorTotalImpulse", "total_impulse", "totalImpulse"], thrust_n * burn_time_s),
@@ -612,10 +619,19 @@ class ActiveSimulationManager:
         aero_center = self._aerodynamic_center_m(components, total_length_m, diameter_m)
         cp_m = aero_center["cp_m"]
         stability_margin = (cp_m - cg_m) / diameter_m
+        recovery_timing = self._build_recovery_timing(
+            burn_time_s=burn_time_s,
+            motor_delay_s=motor_delay_s,
+            apogee_time=apogee_time,
+            touchdown_time=touchdown_time,
+        )
+        if motor_delay_s > 0 and abs(recovery_timing["timing_error_s"]) > 2.5:
+            warnings.append("Motor ejection delay is far from apogee; use avionics or adjust delay.")
         flight_events = self._build_flight_events(
             burn_time_s=burn_time_s,
             max_altitude=max_altitude,
             apogee_time=apogee_time,
+            recovery_timing=recovery_timing,
             max_deployment=max_deployment,
             max_deployment_time=max_deployment_time,
             landing=landing,
@@ -641,7 +657,9 @@ class ActiveSimulationManager:
             "downrange_distance": downrange,
             "motor_thrust": thrust_n,
             "motor_burn_time": burn_time_s,
+            "motor_delay": motor_delay_s,
             "total_impulse": total_impulse_ns,
+            "recovery_timing": recovery_timing,
             "stability_margin": stability_margin,
             "center_of_pressure_m": cp_m,
             "cp_contributions": aero_center["contributions"],
@@ -907,6 +925,7 @@ class ActiveSimulationManager:
         burn_time_s: float,
         max_altitude: float,
         apogee_time: float,
+        recovery_timing: Dict,
         max_deployment: float,
         max_deployment_time: float,
         landing: Dict,
@@ -942,6 +961,14 @@ class ActiveSimulationManager:
                 "unit": "m",
             },
         ]
+        if recovery_timing.get("motor_delay_s", 0.0) > 0:
+            events.append({
+                "name": "Motor ejection",
+                "time": round(recovery_timing["ejection_time_s"], 3),
+                "type": "recovery",
+                "value": round(recovery_timing["timing_error_s"], 3),
+                "unit": "s from apogee",
+            })
         if max_deployment > 0.001:
             events.append({
                 "name": "Max airbrake",
@@ -976,6 +1003,33 @@ class ActiveSimulationManager:
                 "unit": "m/s",
             })
         return sorted(events, key=lambda item: item["time"])
+
+    @staticmethod
+    def _build_recovery_timing(
+        *,
+        burn_time_s: float,
+        motor_delay_s: float,
+        apogee_time: float,
+        touchdown_time: Optional[float],
+    ) -> Dict[str, float]:
+        ejection_time_s = burn_time_s + max(motor_delay_s, 0.0)
+        timing_error_s = ejection_time_s - apogee_time
+        abs_error = abs(timing_error_s)
+        if abs_error <= 1.0:
+            status = "optimal"
+        elif timing_error_s < 0:
+            status = "early"
+        else:
+            status = "late"
+        return {
+            "motor_delay_s": motor_delay_s,
+            "optimal_delay_s": max(apogee_time - burn_time_s, 0.0),
+            "ejection_time_s": ejection_time_s,
+            "apogee_time_s": apogee_time,
+            "timing_error_s": timing_error_s,
+            "status": status,
+            "before_touchdown": touchdown_time is None or ejection_time_s <= touchdown_time,
+        }
 
     @staticmethod
     def _interpolate_drag_increment(deployment_fraction: float, table: List[Dict[str, float]]) -> float:
