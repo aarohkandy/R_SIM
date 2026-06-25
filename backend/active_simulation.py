@@ -59,6 +59,20 @@ class ActiveSimulationManager:
     def _clamp(value: float, low: float, high: float) -> float:
         return max(low, min(high, value))
 
+    @staticmethod
+    def _normalize_deploy_event(value, default: str) -> str:
+        raw = str(value or default).strip().lower().replace("-", "_").replace(" ", "_")
+        aliases = {
+            "altitude_on_descent": "altitude",
+            "descent": "altitude",
+            "main_altitude": "altitude",
+            "motor": "motor_ejection",
+            "ejection": "motor_ejection",
+            "motor_delay": "motor_ejection",
+            "motor_ejection_charge": "motor_ejection",
+        }
+        return aliases.get(raw, raw)
+
     def submit_cfd_simulation(
         self,
         rocket_data: Dict,
@@ -112,6 +126,7 @@ class ActiveSimulationManager:
         if mass_input <= 0:
             errors.append("Rocket weight must be positive.")
 
+        motor_delay = 0.0
         motor = next((c for c in components if str(c.get("type", "")).lower() == "motor"), None)
         if motor is None:
             errors.append("Rocket must include a motor.")
@@ -119,12 +134,12 @@ class ActiveSimulationManager:
             burn_time = self._as_float(self._first_value(motor, ["motorBurnTime", "burn_time", "burnTime"], 0.0), 0.0)
             thrust = self._as_float(self._first_value(motor, ["motorThrust", "average_thrust", "averageThrust"], 0.0), 0.0)
             impulse = self._as_float(self._first_value(motor, ["motorTotalImpulse", "total_impulse", "totalImpulse"], 0.0), 0.0)
-            delay = self._as_float(self._first_value(motor, ["motorDelay", "delay_time", "delay"], 0.0), 0.0)
+            motor_delay = self._as_float(self._first_value(motor, ["motorDelay", "delay_time", "delay"], 0.0), 0.0)
             if burn_time <= 0:
                 errors.append("Motor burn time must be positive.")
             if thrust <= 0 and impulse <= 0:
                 errors.append("Motor thrust or total impulse must be positive.")
-            if delay < 0:
+            if motor_delay < 0:
                 errors.append("Motor delay must not be negative.")
 
         if self._rocket_diameter_m(components) <= 0.01 and components:
@@ -202,11 +217,21 @@ class ActiveSimulationManager:
         if landing_enabled:
             system_type = landing.get("type") or landing.get("systemType") or "main_parachute"
             deploy_altitude = self._as_float(landing.get("deployAltitude"), 120.0)
+            drogue_deploy_altitude = self._as_float(landing.get("drogueDeployAltitude"), deploy_altitude)
             drag_area = self._as_float(landing.get("dragArea"), 0.18)
             drag_coefficient = self._as_float(landing.get("dragCoefficient"), 1.55)
             max_safe_velocity = self._as_float(landing.get("maxSafeVelocity"), 7.5)
             drogue_drag_area = self._as_float(landing.get("drogueDragArea"), 0.04)
             drogue_drag_coefficient = self._as_float(landing.get("drogueDragCoefficient"), 1.25)
+            valid_events = {"apogee", "altitude", "motor_ejection"}
+            main_event = self._normalize_deploy_event(
+                self._first_value(landing, ["mainDeployEvent", "deployEvent", "deploymentEvent"], "altitude"),
+                "altitude",
+            )
+            drogue_event = self._normalize_deploy_event(
+                self._first_value(landing, ["drogueDeployEvent", "drogueDeploymentEvent"], "apogee"),
+                "apogee",
+            )
             if deploy_altitude <= 0:
                 errors.append("Landing deploy altitude must be positive.")
             if drag_area <= 0:
@@ -215,7 +240,17 @@ class ActiveSimulationManager:
                 errors.append("Landing drag coefficient must be positive.")
             if max_safe_velocity <= 0:
                 errors.append("Landing safe touchdown velocity must be positive.")
+            if main_event not in valid_events:
+                errors.append("Main recovery deploy event must be apogee, altitude, or motor_ejection.")
+            if main_event == "motor_ejection" and motor_delay <= 0:
+                warnings.append("Main recovery uses motor ejection but motor delay is not set.")
             if system_type == "drogue_main":
+                if drogue_event not in valid_events:
+                    errors.append("Drogue recovery deploy event must be apogee, altitude, or motor_ejection.")
+                if drogue_event == "altitude" and drogue_deploy_altitude <= 0:
+                    errors.append("Drogue deploy altitude must be positive.")
+                if drogue_event == "motor_ejection" and motor_delay <= 0:
+                    warnings.append("Drogue recovery uses motor ejection but motor delay is not set.")
                 if drogue_drag_area <= 0:
                     errors.append("Drogue drag area must be positive.")
                 if drogue_drag_coefficient <= 0:
@@ -350,6 +385,7 @@ class ActiveSimulationManager:
 
         prev_accel_z = 0.0
         t = 0.0
+        motor_ejection_time_s = burn_time_s + motor_delay_s if motor_delay_s > 0 else None
         while t <= max_time:
             speed_air_x = vx - wind_x
             speed_air_y = vy - wind_y
@@ -357,16 +393,37 @@ class ActiveSimulationManager:
             speed_air = math.sqrt(speed_air_x**2 + speed_air_y**2 + speed_air_z**2)
             dynamic_pressure = 0.5 * density * speed_air**2
             deployment_fraction = self._clamp((stroke / active["cylinder_stroke_m"]) * active["linkage_ratio"], 0.0, 1.0)
-            if (
-                landing["enabled"]
-                and not landing_deployed
-                and velocity_z < -0.5
-            ):
-                if landing["system_type"] == "drogue_main" and not drogue_deployed:
+            apogee_detected = velocity_z < -0.5
+            if landing["enabled"]:
+                if (
+                    landing["system_type"] == "drogue_main"
+                    and not drogue_deployed
+                    and self._should_deploy_recovery(
+                        landing["drogue_deploy_event"],
+                        t=t,
+                        altitude=altitude,
+                        velocity_z=velocity_z,
+                        deploy_altitude_m=landing["drogue_deploy_altitude_m"],
+                        apogee_detected=apogee_detected,
+                        motor_ejection_time_s=motor_ejection_time_s,
+                    )
+                ):
                     drogue_deployed = True
                     drogue_deploy_time = t
                     drogue_deploy_altitude = altitude
-                if altitude <= landing["deploy_altitude_m"]:
+
+                if (
+                    not landing_deployed
+                    and self._should_deploy_recovery(
+                        landing["main_deploy_event"],
+                        t=t,
+                        altitude=altitude,
+                        velocity_z=velocity_z,
+                        deploy_altitude_m=landing["deploy_altitude_m"],
+                        apogee_detected=apogee_detected,
+                        motor_ejection_time_s=motor_ejection_time_s,
+                    )
+                ):
                     landing_deployed = True
                     landing_deploy_time = t
                     landing_deploy_altitude = altitude
@@ -705,8 +762,11 @@ class ActiveSimulationManager:
                 "main_deployed": landing_deployed,
                 "drogue_deployed": drogue_deployed,
                 "deploy_altitude_m": landing["deploy_altitude_m"],
+                "main_deploy_event": landing["main_deploy_event"],
                 "deploy_time": landing_deploy_time,
                 "deploy_actual_altitude_m": landing_deploy_altitude,
+                "drogue_deploy_event": landing["drogue_deploy_event"],
+                "drogue_deploy_altitude_target_m": landing["drogue_deploy_altitude_m"],
                 "drogue_deploy_time": drogue_deploy_time,
                 "drogue_deploy_altitude_m": drogue_deploy_altitude,
                 "drag_area_m2": landing["drag_area_m2"],
@@ -919,6 +979,25 @@ class ActiveSimulationManager:
         main_area = landing["drag_coefficient"] * landing["drag_area_m2"] * main_deployment
         return (drogue_area + main_area) / max(frontal_area_m2, 1e-6)
 
+    @staticmethod
+    def _should_deploy_recovery(
+        deploy_event: str,
+        *,
+        t: float,
+        altitude: float,
+        velocity_z: float,
+        deploy_altitude_m: float,
+        apogee_detected: bool,
+        motor_ejection_time_s: Optional[float],
+    ) -> bool:
+        if deploy_event == "apogee":
+            return apogee_detected
+        if deploy_event == "altitude":
+            return apogee_detected and velocity_z < -0.5 and altitude <= deploy_altitude_m
+        if deploy_event == "motor_ejection":
+            return motor_ejection_time_s is not None and t >= motor_ejection_time_s
+        return False
+
     def _build_flight_events(
         self,
         *,
@@ -1074,10 +1153,21 @@ class ActiveSimulationManager:
 
     def _build_landing_config(self, config: Dict) -> Dict:
         landing = config.get("landingSystem") or config.get("recoverySystem") or {}
+        deploy_altitude = self._as_float(landing.get("deployAltitude"), 120.0)
+        system_type = landing.get("type") or landing.get("systemType") or "main_parachute"
         return {
             "enabled": self._as_bool(landing.get("enabled"), True),
-            "system_type": landing.get("type") or landing.get("systemType") or "main_parachute",
-            "deploy_altitude_m": self._as_float(landing.get("deployAltitude"), 120.0),
+            "system_type": system_type,
+            "main_deploy_event": self._normalize_deploy_event(
+                self._first_value(landing, ["mainDeployEvent", "deployEvent", "deploymentEvent"], "altitude"),
+                "altitude",
+            ),
+            "drogue_deploy_event": self._normalize_deploy_event(
+                self._first_value(landing, ["drogueDeployEvent", "drogueDeploymentEvent"], "apogee"),
+                "apogee",
+            ),
+            "deploy_altitude_m": deploy_altitude,
+            "drogue_deploy_altitude_m": self._as_float(landing.get("drogueDeployAltitude"), deploy_altitude),
             "drag_area_m2": self._as_float(landing.get("dragArea"), 0.18),
             "drag_coefficient": self._as_float(landing.get("dragCoefficient"), 1.55),
             "drogue_drag_area_m2": self._as_float(landing.get("drogueDragArea"), 0.04),

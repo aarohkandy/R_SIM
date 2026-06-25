@@ -276,6 +276,58 @@ class ActiveSimulationTests(unittest.TestCase):
         self.assertIn("Main deploy", event_names)
         self.assertTrue(any(row["phase"] == "drogue" for row in landing["history"]))
 
+    def test_recovery_can_deploy_from_motor_ejection_event(self):
+        rocket = sample_rocket()
+        rocket["components"][3]["motorDelay"] = 0.8
+        config = base_config()
+        config["landingSystem"].update({
+            "mainDeployEvent": "motor_ejection",
+            "deployAltitude": 20,
+        })
+        manager = ActiveSimulationManager()
+        result = manager.submit_cfd_simulation(rocket, config)["results"]
+        landing = result["landing_system"]
+
+        self.assertEqual(landing["main_deploy_event"], "motor_ejection")
+        self.assertTrue(landing["main_deployed"])
+        self.assertAlmostEqual(
+            landing["deploy_time"],
+            result["motor_burn_time"] + rocket["components"][3]["motorDelay"],
+            delta=config["timeStep"],
+        )
+
+    def test_drogue_main_keeps_configured_deployment_events(self):
+        rocket = sample_rocket()
+        rocket["components"][3]["motorDelay"] = 0.6
+        config = base_config()
+        config["landingSystem"].update({
+            "type": "drogue_main",
+            "drogueDeployEvent": "motor_ejection",
+            "mainDeployEvent": "altitude",
+            "deployAltitude": 45,
+            "dragArea": 0.18,
+            "drogueDragArea": 0.035,
+            "drogueDragCoefficient": 1.25,
+        })
+        manager = ActiveSimulationManager()
+        result = manager.submit_cfd_simulation(rocket, config)["results"]
+        landing = result["landing_system"]
+
+        self.assertEqual(landing["drogue_deploy_event"], "motor_ejection")
+        self.assertEqual(landing["main_deploy_event"], "altitude")
+        self.assertTrue(landing["drogue_deployed"])
+        self.assertTrue(landing["main_deployed"])
+        self.assertLess(landing["drogue_deploy_time"], landing["deploy_time"])
+
+    def test_invalid_recovery_deploy_event_is_rejected(self):
+        config = base_config()
+        config["landingSystem"]["mainDeployEvent"] = "barometric_guess"
+        manager = ActiveSimulationManager()
+        result = manager.submit_cfd_simulation(sample_rocket(), config)
+
+        self.assertFalse(result["success"])
+        self.assertIn("Main recovery deploy event must be apogee, altitude, or motor_ejection.", result["validation_errors"])
+
     def test_invalid_landing_system_is_rejected(self):
         config = base_config()
         config["landingSystem"]["dragArea"] = 0

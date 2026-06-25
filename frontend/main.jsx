@@ -124,6 +124,9 @@ const componentDefaults = {
     length: 40,
     diameter: 54,
     weight: 85,
+    mainDeployEvent: 'altitude',
+    drogueDeployEvent: 'apogee',
+    drogueDeployAltitude: 120,
     deployAltitude: 120,
     dragArea: 0.24,
     dragCoefficient: 1.55,
@@ -204,6 +207,9 @@ const defaultConfig = {
   landingSystem: {
     enabled: true,
     type: 'main_parachute',
+    mainDeployEvent: 'altitude',
+    drogueDeployEvent: 'apogee',
+    drogueDeployAltitude: 120,
     deployAltitude: 120,
     dragArea: 0.24,
     dragCoefficient: 1.55,
@@ -558,6 +564,22 @@ const impulseClasses = [
   { label: 'L', max: 5120 },
   { label: 'M', max: 10240 }
 ];
+
+const recoveryDeployEvents = [
+  { value: 'apogee', label: 'Apogee' },
+  { value: 'motor_ejection', label: 'Motor ejection' },
+  { value: 'altitude', label: 'Altitude on descent' }
+];
+
+const recoveryEventLabel = (value) => (
+  recoveryDeployEvents.find((event) => event.value === value)?.label || 'Altitude on descent'
+);
+
+const recoveryEventDetail = (event, altitude) => (
+  event === 'altitude'
+    ? `${formatNumber(altitude, 0)} m on descent`
+    : recoveryEventLabel(event)
+);
 
 const getImpulseClass = (impulse) => {
   const totalImpulse = numberValue(impulse, 0);
@@ -1345,6 +1367,8 @@ function ActiveSetup({ config, setConfig, syncAirbrake }) {
 
 function LandingSetup({ config, setConfig, syncLanding, metrics }) {
   const landing = config.landingSystem;
+  const mainDeployEvent = landing.mainDeployEvent || landing.deployEvent || 'altitude';
+  const drogueDeployEvent = landing.drogueDeployEvent || 'apogee';
   const sizing = getLandingSizing(metrics, config);
   const drogueSizing = getLandingSizing(metrics, config, {
     dragArea: landing.drogueDragArea,
@@ -1383,7 +1407,33 @@ function LandingSetup({ config, setConfig, syncLanding, metrics }) {
             { value: 'active_drag_landing', label: 'Active drag landing' }
           ]}
         />
-        <Field label={landing.type === 'drogue_main' ? 'Main altitude' : 'Deploy altitude'} value={landing.deployAltitude} unit="m" onChange={(value) => setLanding('deployAltitude', value)} />
+        {landing.type === 'drogue_main' && (
+          <>
+            <Field
+              label="Drogue event"
+              value={drogueDeployEvent}
+              onChange={(value) => setLanding('drogueDeployEvent', value)}
+              options={recoveryDeployEvents}
+            />
+            {drogueDeployEvent === 'altitude' && (
+              <Field
+                label="Drogue altitude"
+                value={landing.drogueDeployAltitude ?? landing.deployAltitude}
+                unit="m"
+                onChange={(value) => setLanding('drogueDeployAltitude', value)}
+              />
+            )}
+          </>
+        )}
+        <Field
+          label={landing.type === 'drogue_main' ? 'Main event' : 'Deploy event'}
+          value={mainDeployEvent}
+          onChange={(value) => setLanding('mainDeployEvent', value)}
+          options={recoveryDeployEvents}
+        />
+        {mainDeployEvent === 'altitude' && (
+          <Field label={landing.type === 'drogue_main' ? 'Main altitude' : 'Deploy altitude'} value={landing.deployAltitude} unit="m" onChange={(value) => setLanding('deployAltitude', value)} />
+        )}
         <Field label={landing.type === 'drogue_main' ? 'Main area' : 'Drag area'} value={landing.dragArea} unit="m2" step="0.01" onChange={(value) => setLanding('dragArea', value)} />
         <Field label={landing.type === 'drogue_main' ? 'Main Cd' : 'Drag coefficient'} value={landing.dragCoefficient} step="0.01" onChange={(value) => setLanding('dragCoefficient', value)} />
         {landing.type === 'drogue_main' && (
@@ -1393,6 +1443,23 @@ function LandingSetup({ config, setConfig, syncLanding, metrics }) {
           </>
         )}
         <Field label="Safe touchdown" value={landing.maxSafeVelocity} unit="m/s" step="0.1" onChange={(value) => setLanding('maxSafeVelocity', value)} />
+      </div>
+      <div className="sizing-card">
+        <div className="comparison-title">Recovery sequence</div>
+        <div className="sequence-list">
+          {landing.type === 'drogue_main' && (
+            <div className="sequence-row">
+              <span>Drogue</span>
+              <strong>{recoveryEventLabel(drogueDeployEvent)}</strong>
+              <em>{recoveryEventDetail(drogueDeployEvent, landing.drogueDeployAltitude ?? landing.deployAltitude)}</em>
+            </div>
+          )}
+          <div className="sequence-row">
+            <span>{landing.type === 'drogue_main' ? 'Main' : 'Recovery'}</span>
+            <strong>{recoveryEventLabel(mainDeployEvent)}</strong>
+            <em>{recoveryEventDetail(mainDeployEvent, landing.deployAltitude)}</em>
+          </div>
+        </div>
       </div>
       <div className="sizing-card">
         <div className="comparison-title">Recovery sizing</div>

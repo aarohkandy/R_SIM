@@ -1077,6 +1077,45 @@ button:focus-visible {
   padding: 0 9px 9px;
 }
 
+.sequence-list {
+  display: grid;
+  gap: 7px;
+  padding: 9px;
+}
+
+.sequence-row {
+  display: grid;
+  grid-template-columns: 58px minmax(0, 1fr);
+  gap: 4px 8px;
+  align-items: center;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  padding: 8px;
+  background: #fafbfc;
+}
+
+.sequence-row span {
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.sequence-row strong {
+  min-width: 0;
+  font-size: 13px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.sequence-row em {
+  grid-column: 2;
+  color: var(--muted);
+  font-size: 11px;
+  font-style: normal;
+}
+
 .metric-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
