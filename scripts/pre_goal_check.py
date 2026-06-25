@@ -116,6 +116,10 @@ def main() -> int:
     require("streamer-marker" in frontend_source and "streamer-marker" in frontend_style, "Rocket drawing is missing streamer recovery markers.")
     require("Shock Cord" in frontend_source, "Frontend is missing explicit recovery shock-cord components.")
     require("shock-cord-marker" in frontend_source and "shock-cord-marker" in frontend_style, "Rocket drawing is missing shock-cord recovery markers.")
+    require("Motor Mount" in frontend_source, "Frontend is missing internal motor mount components.")
+    require("motor-mount-marker" in frontend_source and "motor-mount-marker" in frontend_style, "Rocket drawing is missing motor mount markers.")
+    require("Centering Ring" in frontend_source, "Frontend is missing internal centering ring components.")
+    require("centering-ring-marker" in frontend_source and "centering-ring-marker" in frontend_style, "Rocket drawing is missing centering ring markers.")
     require("rail-button-dot" in frontend_style, "Rocket drawing does not render rail button placement.")
     require("position_m" in active_sim_source, "Backend CP contributions do not expose fin axial placement.")
     require("attachment must reference" in active_sim_source, "Backend does not reject invalid subpart attachment references.")
@@ -125,6 +129,8 @@ def main() -> int:
     require("parachute" in openrocket_source, "OpenRocket import does not preserve parachute components.")
     require("streamer" in openrocket_source, "OpenRocket import does not preserve streamer components.")
     require("shockcord" in openrocket_source, "OpenRocket import does not preserve shock-cord components.")
+    require("motor mount" in active_sim_source and "centering ring" in active_sim_source, "Backend does not treat motor mount hardware as internal geometry.")
+    require("innertube" in openrocket_source and "centeringring" in openrocket_source, "OpenRocket import does not preserve motor mount hardware.")
     require("Airbrake station" in frontend_source, "Frontend is missing active airbrake station controls.")
     require("active.locationFromNose" in frontend_source, "Frontend design checks do not target active airbrake station.")
     require("moment_arm_m" in active_sim_source, "Backend active system does not report active airbrake moment arm.")
@@ -170,6 +176,8 @@ def main() -> int:
           <parachute><name>Main Parachute</name><mass>0.038</mass><diameter>0.550</diameter><cd>1.60</cd><deployAltitude>0.080</deployAltitude></parachute>
           <streamer><name>Drogue Streamer</name><mass>0.016</mass><stripLength>1.200</stripLength><stripWidth>0.080</stripWidth><cd>1.05</cd><deployEvent>apogee</deployEvent></streamer>
           <shockcord><name>Nylon Harness</name><mass>0.024</mass><length>3.000</length><diameter>0.003</diameter><maxTensionN>450</maxTensionN></shockcord>
+          <innertube><name>Motor Mount Tube</name><mass>0.036</mass><length>0.160</length><innerRadius>0.0145</innerRadius><outerRadius>0.017</outerRadius></innertube>
+          <centeringring><name>Centering Rings</name><mass>0.018</mass><ringCount>2</ringCount><innerRadius>0.017</innerRadius><outerRadius>0.020</outerRadius><thickness>0.004</thickness></centeringring>
           <trapezoidfinset><name>Fins</name><finCount>3</finCount><rootChord>0.090</rootChord><height>0.055</height><mass>0.045</mass></trapezoidfinset>
           <motor><manufacturer>Estes</manufacturer><designation>Estes C6-5</designation><diameter>0.018</diameter><length>0.070</length><burnTime>1.600</burnTime><totalImpulse>10.000</totalImpulse><averageThrust>6.000</averageThrust><mass>0.017</mass></motor>
         </subcomponents>
@@ -192,11 +200,15 @@ def main() -> int:
     imported_parachute = next((component for component in imported_components if component.get("type") == "Parachute"), {})
     imported_streamer = next((component for component in imported_components if component.get("type") == "Streamer"), {})
     imported_shock_cord = next((component for component in imported_components if component.get("type") == "Shock Cord"), {})
+    imported_motor_mount = next((component for component in imported_components if component.get("type") == "Motor Mount"), {})
+    imported_centering_ring = next((component for component in imported_components if component.get("type") == "Centering Ring"), {})
     require(len(imported_motor.get("thrustCurve", [])) > 5, f"Imported motor was not enriched with thrust curve: {imported_motor}")
     require(imported_mass.get("massRole") == "battery", f"Imported OpenRocket mass component was not preserved: {imported_components}")
     require(imported_parachute.get("dragArea", 0) > 0.2, f"Imported OpenRocket parachute was not preserved: {imported_components}")
     require(abs(imported_streamer.get("dragArea", 0) - 0.096) < 1e-9, f"Imported OpenRocket streamer was not preserved: {imported_components}")
     require(imported_shock_cord.get("maxTensionN") == 450, f"Imported OpenRocket shock cord was not preserved: {imported_components}")
+    require(imported_motor_mount.get("mountLength") == 160, f"Imported OpenRocket motor mount was not preserved: {imported_components}")
+    require(imported_centering_ring.get("ringCount") == 2, f"Imported OpenRocket centering ring was not preserved: {imported_components}")
 
     controller_code = r"""
 ControlOutput control_function(SensorData sensor_data) {
@@ -257,6 +269,8 @@ ControlOutput control_function(SensorData sensor_data) {
             {"id": 6, "type": "Parachute", "name": "Prep Main Parachute", "weight": 38, "recoveryRole": "main", "deployEvent": "altitude", "deployAltitude": 80, "dragArea": 0.18, "dragCoefficient": 1.55, "maxOpeningLoadG": 15, "axialPosition": 240, "attachedToComponent": 2},
             {"id": 7, "type": "Streamer", "name": "Prep Drogue Streamer", "weight": 16, "recoveryRole": "drogue", "deployEvent": "apogee", "streamerLength": 1.2, "streamerWidth": 0.08, "dragCoefficient": 1.05, "maxOpeningLoadG": 12, "axialPosition": 245, "attachedToComponent": 2},
             {"id": 8, "type": "Shock Cord", "name": "Prep Nylon Harness", "weight": 24, "cordLength": 3.0, "cordDiameter": 3.0, "maxTensionN": 450, "axialPosition": 250, "attachedToComponent": 2},
+            {"id": 9, "type": "Motor Mount", "name": "Prep Motor Mount Tube", "weight": 36, "mountLength": 160, "innerDiameter": 29, "outerDiameter": 34, "axialPosition": 500, "attachedToComponent": 2},
+            {"id": 10, "type": "Centering Ring", "name": "Prep Centering Rings", "weight": 18, "ringCount": 2, "innerDiameter": 34, "outerDiameter": 40, "thickness": 4, "axialPosition": 505, "attachedToComponent": 2},
         ],
         "rocketSplitPoints": [
             {"id": "prep-split", "afterComponentId": "1", "label": "Payload split"},

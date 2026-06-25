@@ -26,9 +26,10 @@ class ActiveSimulationManager:
     model_version = "active_pneumatic_local_dynamics_v1"
     recovery_component_types = {"parachute", "streamer"}
     recovery_hardware_types = {"shock cord"}
-    attachment_child_types = {"fins", "motor", "rail button", "mass component"} | recovery_component_types | recovery_hardware_types
+    motor_hardware_types = {"motor mount", "centering ring"}
+    attachment_child_types = {"fins", "motor", "rail button", "mass component"} | recovery_component_types | recovery_hardware_types | motor_hardware_types
     attachment_host_types = {"body tube", "transition", "electronics bay", "recovery bay", "active airbrake"}
-    internal_component_types = {"fins", "motor", "rail button", "mass component"} | recovery_component_types | recovery_hardware_types
+    internal_component_types = {"fins", "motor", "rail button", "mass component"} | recovery_component_types | recovery_hardware_types | motor_hardware_types
 
     def __init__(self):
         self.simulations: Dict[str, Dict] = {}
@@ -346,6 +347,54 @@ class ActiveSimulationManager:
                     errors.append(f"{name} cord diameter must be positive.")
                 if max_tension <= 0:
                     errors.append(f"{name} rated strength must be positive.")
+            if component_type == "motor mount":
+                mount_length = self._as_float(
+                    self._first_value(component, ["mountLength", "motorMountLength", "tubeLength", "length"], 0.0),
+                    0.0,
+                )
+                inner_diameter = self._as_float(
+                    self._first_value(component, ["innerDiameter", "motorDiameter", "inner_diameter"], 0.0),
+                    0.0,
+                )
+                outer_diameter = self._as_float(
+                    self._first_value(component, ["outerDiameter", "tubeOuterDiameter", "outer_diameter"], 0.0),
+                    0.0,
+                )
+                if mount_length <= 0:
+                    errors.append(f"{name} motor mount length must be positive.")
+                if inner_diameter <= 0:
+                    errors.append(f"{name} motor mount inner diameter must be positive.")
+                if outer_diameter <= 0:
+                    errors.append(f"{name} motor mount outer diameter must be positive.")
+                if inner_diameter > 0 and outer_diameter > 0 and outer_diameter <= inner_diameter:
+                    errors.append(f"{name} motor mount outer diameter must exceed inner diameter.")
+            if component_type == "centering ring":
+                ring_count = self._as_float(
+                    self._first_value(component, ["ringCount", "count", "instanceCount", "numberOfRings"], 0.0),
+                    0.0,
+                )
+                inner_diameter = self._as_float(
+                    self._first_value(component, ["innerDiameter", "motorDiameter", "inner_diameter"], 0.0),
+                    0.0,
+                )
+                outer_diameter = self._as_float(
+                    self._first_value(component, ["outerDiameter", "bodyDiameter", "outer_diameter"], 0.0),
+                    0.0,
+                )
+                thickness = self._as_float(
+                    self._first_value(component, ["thickness", "ringThickness", "length"], 0.0),
+                    0.0,
+                )
+                if ring_count < 1:
+                    errors.append(f"{name} centering ring count must be at least one.")
+                if inner_diameter <= 0:
+                    errors.append(f"{name} centering ring inner diameter must be positive.")
+                if outer_diameter <= 0:
+                    errors.append(f"{name} centering ring outer diameter must be positive.")
+                if thickness <= 0:
+                    errors.append(f"{name} centering ring thickness must be positive.")
+                if inner_diameter > 0 and outer_diameter > 0 and outer_diameter <= inner_diameter:
+                    errors.append(f"{name} centering ring outer diameter must exceed inner diameter.")
 
         dt_raw = self._as_float(config.get("timeStep") or config.get("time_step"), 0.02)
         max_time_raw = self._as_float(config.get("maxTime") or config.get("max_time"), 45.0)

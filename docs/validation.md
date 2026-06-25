@@ -39,7 +39,7 @@ The active scenario matrix uses importable files in `examples/scenarios/`:
 - Sample active pneumatic rocket simulation uses a motor thrust curve from the backend motor database.
 - Sample active pneumatic rocket simulation preserves builder split markers in `results.stage_splits`.
 - Sample active pneumatic rocket simulation carries valid fin/motor attachment hosts, while invalid subpart-to-subpart attachments fail backend validation.
-- Sample active pneumatic rocket simulation carries an internal mass component that affects mass/CG inputs without changing external length, diameter, split markers, or aero geometry.
+- Sample active pneumatic rocket simulation carries internal mass and motor-mount hardware components that affect mass/CG inputs without changing external length, diameter, split markers, or aero geometry.
 - Frontend launch-site selection is wired to `/api/environment/launch-sites`.
 - Frontend setup exposes deterministic sensor, atmosphere, attitude, and pneumatic pressure noise settings.
 - Frontend motor search is wired to `/api/environment/motors` and must not contain a mock motor list.
@@ -47,7 +47,7 @@ The active scenario matrix uses importable files in `examples/scenarios/`:
 - Frontend design tree and rocket side-view drawing expose structural split markers.
 - Frontend inspector/table expose subpart attachment hosts for fins, motors, and rail buttons.
 - Frontend design tree nests attached subparts beneath their host airframe part and separates unattached subparts.
-- Frontend palette, inspector, table, mass breakdown, and side-view drawing expose internal mass components.
+- Frontend palette, inspector, table, mass breakdown, and side-view drawing expose internal mass components, motor mount tubes, and centering rings.
 - Frontend palette, inspector, table, side-view drawing, OpenRocket import, and backend simulation config expose parachute, streamer, and shock-cord recovery components.
 - Recovery safety output applies shock-cord rated strength as a harness opening-load limit and reports the effective opening-load limit.
 - Frontend results view renders live charts from trajectory, force, pressure, and active-system histories.

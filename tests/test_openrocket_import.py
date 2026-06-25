@@ -171,6 +171,39 @@ class OpenRocketImportTests(unittest.TestCase):
         self.assertEqual(shock_cord["material"], "nylon")
         self.assertEqual(shock_cord["attachedToComponent"], body["id"])
 
+    def test_parse_openrocket_motor_mount_hardware(self):
+        xml = SAMPLE_OPENROCKET_XML.replace(
+            b"<trapezoidfinset>",
+            (
+                b"<innertube><name>Motor Mount Tube</name><mass>0.036</mass><length>0.160</length>"
+                b"<innerRadius>0.0145</innerRadius><outerRadius>0.017</outerRadius><material>phenolic</material></innertube>"
+                b"<centeringring><name>Centering Rings</name><mass>0.018</mass><ringCount>2</ringCount>"
+                b"<innerRadius>0.017</innerRadius><outerRadius>0.020</outerRadius><thickness>0.004</thickness>"
+                b"<material>plywood</material></centeringring><trapezoidfinset>"
+            ),
+        )
+        imported = parse_openrocket_design(xml, "motor-mount.ork")
+        motor_mount = next(component for component in imported.rocket_data["components"] if component["type"] == "Motor Mount")
+        centering_ring = next(component for component in imported.rocket_data["components"] if component["type"] == "Centering Ring")
+        body = next(component for component in imported.rocket_data["components"] if component["type"] == "Body Tube")
+
+        self.assertEqual(motor_mount["name"], "Motor Mount Tube")
+        self.assertAlmostEqual(motor_mount["weight"], 36.0)
+        self.assertAlmostEqual(motor_mount["mountLength"], 160.0)
+        self.assertAlmostEqual(motor_mount["innerDiameter"], 29.0)
+        self.assertAlmostEqual(motor_mount["outerDiameter"], 34.0)
+        self.assertEqual(motor_mount["material"], "phenolic")
+        self.assertEqual(motor_mount["attachedToComponent"], body["id"])
+        self.assertEqual(centering_ring["name"], "Centering Rings")
+        self.assertAlmostEqual(centering_ring["weight"], 18.0)
+        self.assertEqual(centering_ring["ringCount"], 2)
+        self.assertAlmostEqual(centering_ring["innerDiameter"], 34.0)
+        self.assertAlmostEqual(centering_ring["outerDiameter"], 40.0)
+        self.assertAlmostEqual(centering_ring["thickness"], 4.0)
+        self.assertEqual(centering_ring["material"], "plywood")
+        self.assertEqual(centering_ring["attachedToComponent"], body["id"])
+        self.assertAlmostEqual(imported.rocket_data["totalHeight"], 680.0)
+
     def test_import_endpoint_rejects_non_openrocket_extension(self):
         client = app.test_client()
         response = client.post(

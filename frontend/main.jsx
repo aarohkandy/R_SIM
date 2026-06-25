@@ -40,6 +40,8 @@ const componentColor = {
   'Active Airbrake': '#f2a541',
   Fins: '#2a9d8f',
   Motor: '#343a40',
+  'Motor Mount': '#6d597a',
+  'Centering Ring': '#457b9d',
   'Landing System': '#7b61ff',
   'Rail Button': '#6c757d',
   'Mass Component': '#b56576',
@@ -128,6 +130,29 @@ const componentDefaults = {
     motorBurnTime: 2.2,
     motorTotalImpulse: 90,
     motorDelay: 7
+  },
+  'Motor Mount': {
+    type: 'Motor Mount',
+    name: 'Phenolic motor mount tube',
+    length: 0,
+    diameter: 0,
+    weight: 36,
+    mountLength: 170,
+    innerDiameter: 29,
+    outerDiameter: 34,
+    material: 'phenolic'
+  },
+  'Centering Ring': {
+    type: 'Centering Ring',
+    name: 'Plywood centering ring set',
+    length: 0,
+    diameter: 0,
+    weight: 18,
+    ringCount: 2,
+    innerDiameter: 34,
+    outerDiameter: 54,
+    thickness: 4,
+    material: 'birch plywood'
   },
   'Landing System': {
     type: 'Landing System',
@@ -233,6 +258,8 @@ const defaultComponents = [
   { ...componentDefaults['Mass Component'], id: 'mass-1', name: 'Avionics battery pack', weight: 65, massRole: 'battery', axialPosition: 720, attachedToComponent: 'avbay-1' },
   { ...componentDefaults['Active Airbrake'], id: 'airbrake-1' },
   { ...componentDefaults['Body Tube'], id: 'tube-2', name: 'Aft airframe', length: 320, weight: 125 },
+  { ...componentDefaults['Motor Mount'], id: 'motor-mount-1', attachedToComponent: 'tube-2', axialPosition: 950 },
+  { ...componentDefaults['Centering Ring'], id: 'centering-ring-1', attachedToComponent: 'tube-2', axialPosition: 952 },
   { ...componentDefaults.Fins, id: 'fins-1', attachedToComponent: 'tube-2' },
   { ...componentDefaults.Motor, id: 'motor-1', attachedToComponent: 'tube-2' }
 ];
@@ -395,14 +422,16 @@ const getDiameter = (component) => numberValue(component.diameter ?? component.b
 const recoveryDeviceTypes = new Set(['Parachute', 'Streamer']);
 const recoveryHardwareTypes = new Set(['Shock Cord']);
 const recoverySubpartTypes = new Set([...recoveryDeviceTypes, ...recoveryHardwareTypes]);
-const internalMassTypes = new Set(['Mass Component', ...recoverySubpartTypes]);
+const motorHardwareTypes = new Set(['Motor Mount', 'Centering Ring']);
+const internalSubpartTypes = new Set([...recoverySubpartTypes, ...motorHardwareTypes]);
+const internalMassTypes = new Set(['Mass Component', ...internalSubpartTypes]);
 
 const getStructuralLength = (components) => components
   .filter((component) => structuralTypes.has(component.type) && component.type !== 'Rail Button')
   .reduce((sum, component) => sum + Math.max(0, numberValue(component.length)), 0);
 
-const positionalTypes = new Set(['Fins', 'Motor', 'Rail Button', 'Mass Component', ...recoverySubpartTypes]);
-const attachmentChildTypes = new Set(['Fins', 'Motor', 'Rail Button', 'Mass Component', ...recoverySubpartTypes]);
+const positionalTypes = new Set(['Fins', 'Motor', 'Rail Button', 'Mass Component', ...internalSubpartTypes]);
+const attachmentChildTypes = new Set(['Fins', 'Motor', 'Rail Button', 'Mass Component', ...internalSubpartTypes]);
 const attachmentHostTypes = new Set(['Body Tube', 'Transition', 'Electronics Bay', 'Recovery Bay', 'Active Airbrake']);
 
 const normalizeAttachmentId = (value) => (value === null || value === undefined ? '' : String(value));
@@ -435,6 +464,12 @@ const getComponentAxialPosition = (component, totalLength) => {
   }
   if (component.type === 'Motor') {
     return clamp(totalLength - numberValue(component.length, 80), 0, totalLength);
+  }
+  if (component.type === 'Motor Mount') {
+    return clamp(totalLength - numberValue(component.mountLength, 160), 0, totalLength);
+  }
+  if (component.type === 'Centering Ring') {
+    return clamp(totalLength - 170, 0, totalLength);
   }
   if (component.type === 'Rail Button') {
     return clamp(totalLength * 0.38 + numberValue(component.railOffset, 0), 0, totalLength);
@@ -626,6 +661,10 @@ const getMetrics = (components) => {
       position = getComponentAxialPosition(component, totalLength) + numberValue(component.finWidth, 100) / 2;
     } else if (component.type === 'Motor') {
       position = getComponentAxialPosition(component, totalLength) + numberValue(component.length, 80) / 2;
+    } else if (component.type === 'Motor Mount') {
+      position = getComponentAxialPosition(component, totalLength) + numberValue(component.mountLength, 160) / 2;
+    } else if (component.type === 'Centering Ring') {
+      position = getComponentAxialPosition(component, totalLength);
     } else if (component.type === 'Rail Button') {
       position = getComponentAxialPosition(component, totalLength);
     } else if (component.type === 'Mass Component') {
@@ -669,7 +708,7 @@ const massGroups = [
     types: ['Nose Cone', 'Body Tube', 'Transition', 'Electronics Bay', 'Recovery Bay', 'Rail Button']
   },
   { key: 'fins', label: 'Fins', color: '#2a9d8f', types: ['Fins'] },
-  { key: 'motor', label: 'Motor', color: '#343a40', types: ['Motor'] },
+  { key: 'motor', label: 'Motor', color: '#343a40', types: ['Motor', 'Motor Mount', 'Centering Ring'] },
   { key: 'payload', label: 'Payload and ballast', color: '#b56576', types: ['Mass Component'] },
   { key: 'active', label: 'Active control', color: '#f2a541', types: ['Active Airbrake'] },
   { key: 'landing', label: 'Landing', color: '#7b61ff', types: ['Landing System', 'Parachute', 'Streamer', 'Shock Cord'] }
@@ -1041,6 +1080,72 @@ const getDesignChecks = ({ components, splitPoints = [], metrics, config, landin
       }
       if (numberValue(component.maxTensionN, 0) <= 0) {
         add('error', 'Cord strength', 'Shock cord rated strength must be positive.', componentTarget(component, 'maxTensionN'));
+      }
+    }
+
+    if (component.type === 'Motor Mount') {
+      const mountLength = numberValue(component.mountLength, 0);
+      const innerDiameter = numberValue(component.innerDiameter, 0);
+      const outerDiameter = numberValue(component.outerDiameter, 0);
+      if (mountLength <= 0) {
+        add('error', 'Motor mount length', 'Motor mount tube length must be positive.', componentTarget(component, 'mountLength'));
+      }
+      if (innerDiameter <= 0) {
+        add('error', 'Motor mount ID', 'Motor mount inner diameter must be positive.', componentTarget(component, 'innerDiameter'));
+      }
+      if (outerDiameter <= 0) {
+        add('error', 'Motor mount OD', 'Motor mount outer diameter must be positive.', componentTarget(component, 'outerDiameter'));
+      }
+      if (innerDiameter > 0 && outerDiameter > 0 && outerDiameter <= innerDiameter) {
+        add('error', 'Motor mount wall', 'Motor mount outer diameter must exceed inner diameter.', [
+          componentTarget(component, 'innerDiameter'),
+          componentTarget(component, 'outerDiameter')
+        ]);
+      }
+      if (motor && innerDiameter > 0 && numberValue(motor.diameter, 0) > innerDiameter + 0.1) {
+        add('error', 'Motor mount fit', 'Selected motor is wider than the motor mount inner diameter.', [
+          componentTarget(component, 'innerDiameter'),
+          componentTarget(motor, 'diameter')
+        ]);
+      }
+      const host = getAttachmentHost(component, components);
+      if (host && outerDiameter > 0 && getDiameter(host) > 0 && outerDiameter > getDiameter(host) + 0.1) {
+        add('error', 'Motor mount host fit', 'Motor mount outer diameter must fit inside its host airframe.', [
+          componentTarget(component, 'outerDiameter'),
+          componentTarget(component, 'attachedToComponent')
+        ]);
+      }
+    }
+
+    if (component.type === 'Centering Ring') {
+      const ringCount = numberValue(component.ringCount, 0);
+      const innerDiameter = numberValue(component.innerDiameter, 0);
+      const outerDiameter = numberValue(component.outerDiameter, 0);
+      const thickness = numberValue(component.thickness, 0);
+      if (ringCount < 1) {
+        add('error', 'Centering ring count', 'Use at least one centering ring.', componentTarget(component, 'ringCount'));
+      }
+      if (innerDiameter <= 0) {
+        add('error', 'Centering ring ID', 'Centering ring inner diameter must be positive.', componentTarget(component, 'innerDiameter'));
+      }
+      if (outerDiameter <= 0) {
+        add('error', 'Centering ring OD', 'Centering ring outer diameter must be positive.', componentTarget(component, 'outerDiameter'));
+      }
+      if (thickness <= 0) {
+        add('error', 'Centering ring thickness', 'Centering ring thickness must be positive.', componentTarget(component, 'thickness'));
+      }
+      if (innerDiameter > 0 && outerDiameter > 0 && outerDiameter <= innerDiameter) {
+        add('error', 'Centering ring wall', 'Centering ring outer diameter must exceed inner diameter.', [
+          componentTarget(component, 'innerDiameter'),
+          componentTarget(component, 'outerDiameter')
+        ]);
+      }
+      const host = getAttachmentHost(component, components);
+      if (host && outerDiameter > 0 && getDiameter(host) > 0 && outerDiameter > getDiameter(host) + 0.1) {
+        add('error', 'Centering ring host fit', 'Centering ring outer diameter must fit inside its host airframe.', [
+          componentTarget(component, 'outerDiameter'),
+          componentTarget(component, 'attachedToComponent')
+        ]);
       }
     }
 
@@ -2016,6 +2121,64 @@ function RocketDrawing({ components, splitPoints, selectedId, setSelectedId, met
             <title>{motor.name}</title>
           </g>
         )}
+        {components.filter((component) => component.type === 'Motor Mount').map((mount) => {
+          const mountStart = getComponentAxialPosition(mount, length);
+          const mountLength = Math.max(8, Math.min(numberValue(mount.mountLength, 160), length - mountStart));
+          const outerHeight = heightFor(numberValue(mount.outerDiameter, 34));
+          const innerHeight = heightFor(numberValue(mount.innerDiameter, 29));
+          const selected = selectedId === mount.id;
+          return (
+            <g key={mount.id} onClick={() => setSelectedId(mount.id)}>
+              <rect
+                x={xFor(mountStart)}
+                y={centerY - outerHeight / 2}
+                width={mountLength * pxPerMm}
+                height={outerHeight}
+                rx="2"
+                className={`motor-mount-marker ${selected ? 'selected' : ''}`}
+              />
+              <line x1={xFor(mountStart)} x2={xFor(mountStart + mountLength)} y1={centerY - innerHeight / 2} y2={centerY - innerHeight / 2} className="motor-mount-bore" />
+              <line x1={xFor(mountStart)} x2={xFor(mountStart + mountLength)} y1={centerY + innerHeight / 2} y2={centerY + innerHeight / 2} className="motor-mount-bore" />
+              <title>{mount.name}</title>
+            </g>
+          );
+        })}
+        {components.filter((component) => component.type === 'Centering Ring').map((ring) => {
+          const count = Math.max(1, Math.min(4, Math.round(numberValue(ring.ringCount, 2))));
+          const center = getComponentAxialPosition(ring, length);
+          const ringWidth = Math.max(3, numberValue(ring.thickness, 4) * pxPerMm);
+          const outerHeight = heightFor(numberValue(ring.outerDiameter, maxDiameter));
+          const innerHeight = heightFor(numberValue(ring.innerDiameter, 34));
+          const blockHeight = Math.max(2, (outerHeight - innerHeight) / 2);
+          const selected = selectedId === ring.id;
+          return (
+            <g key={ring.id} onClick={() => setSelectedId(ring.id)}>
+              {Array.from({ length: count }, (_, index) => {
+                const offset = (index - (count - 1) / 2) * 32;
+                const ringX = xFor(clamp(center + offset, 0, length)) - ringWidth / 2;
+                return (
+                  <React.Fragment key={`${ring.id}-${index}`}>
+                    <rect
+                      x={ringX}
+                      y={centerY - outerHeight / 2}
+                      width={ringWidth}
+                      height={blockHeight}
+                      className={`centering-ring-marker ${selected ? 'selected' : ''}`}
+                    />
+                    <rect
+                      x={ringX}
+                      y={centerY + innerHeight / 2}
+                      width={ringWidth}
+                      height={blockHeight}
+                      className={`centering-ring-marker ${selected ? 'selected' : ''}`}
+                    />
+                  </React.Fragment>
+                );
+              })}
+              <title>{ring.name}</title>
+            </g>
+          );
+        })}
         {components.filter((component) => component.type === 'Rail Button').map((button) => {
           const x = xFor(getComponentAxialPosition(button, length));
           const selected = selectedId === button.id;
@@ -2241,7 +2404,8 @@ function ComponentPalette({ addComponent }) {
     ['Airframe', ['Nose Cone', 'Body Tube', 'Transition', 'Electronics Bay', 'Recovery Bay']],
     ['Payload', ['Mass Component']],
     ['Control', ['Active Airbrake', 'Fins', 'Rail Button']],
-    ['Propulsion and landing', ['Motor', 'Parachute', 'Streamer', 'Shock Cord', 'Landing System']]
+    ['Propulsion', ['Motor', 'Motor Mount', 'Centering Ring']],
+    ['Recovery and landing', ['Parachute', 'Streamer', 'Shock Cord', 'Landing System']]
   ];
 
   return (
@@ -2267,6 +2431,12 @@ function ComponentPalette({ addComponent }) {
 const getComponentDetailText = (component) => {
   if (component.type === 'Motor') {
     return `${formatNumber(component.motorThrust, 1)} N, ${formatNumber(component.motorTotalImpulse, 1)} Ns`;
+  }
+  if (component.type === 'Motor Mount') {
+    return `${formatNumber(component.innerDiameter, 0)} mm ID, ${formatNumber(component.mountLength, 0)} mm`;
+  }
+  if (component.type === 'Centering Ring') {
+    return `${formatNumber(component.ringCount, 0)} rings, ${formatNumber(component.innerDiameter, 0)}/${formatNumber(component.outerDiameter, 0)} mm`;
   }
   if (component.type === 'Fins') {
     return `${component.finCount} fins, ${formatNumber(component.finHeight, 0)} mm span`;
@@ -2662,6 +2832,23 @@ function ComponentInspector({ component, components = [], updateComponent, metri
             <Field label="Cord length" value={component.cordLength ?? 3} unit="m" step="0.1" checks={checks('cordLength')} onChange={(value) => set('cordLength', value)} />
             <Field label="Cord diameter" value={component.cordDiameter ?? 3} unit="mm" step="0.1" checks={checks('cordDiameter')} onChange={(value) => set('cordDiameter', value)} />
             <Field label="Rated strength" value={component.maxTensionN ?? 450} unit="N" step="10" checks={checks('maxTensionN')} onChange={(value) => set('maxTensionN', value)} />
+            <Field label="Material" type="text" value={component.material || ''} onChange={(value) => set('material', value)} />
+          </>
+        )}
+        {component.type === 'Motor Mount' && (
+          <>
+            <Field label="Mount length" value={component.mountLength ?? 170} unit="mm" checks={checks('mountLength')} onChange={(value) => set('mountLength', value)} />
+            <Field label="Inner diameter" value={component.innerDiameter ?? 29} unit="mm" checks={checks('innerDiameter')} onChange={(value) => set('innerDiameter', value)} />
+            <Field label="Outer diameter" value={component.outerDiameter ?? 34} unit="mm" checks={checks('outerDiameter')} onChange={(value) => set('outerDiameter', value)} />
+            <Field label="Material" type="text" value={component.material || ''} onChange={(value) => set('material', value)} />
+          </>
+        )}
+        {component.type === 'Centering Ring' && (
+          <>
+            <Field label="Ring count" value={component.ringCount ?? 2} checks={checks('ringCount')} onChange={(value) => set('ringCount', value)} />
+            <Field label="Inner diameter" value={component.innerDiameter ?? 34} unit="mm" checks={checks('innerDiameter')} onChange={(value) => set('innerDiameter', value)} />
+            <Field label="Outer diameter" value={component.outerDiameter ?? 54} unit="mm" checks={checks('outerDiameter')} onChange={(value) => set('outerDiameter', value)} />
+            <Field label="Thickness" value={component.thickness ?? 4} unit="mm" checks={checks('thickness')} onChange={(value) => set('thickness', value)} />
             <Field label="Material" type="text" value={component.material || ''} onChange={(value) => set('material', value)} />
           </>
         )}
@@ -3812,13 +3999,19 @@ function App() {
       next.weight = 18;
     }
     if (attachmentChildTypes.has(type)) {
+      const motorHost = getAttachmentHost(components.find((component) => component.type === 'Motor'), components);
       const host = recoverySubpartTypes.has(type)
         ? components.find((component) => component.type === 'Recovery Bay') || getDefaultAttachmentHost(components)
+        : motorHardwareTypes.has(type)
+          ? motorHost || components.find((component) => component.type === 'Body Tube' && /aft/i.test(component.name || '')) || getDefaultAttachmentHost(components)
         : getDefaultAttachmentHost(components);
       if (host) {
         next.attachedToComponent = host.id;
         if (type === 'Mass Component' || recoverySubpartTypes.has(type)) {
           next.axialPosition = getAttachmentHostCenter(host, components, componentMetrics.totalLength * 0.45);
+        }
+        if (type === 'Centering Ring') {
+          next.outerDiameter = getDiameter(host) || next.outerDiameter;
         }
       }
     }

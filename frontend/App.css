@@ -545,6 +545,8 @@ button:focus-visible {
 .rocket-part:hover,
 .rocket-part.selected,
 .motor-core.selected,
+.motor-mount-marker.selected,
+.centering-ring-marker.selected,
 .mass-marker.selected,
 .parachute-marker.selected {
   stroke: var(--accent);
@@ -570,6 +572,27 @@ button:focus-visible {
 
 .motor-nozzle {
   fill: #111827;
+}
+
+.motor-mount-marker {
+  fill: rgba(109, 89, 122, 0.18);
+  stroke: #6d597a;
+  stroke-width: 1.5;
+  cursor: pointer;
+}
+
+.motor-mount-bore {
+  stroke: #6d597a;
+  stroke-width: 1;
+  stroke-dasharray: 5 4;
+  pointer-events: none;
+}
+
+.centering-ring-marker {
+  fill: #457b9d;
+  stroke: #1d3557;
+  stroke-width: 1.2;
+  cursor: pointer;
 }
 
 .rail-button-dot {

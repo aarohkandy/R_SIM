@@ -43,6 +43,15 @@ RECOVERY_HARDWARE_COMPONENT_TAGS = {
     "shockcord",
 }
 
+MOTOR_MOUNT_COMPONENT_TAGS = {
+    "innertube",
+}
+
+CENTERING_RING_COMPONENT_TAGS = {
+    "centeringring",
+    "centeringrings",
+}
+
 
 @dataclass
 class ImportedOpenRocket:
@@ -83,6 +92,14 @@ def parse_openrocket_design(payload: bytes, filename: str = "design.ork") -> Imp
             next_id += 1
         elif tag in RECOVERY_HARDWARE_COMPONENT_TAGS:
             component = _parse_shock_cord_component(element, next_id, last_body_id)
+            components.append(component)
+            next_id += 1
+        elif tag in MOTOR_MOUNT_COMPONENT_TAGS:
+            component = _parse_motor_mount_component(element, next_id, last_body_id)
+            components.append(component)
+            next_id += 1
+        elif tag in CENTERING_RING_COMPONENT_TAGS:
+            component = _parse_centering_ring_component(element, next_id, last_body_id)
             components.append(component)
             next_id += 1
 
@@ -299,6 +316,75 @@ def _parse_shock_cord_component(element: ET.Element, component_id: int, attached
     }
 
 
+def _parse_motor_mount_component(element: ET.Element, component_id: int, attached_to: Optional[int]) -> Dict:
+    name = _first_text(element, ["name"]) or "Imported Motor Mount"
+    mass = _mass_g(_numeric_child(element, ["mass", "massoverride", "componentmass"]))
+    mount_length = _length_mm(_numeric_child(element, ["length", "tubeLength", "motorMountLength"]))
+    inner_diameter = (
+        _diameter_mm(_numeric_child(element, ["innerRadius", "motorRadius"]))
+        or _length_mm(_numeric_child(element, ["innerDiameter", "motorDiameter"]))
+    )
+    outer_diameter = (
+        _diameter_mm(_numeric_child(element, ["outerRadius", "radius"]))
+        or _length_mm(_numeric_child(element, ["outerDiameter", "diameter"]))
+    )
+    axial_position = _length_mm(_numeric_child(element, ["position", "axialOffset", "componentCG", "cgx"]))
+
+    if not outer_diameter and inner_diameter:
+        outer_diameter = inner_diameter + 4.0
+    if not inner_diameter and outer_diameter:
+        inner_diameter = max(0.0, outer_diameter - 4.0)
+
+    return {
+        "id": component_id,
+        "type": "Motor Mount",
+        "name": name,
+        "length": 0,
+        "diameter": 0,
+        "weight": mass,
+        "mountLength": mount_length or 120.0,
+        "innerDiameter": inner_diameter or 29.0,
+        "outerDiameter": outer_diameter or 34.0,
+        "material": _first_text(element, ["material"]) or "phenolic",
+        "axialPosition": axial_position or None,
+        "attachedToComponent": attached_to,
+        "importSource": "openrocket",
+    }
+
+
+def _parse_centering_ring_component(element: ET.Element, component_id: int, attached_to: Optional[int]) -> Dict:
+    name = _first_text(element, ["name"]) or "Imported Centering Ring"
+    mass = _mass_g(_numeric_child(element, ["mass", "massoverride", "componentmass"]))
+    ring_count = int(_numeric_child(element, ["ringCount", "count", "instanceCount", "numberOfRings"]) or 1)
+    inner_diameter = (
+        _diameter_mm(_numeric_child(element, ["innerRadius", "motorRadius"]))
+        or _length_mm(_numeric_child(element, ["innerDiameter", "motorDiameter"]))
+    )
+    outer_diameter = (
+        _diameter_mm(_numeric_child(element, ["outerRadius", "bodyRadius", "radius"]))
+        or _length_mm(_numeric_child(element, ["outerDiameter", "bodyDiameter", "diameter"]))
+    )
+    thickness = _length_mm(_numeric_child(element, ["thickness", "ringThickness", "length"]))
+    axial_position = _length_mm(_numeric_child(element, ["position", "axialOffset", "componentCG", "cgx"]))
+
+    return {
+        "id": component_id,
+        "type": "Centering Ring",
+        "name": name,
+        "length": 0,
+        "diameter": 0,
+        "weight": mass,
+        "ringCount": max(1, ring_count),
+        "innerDiameter": inner_diameter or 29.0,
+        "outerDiameter": outer_diameter or 40.0,
+        "thickness": thickness or 3.0,
+        "material": _first_text(element, ["material"]) or "plywood",
+        "axialPosition": axial_position or None,
+        "attachedToComponent": attached_to,
+        "importSource": "openrocket",
+    }
+
+
 def _parse_motor(root: ET.Element, component_id: int, attached_to: Optional[int]) -> Optional[Dict]:
     motor_element = next((element for element in root.iter() if _tag(element) == "motor"), None)
     if motor_element is None:
@@ -429,7 +515,17 @@ def _direct_numeric_child(element: ET.Element, names: List[str]) -> Optional[flo
 
 
 def _sum_linear_length_mm(components: List[Dict]) -> float:
-    return sum(component.get("length") or 0 for component in components if component.get("type") not in {"Fins", "Motor"})
+    internal_types = {
+        "Fins",
+        "Motor",
+        "Mass Component",
+        "Parachute",
+        "Streamer",
+        "Shock Cord",
+        "Motor Mount",
+        "Centering Ring",
+    }
+    return sum(component.get("length") or 0 for component in components if component.get("type") not in internal_types)
 
 
 def _sum_component_mass_g(components: List[Dict]) -> float:

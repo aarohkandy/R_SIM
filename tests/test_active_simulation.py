@@ -163,6 +163,77 @@ class ActiveSimulationTests(unittest.TestCase):
         result = manager.submit_cfd_simulation(rocket, base_config())
         self.assertTrue(result["success"])
 
+    def test_motor_mount_hardware_does_not_change_external_geometry(self):
+        manager = ActiveSimulationManager()
+        rocket = sample_rocket()
+        rocket["components"].extend([
+            {
+                "id": 5,
+                "type": "Motor Mount",
+                "name": "Motor mount tube",
+                "length": 1000,
+                "diameter": 200,
+                "weight": 36,
+                "mountLength": 160,
+                "innerDiameter": 29,
+                "outerDiameter": 34,
+                "attachedToComponent": 2,
+            },
+            {
+                "id": 6,
+                "type": "Centering Ring",
+                "name": "Centering ring set",
+                "length": 1000,
+                "diameter": 200,
+                "weight": 18,
+                "ringCount": 2,
+                "innerDiameter": 34,
+                "outerDiameter": 40,
+                "thickness": 4,
+                "attachedToComponent": 2,
+            },
+        ])
+
+        self.assertAlmostEqual(manager._rocket_length_m(rocket, rocket["components"]), 0.68)
+        self.assertAlmostEqual(manager._rocket_diameter_m(rocket["components"]), 0.04)
+        result = manager.submit_cfd_simulation(rocket, base_config())
+        self.assertTrue(result["success"])
+
+    def test_invalid_motor_mount_hardware_is_rejected(self):
+        manager = ActiveSimulationManager()
+        rocket = sample_rocket()
+        rocket["components"].extend([
+            {
+                "id": 5,
+                "type": "Motor Mount",
+                "name": "Broken motor mount",
+                "weight": 36,
+                "mountLength": 0,
+                "innerDiameter": 35,
+                "outerDiameter": 34,
+                "attachedToComponent": 2,
+            },
+            {
+                "id": 6,
+                "type": "Centering Ring",
+                "name": "Broken centering ring",
+                "weight": 18,
+                "ringCount": 0,
+                "innerDiameter": 40,
+                "outerDiameter": 34,
+                "thickness": 0,
+                "attachedToComponent": 2,
+            },
+        ])
+
+        result = manager.submit_cfd_simulation(rocket, base_config())
+
+        self.assertFalse(result["success"])
+        self.assertTrue(any("Broken motor mount motor mount length" in error for error in result["validation_errors"]))
+        self.assertTrue(any("Broken motor mount motor mount outer diameter" in error for error in result["validation_errors"]))
+        self.assertTrue(any("Broken centering ring centering ring count" in error for error in result["validation_errors"]))
+        self.assertTrue(any("Broken centering ring centering ring thickness" in error for error in result["validation_errors"]))
+
     def test_parachute_components_drive_landing_configuration(self):
         manager = ActiveSimulationManager()
         rocket = sample_rocket()
