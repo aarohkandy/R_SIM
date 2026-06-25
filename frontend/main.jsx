@@ -144,6 +144,21 @@ const componentDefaults = {
   }
 };
 
+const defaultControllerCode = `ControlOutput control_function(SensorData sensor_data) {
+    ControlOutput out{};
+    double error = sensor_data.predicted_apogee - 180.0;
+    double command = error > 0.0 ? error * 0.012 + sensor_data.velocity_z * 0.004 : 0.0;
+    if (sensor_data.altitude < 35.0 && sensor_data.velocity_z > 0.0) {
+        command = 0.0;
+    }
+    if (command > 1.0) command = 1.0;
+    if (command < 0.0) command = 0.0;
+    out.valve_command = command;
+    out.surface_target = command;
+    out.recovery_trigger = false;
+    return out;
+}`;
+
 const defaultComponents = [
   { ...componentDefaults['Nose Cone'], id: 'nose-1' },
   { ...componentDefaults['Recovery Bay'], id: 'recovery-1' },
@@ -174,6 +189,7 @@ const defaultConfig = {
   turbulenceModel: 'LES',
   activePneumaticEnabled: true,
   controllerLanguage: 'builtin',
+  controlCode: defaultControllerCode,
   activeSystem: {
     enabled: true,
     tankPressure: 690000,
@@ -1438,13 +1454,18 @@ function FlightSetup({
   );
 }
 
-function ActiveSetup({ config, setConfig, syncAirbrake }) {
+function ActiveSetup({ config, setConfig, syncAirbrake, compileController, controllerCompileState }) {
   const active = config.activeSystem;
   const controller = config.controller;
+  const controllerLanguage = config.controllerLanguage || 'builtin';
   const setActive = (key, value) => setConfig((current) => ({
     ...current,
     activePneumaticEnabled: key === 'enabled' ? value : current.activePneumaticEnabled,
     activeSystem: { ...current.activeSystem, [key]: value }
+  }));
+  const setRoot = (key, value) => setConfig((current) => ({
+    ...current,
+    [key]: value
   }));
   const setController = (key, value) => setConfig((current) => ({
     ...current,
@@ -1465,6 +1486,15 @@ function ActiveSetup({ config, setConfig, syncAirbrake }) {
         <Field label="Valve flow" value={active.valveFlowRate} step="0.1" onChange={(value) => setActive('valveFlowRate', value)} />
         <Field label="Cylinder bore" value={active.cylinderBore} unit="m" step="0.001" onChange={(value) => setActive('cylinderBore', value)} />
         <Field label="Cylinder stroke" value={active.cylinderStroke} unit="m" step="0.001" onChange={(value) => setActive('cylinderStroke', value)} />
+        <Field
+          label="Controller source"
+          value={controllerLanguage}
+          onChange={(value) => setRoot('controllerLanguage', value)}
+          options={[
+            { value: 'builtin', label: 'Built-in controller' },
+            { value: 'cpp', label: 'C++ controller' }
+          ]}
+        />
         <Field label="Surface count" value={active.surfaceCount} onChange={(value) => { setActive('surfaceCount', value); syncAirbrake('surfaceCount', value); }} />
         <Field label="Surface area" value={active.surfaceArea} unit="m2" step="0.0001" onChange={(value) => { setActive('surfaceArea', value); syncAirbrake('surfaceArea', value); }} />
         <Field label="Max angle" value={active.surfaceMaxAngle} unit="deg" onChange={(value) => { setActive('surfaceMaxAngle', value); syncAirbrake('surfaceMaxAngle', value); }} />
@@ -1472,6 +1502,25 @@ function ActiveSetup({ config, setConfig, syncAirbrake }) {
         <Field label="Kp" value={controller.kp} step="0.001" onChange={(value) => setController('kp', value)} />
         <Field label="Kd" value={controller.kd} step="0.001" onChange={(value) => setController('kd', value)} />
       </div>
+      {controllerLanguage === 'cpp' && (
+        <div className="code-panel">
+          <div className="comparison-title">Controller code</div>
+          <textarea
+            className="code-editor"
+            value={config.controlCode || defaultControllerCode}
+            spellCheck="false"
+            onChange={(event) => setRoot('controlCode', event.target.value)}
+          />
+          <div className="controller-actions">
+            <button type="button" onClick={compileController} disabled={controllerCompileState.status === 'running'}>
+              {controllerCompileState.status === 'running' ? 'Compiling...' : 'Compile check'}
+            </button>
+            <span className={`compile-pill ${controllerCompileState.status}`}>
+              {controllerCompileState.message || 'Not checked'}
+            </span>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -1638,6 +1687,7 @@ function ResultsPanel({
   const launchGuide = data?.launch_guide;
   const recoveryTiming = data?.recovery_timing;
   const events = data?.flight_events || [];
+  const controllerLabel = data?.controller?.compiled_cpp ? 'C++' : 'Built-in';
   const apogeeTrim = comparisonData ? comparisonData.max_altitude - data.max_altitude : null;
   const touchdownDelta = comparisonData ? comparisonData.landing_velocity - data.landing_velocity : null;
   const targetError = data.controller?.target_apogee
@@ -1681,7 +1731,14 @@ function ResultsPanel({
             : 'bad',
         detail: `${recoveryTiming.timing_error_s >= 0 ? '+' : ''}${formatNumber(recoveryTiming.timing_error_s, 2)} s from apogee; optimal ${formatNumber(recoveryTiming.optimal_delay_s, 1)} s`
       }
-      : null
+      : null,
+    {
+      label: 'Controller',
+      status: data.controller?.failures ? 'bad' : data.controller?.compiled_cpp ? 'good' : 'info',
+      detail: data.controller?.compiled_cpp
+        ? 'Compiled C++ controller active'
+        : `${data.controller?.mode || 'builtin'} mode`
+    }
   ].filter(Boolean);
 
   if (!data) {
@@ -1706,6 +1763,7 @@ function ResultsPanel({
         <div className="metric-box"><span>Downrange</span><strong>{formatNumber(data.downrange_distance, 1)} m</strong></div>
         <div className="metric-box"><span>Guide exit</span><strong>{formatNumber(launchGuide?.simulated_exit_velocity_mps ?? launchGuide?.estimated_exit_velocity_mps, 2)} m/s</strong></div>
         <div className="metric-box"><span>Motor delay</span><strong>{formatNumber(recoveryTiming?.motor_delay_s, 1)} s</strong></div>
+        <div className="metric-box"><span>Controller</span><strong>{controllerLabel}</strong></div>
         <div className="metric-box"><span>Stability</span><strong>{formatNumber(metrics.stability, 2)} cal</strong></div>
       </div>
       {comparisonData && (
@@ -1888,6 +1946,7 @@ function App() {
   const [simulationCases, setSimulationCases] = useState([]);
   const [selectedCaseId, setSelectedCaseId] = useState(null);
   const [rocketOverrides, setRocketOverrides] = useState({});
+  const [controllerCompileState, setControllerCompileState] = useState({ status: 'idle', message: '' });
   const fileInputRef = useRef(null);
   const componentMetrics = useMemo(() => getMetrics(components), [components]);
   const metrics = useMemo(() => applyRocketOverrides(componentMetrics, rocketOverrides), [componentMetrics, rocketOverrides]);
@@ -1905,6 +1964,9 @@ function App() {
 
   const setConfigAndInvalidate = (updater) => {
     setConfig(updater);
+    setControllerCompileState((current) => (
+      current.status === 'success' ? { status: 'idle', message: 'Controller changed' } : current
+    ));
     staleResults();
   };
 
@@ -2204,6 +2266,28 @@ function App() {
     }
   };
 
+  const compileController = async () => {
+    if (!API_URL) {
+      setControllerCompileState({ status: 'error', message: 'No local API URL is configured.' });
+      return;
+    }
+    setControllerCompileState({ status: 'running', message: 'Compiling controller...' });
+    try {
+      const response = await fetch(`${API_URL}/api/control-code/compile`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ code: config.controlCode || defaultControllerCode })
+      });
+      const body = await response.json();
+      setControllerCompileState({
+        status: body.success ? 'success' : 'error',
+        message: body.message || (body.success ? 'Compilation successful' : 'Compilation failed')
+      });
+    } catch (error) {
+      setControllerCompileState({ status: 'error', message: error.message });
+    }
+  };
+
   const saveDesign = () => {
     const data = {
       id: 'browser-saved-active-rocket',
@@ -2235,6 +2319,7 @@ function App() {
       setComponents(imported.components);
       setConfig(imported.config);
       setRocketOverrides(imported.rocketOverrides);
+      setControllerCompileState({ status: 'idle', message: '' });
       setSelectedId(imported.components[0]?.id || null);
       staleResults();
       setSimulationCases([]);
@@ -2373,6 +2458,7 @@ function App() {
         setComponents(imported.components);
         setConfig(imported.config);
         setRocketOverrides(imported.rocketOverrides);
+        setControllerCompileState({ status: 'idle', message: '' });
         setSelectedId(imported.components[0]?.id || null);
         staleResults();
         setSimulationCases([]);
@@ -2389,6 +2475,7 @@ function App() {
         }));
         setComponents(imported.length ? imported : defaultComponents);
         setRocketOverrides({});
+        setControllerCompileState({ status: 'idle', message: '' });
         setSelectedId(imported[0]?.id || null);
         staleResults();
         setSimulationCases([]);
@@ -2407,6 +2494,7 @@ function App() {
     setComponents(defaultComponents.map((component) => ({ ...component, id: makeId(component.type.toLowerCase().replace(/[^a-z0-9]+/g, '-')) })));
     setConfig(defaultConfig);
     setRocketOverrides({});
+    setControllerCompileState({ status: 'idle', message: '' });
     staleResults();
     setSimulationCases([]);
     setInspectorTab('component');
@@ -2482,7 +2570,15 @@ function App() {
         setRocketOverrides={setRocketOverridesAndInvalidate}
       />
     ),
-    active: <ActiveSetup config={config} setConfig={setConfigAndInvalidate} syncAirbrake={syncAirbrake} />,
+    active: (
+      <ActiveSetup
+        config={config}
+        setConfig={setConfigAndInvalidate}
+        syncAirbrake={syncAirbrake}
+        compileController={compileController}
+        controllerCompileState={controllerCompileState}
+      />
+    ),
     landing: <LandingSetup config={config} setConfig={setConfigAndInvalidate} syncLanding={syncLanding} metrics={metrics} />,
     results: (
       <ResultsPanel

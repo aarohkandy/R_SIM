@@ -1010,6 +1010,62 @@ button:focus-visible {
   border-color: rgba(186, 45, 45, 0.24);
 }
 
+.code-panel {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fff;
+  overflow: hidden;
+  margin-top: 12px;
+}
+
+.code-editor {
+  width: 100%;
+  min-height: 260px;
+  resize: vertical;
+  border: none;
+  border-bottom: 1px solid var(--line);
+  border-radius: 0;
+  padding: 10px;
+  font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+  font-size: 11px;
+  line-height: 1.45;
+  color: #16202c;
+  background: #fbfcfe;
+}
+
+.controller-actions {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 8px;
+  align-items: center;
+  padding: 9px;
+}
+
+.compile-pill {
+  min-width: 0;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 6px 8px;
+  color: var(--muted);
+  background: #fff;
+  font-size: 11px;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.compile-pill.success {
+  color: var(--good);
+  border-color: rgba(31, 143, 95, 0.28);
+  background: rgba(31, 143, 95, 0.08);
+}
+
+.compile-pill.error {
+  color: var(--bad);
+  border-color: rgba(186, 45, 45, 0.28);
+  background: rgba(186, 45, 45, 0.08);
+}
+
 .motor-list {
   margin-top: 10px;
   display: grid;
