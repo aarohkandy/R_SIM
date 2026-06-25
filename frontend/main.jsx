@@ -365,6 +365,42 @@ const getMetrics = (components) => {
   };
 };
 
+const massGroups = [
+  {
+    key: 'airframe',
+    label: 'Airframe',
+    color: '#d8dee6',
+    types: ['Nose Cone', 'Body Tube', 'Transition', 'Electronics Bay', 'Recovery Bay', 'Rail Button']
+  },
+  { key: 'fins', label: 'Fins', color: '#2a9d8f', types: ['Fins'] },
+  { key: 'motor', label: 'Motor', color: '#343a40', types: ['Motor'] },
+  { key: 'active', label: 'Active control', color: '#f2a541', types: ['Active Airbrake'] },
+  { key: 'landing', label: 'Landing', color: '#7b61ff', types: ['Landing System'] }
+];
+
+const getMassBreakdown = (components) => {
+  const rows = massGroups.map((group) => ({
+    ...group,
+    mass: components
+      .filter((component) => group.types.includes(component.type))
+      .reduce((sum, component) => sum + componentMass(component), 0)
+  }));
+  const groupedTypes = new Set(massGroups.flatMap((group) => group.types));
+  const otherMass = components
+    .filter((component) => !groupedTypes.has(component.type))
+    .reduce((sum, component) => sum + componentMass(component), 0);
+  const allRows = otherMass > 0
+    ? [...rows, { key: 'other', label: 'Other', color: '#8793a1', mass: otherMass }]
+    : rows;
+  const total = allRows.reduce((sum, row) => sum + row.mass, 0);
+  return allRows
+    .filter((row) => row.mass > 0)
+    .map((row) => ({
+      ...row,
+      percent: total > 0 ? (row.mass / total) * 100 : 0
+    }));
+};
+
 const summarizeRun = ({ label, active, passive = null }) => {
   const activeData = active?.results || {};
   const passiveData = passive?.results || null;
@@ -375,7 +411,10 @@ const summarizeRun = ({ label, active, passive = null }) => {
     active,
     passive,
     apogee: activeData.max_altitude,
+    targetApogee: activeData.controller?.target_apogee || null,
+    flightTime: activeData.total_flight_time || null,
     touchdown: activeData.landing_velocity,
+    landingDeploy: activeData.landing_system?.deploy_actual_altitude_m ?? activeData.landing_system?.deploy_altitude_m ?? null,
     maxDeployment: activeData.active_system?.max_surface_deployment || 0,
     trim: passiveData ? passiveData.max_altitude - activeData.max_altitude : null,
     landingStatus: activeData.landing_system?.touchdown_status || 'n/a'
@@ -755,6 +794,64 @@ function ComponentTable({ components, selectedId, setSelectedId }) {
   );
 }
 
+function DesignAnalysis({ metrics, massBreakdown, config }) {
+  const cgCpSeparation = metrics.cp - metrics.cg;
+  const stabilityState = metrics.stability < 1
+    ? { label: 'Low', tone: 'bad' }
+    : metrics.stability > 3.5
+      ? { label: 'High', tone: 'warn' }
+      : { label: 'Nominal', tone: 'good' };
+  const thrustState = metrics.thrustToWeight >= 5
+    ? { label: 'Strong', tone: 'good' }
+    : metrics.thrustToWeight >= 3
+      ? { label: 'Usable', tone: 'warn' }
+      : { label: 'Low', tone: 'bad' };
+  const landingAreaLoading = config.landingSystem.enabled && numberValue(config.landingSystem.dragArea) > 0
+    ? (metrics.mass / 1000) / numberValue(config.landingSystem.dragArea)
+    : null;
+
+  return (
+    <div className="analysis-panel">
+      <div className="analysis-header">
+        <strong>Design analysis</strong>
+        <span>{formatNumber(cgCpSeparation, 0)} mm CG to CP</span>
+      </div>
+      <div className="analysis-grid">
+        <div className={`analysis-stat ${stabilityState.tone}`}>
+          <span>Static margin</span>
+          <strong>{stabilityState.label}</strong>
+          <em>{formatNumber(metrics.stability, 2)} cal</em>
+        </div>
+        <div className={`analysis-stat ${thrustState.tone}`}>
+          <span>Lift-off</span>
+          <strong>{thrustState.label}</strong>
+          <em>{formatNumber(metrics.thrustToWeight, 2)} T/W</em>
+        </div>
+        <div className={`analysis-stat ${landingAreaLoading !== null && landingAreaLoading <= 7 ? 'good' : 'warn'}`}>
+          <span>Landing load</span>
+          <strong>{landingAreaLoading === null ? 'Off' : `${formatNumber(landingAreaLoading, 1)} kg/m2`}</strong>
+          <em>{formatNumber(config.landingSystem.dragArea, 2)} m2 area</em>
+        </div>
+      </div>
+      <div className="mass-breakdown" aria-label="Mass breakdown">
+        {massBreakdown.map((row) => (
+          <div className="mass-row" key={row.key}>
+            <div className="mass-label">
+              <span className="mass-swatch" style={{ backgroundColor: row.color }} />
+              <strong>{row.label}</strong>
+              <em>{formatNumber(row.mass, 0)} g</em>
+            </div>
+            <div className="mass-track">
+              <span style={{ width: `${clamp(row.percent, 3, 100)}%`, backgroundColor: row.color }} />
+            </div>
+            <b>{formatNumber(row.percent, 0)}%</b>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 function ComponentInspector({ component, updateComponent }) {
   if (!component) {
     return (
@@ -1020,7 +1117,15 @@ function LandingSetup({ config, setConfig, syncLanding }) {
   );
 }
 
-function ResultsPanel({ result, comparisonResult, simulationCases, metrics, exportResults }) {
+function ResultsPanel({
+  result,
+  comparisonResult,
+  simulationCases,
+  selectedCaseId,
+  onSelectCase,
+  metrics,
+  exportResults
+}) {
   const data = result?.results;
   const comparisonData = comparisonResult?.results;
   const trajectory = data?.trajectory || [];
@@ -1120,17 +1225,31 @@ function ResultsPanel({ result, comparisonResult, simulationCases, metrics, expo
                   <th>Apogee</th>
                   <th>Trim</th>
                   <th>Airbrake</th>
+                  <th>Deploy</th>
                   <th>Touchdown</th>
                 </tr>
               </thead>
               <tbody>
                 {simulationCases.map((runCase) => (
-                  <tr key={runCase.id}>
+                  <tr
+                    key={runCase.id}
+                    className={runCase.id === selectedCaseId ? 'active-case' : ''}
+                    role="button"
+                    tabIndex={0}
+                    onClick={() => onSelectCase(runCase)}
+                    onKeyDown={(event) => {
+                      if (event.key === 'Enter' || event.key === ' ') {
+                        event.preventDefault();
+                        onSelectCase(runCase);
+                      }
+                    }}
+                  >
                     <td>{runCase.label}</td>
                     <td>{runCase.createdAt}</td>
                     <td>{formatNumber(runCase.apogee, 1)} m</td>
                     <td>{runCase.trim === null ? '--' : `${formatNumber(runCase.trim, 1)} m`}</td>
                     <td>{formatNumber(runCase.maxDeployment * 100, 0)}%</td>
+                    <td>{runCase.landingDeploy === null ? '--' : `${formatNumber(runCase.landingDeploy, 0)} m`}</td>
                     <td>{formatNumber(runCase.touchdown, 2)} m/s {runCase.landingStatus}</td>
                   </tr>
                 ))}
@@ -1203,9 +1322,22 @@ function App() {
   const [result, setResult] = useState(null);
   const [comparisonResult, setComparisonResult] = useState(null);
   const [simulationCases, setSimulationCases] = useState([]);
+  const [selectedCaseId, setSelectedCaseId] = useState(null);
   const fileInputRef = useRef(null);
   const metrics = useMemo(() => getMetrics(components), [components]);
+  const massBreakdown = useMemo(() => getMassBreakdown(components), [components]);
   const selectedComponent = components.find((component) => component.id === selectedId);
+
+  const staleResults = () => {
+    setResult(null);
+    setComparisonResult(null);
+    setSelectedCaseId(null);
+  };
+
+  const setConfigAndInvalidate = (updater) => {
+    setConfig(updater);
+    staleResults();
+  };
 
   useEffect(() => {
     let cancelled = false;
@@ -1271,8 +1403,7 @@ function App() {
     setComponents((current) => current.map((component) => (
       component.id === id ? { ...component, ...patch } : component
     )));
-    setResult(null);
-    setComparisonResult(null);
+    staleResults();
   };
 
   const syncAirbrake = (key, value) => {
@@ -1296,8 +1427,7 @@ function App() {
     setComponents((current) => [...current, next]);
     setSelectedId(next.id);
     setInspectorTab('component');
-    setResult(null);
-    setComparisonResult(null);
+    staleResults();
   };
 
   const removeComponent = (id) => {
@@ -1306,8 +1436,7 @@ function App() {
       if (id === selectedId) setSelectedId(next[0]?.id || null);
       return next;
     });
-    setResult(null);
-    setComparisonResult(null);
+    staleResults();
   };
 
   const moveComponent = (id, direction) => {
@@ -1320,8 +1449,7 @@ function App() {
       next.splice(target, 0, item);
       return next;
     });
-    setResult(null);
-    setComparisonResult(null);
+    staleResults();
   };
 
   const duplicateComponent = (id) => {
@@ -1340,8 +1468,7 @@ function App() {
     ]);
     setSelectedId(copy.id);
     setInspectorTab('component');
-    setResult(null);
-    setComparisonResult(null);
+    staleResults();
   };
 
   const addMotor = (motor) => {
@@ -1370,13 +1497,13 @@ function App() {
     ]);
     setSelectedId(motorComponent.id);
     setInspectorTab('component');
-    setResult(null);
-    setComparisonResult(null);
+    staleResults();
   };
 
   const applyLaunchSite = (siteId) => {
     if (siteId === 'custom') {
       setConfig((current) => ({ ...current, launchSite: 'custom' }));
+      staleResults();
       return;
     }
     const site = launchSites.find((item) => item.id === siteId);
@@ -1388,6 +1515,7 @@ function App() {
       temperature: Number(site.temperature.toFixed(1)),
       pressure: site.pressure
     }));
+    staleResults();
   };
 
   const buildSimulationPayload = (overrides = {}) => {
@@ -1455,12 +1583,11 @@ function App() {
     setMessage('Running active flight and landing simulation...');
     try {
       const active = await submitSimulation(buildSimulationPayload());
+      const runCase = summarizeRun({ label: `Active run ${simulationCases.length + 1}`, active });
       setResult(active);
       setComparisonResult(null);
-      setSimulationCases((current) => [
-        summarizeRun({ label: `Active run ${current.length + 1}`, active }),
-        ...current
-      ].slice(0, 8));
+      setSelectedCaseId(runCase.id);
+      setSimulationCases((current) => [runCase, ...current].slice(0, 8));
       setInspectorTab('results');
       setRunState('complete');
       setMessage('Simulation complete.');
@@ -1484,12 +1611,11 @@ function App() {
         activeSystem: { enabled: false },
         controller: { mode: 'disabled' }
       }));
+      const runCase = summarizeRun({ label: `Comparison ${simulationCases.length + 1}`, active, passive });
       setResult(active);
       setComparisonResult(passive);
-      setSimulationCases((current) => [
-        summarizeRun({ label: `Comparison ${current.length + 1}`, active, passive }),
-        ...current
-      ].slice(0, 8));
+      setSelectedCaseId(runCase.id);
+      setSimulationCases((current) => [runCase, ...current].slice(0, 8));
       setInspectorTab('results');
       setRunState('complete');
       setMessage('Comparison complete.');
@@ -1516,8 +1642,7 @@ function App() {
       if (Array.isArray(data.components)) setComponents(data.components);
       if (data.config) setConfig({ ...defaultConfig, ...data.config });
       setSelectedId(data.components?.[0]?.id || null);
-      setResult(null);
-      setComparisonResult(null);
+      staleResults();
       setSimulationCases([]);
       setMessage('Saved design loaded.');
     } catch (error) {
@@ -1570,8 +1695,7 @@ function App() {
         setComponents(data.components);
         setConfig({ ...defaultConfig, ...(data.config || {}) });
         setSelectedId(data.components[0]?.id || null);
-        setResult(null);
-        setComparisonResult(null);
+        staleResults();
         setSimulationCases([]);
         setMessage('Design JSON imported.');
       } else if (file.name.toLowerCase().endsWith('.ork') || file.name.toLowerCase().endsWith('.xml')) {
@@ -1586,8 +1710,7 @@ function App() {
         }));
         setComponents(imported.length ? imported : defaultComponents);
         setSelectedId(imported[0]?.id || null);
-        setResult(null);
-        setComparisonResult(null);
+        staleResults();
         setSimulationCases([]);
         setMessage(`${body.design_name || file.name} imported.`);
       } else {
@@ -1603,11 +1726,18 @@ function App() {
   const newDesign = () => {
     setComponents(defaultComponents.map((component) => ({ ...component, id: makeId(component.type.toLowerCase().replace(/[^a-z0-9]+/g, '-')) })));
     setConfig(defaultConfig);
-    setResult(null);
-    setComparisonResult(null);
+    staleResults();
     setSimulationCases([]);
     setInspectorTab('component');
     setMessage('Fresh active rocket design loaded.');
+  };
+
+  const selectSimulationCase = (runCase) => {
+    setResult(runCase.active);
+    setComparisonResult(runCase.passive);
+    setSelectedCaseId(runCase.id);
+    setInspectorTab('results');
+    setMessage(`${runCase.label} restored.`);
   };
 
   const validationItems = [
@@ -1650,10 +1780,20 @@ function App() {
         addMotor={addMotor}
       />
     ),
-    flight: <FlightSetup config={config} setConfig={setConfig} launchSites={launchSites} applyLaunchSite={applyLaunchSite} />,
-    active: <ActiveSetup config={config} setConfig={setConfig} syncAirbrake={syncAirbrake} />,
-    landing: <LandingSetup config={config} setConfig={setConfig} syncLanding={syncLanding} />,
-    results: <ResultsPanel result={result} comparisonResult={comparisonResult} simulationCases={simulationCases} metrics={metrics} exportResults={exportResults} />
+    flight: <FlightSetup config={config} setConfig={setConfigAndInvalidate} launchSites={launchSites} applyLaunchSite={applyLaunchSite} />,
+    active: <ActiveSetup config={config} setConfig={setConfigAndInvalidate} syncAirbrake={syncAirbrake} />,
+    landing: <LandingSetup config={config} setConfig={setConfigAndInvalidate} syncLanding={syncLanding} />,
+    results: (
+      <ResultsPanel
+        result={result}
+        comparisonResult={comparisonResult}
+        simulationCases={simulationCases}
+        selectedCaseId={selectedCaseId}
+        onSelectCase={selectSimulationCase}
+        metrics={metrics}
+        exportResults={exportResults}
+      />
+    )
   };
 
   return (
@@ -1727,6 +1867,7 @@ function App() {
                   </div>
                 ))}
               </div>
+              <DesignAnalysis metrics={metrics} massBreakdown={massBreakdown} config={config} />
               <LineChart
                 compact
                 title="Trajectory preview"
