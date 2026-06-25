@@ -68,3 +68,6 @@
 - Added recovery footprint output and a landing-footprint results panel with touchdown range, bearing, crossrange, descent time, and drift after main/drogue deployment.
 - Ran `bash scripts/run_pre_goal_checks.sh`: passed with 42 unit tests, backend API smoke including touchdown range, frontend production build, and frontend lint.
 - Browser-checked local app at `http://localhost:5001/`: ran a simulation, rendered the landing footprint map with launch/apogee/main/touchdown points, showed touchdown range 62.3 m, and produced no browser warnings/errors.
+- Added recovery analysis output and results UI rows for deployment sequence, phase durations, average descent rates, drift, and recovery-summary CSV export.
+- Ran `bash scripts/run_pre_goal_checks.sh`: passed with 43 unit tests, recovery-analysis smoke gates, frontend production build, and frontend lint.
+- Browser-checked local app at `http://localhost:5001/`: ran a simulation, rendered Recovery analysis rows for Apogee, Main deploy, Touchdown, Total descent, and Main descent, showed the Recovery summary CSV action, and produced no browser warnings/errors.

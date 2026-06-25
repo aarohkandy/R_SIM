@@ -17,4 +17,5 @@
 - Surface warnings next to the inputs that caused them.
 - Show trajectory, force, pressure, drag, and active-system plots backed by the local simulation histories.
 - Show landing footprint results with touchdown range, bearing, crossrange, descent time, and recovery drift.
-- Support exporting trajectory CSV, force/moment CSV, active-system CSV, recovery CSV, and the full JSON report.
+- Show recovery sequence and phase rows with event timing, deployment velocity, phase duration, average descent rate, and drift.
+- Support exporting trajectory CSV, force/moment CSV, active-system CSV, recovery CSV, recovery-summary CSV, and the full JSON report.

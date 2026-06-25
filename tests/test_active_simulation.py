@@ -321,6 +321,24 @@ class ActiveSimulationTests(unittest.TestCase):
         self.assertEqual(landing["touchdown_range_m"], footprint["touchdown_range_m"])
         self.assertEqual(landing["touchdown_bearing_deg"], footprint["touchdown_bearing_deg"])
 
+    def test_recovery_analysis_reports_deployment_sequence_and_descent_phases(self):
+        manager = ActiveSimulationManager()
+        result = manager.submit_cfd_simulation(sample_rocket(), base_config())["results"]
+        analysis = result["recovery_analysis"]
+        sequence_names = [event["name"] for event in analysis["deployment_sequence"]]
+        phase_names = [phase["name"] for phase in analysis["phases"]]
+        main_phase = next(phase for phase in analysis["phases"] if phase["name"] == "Main descent")
+
+        self.assertIn("Apogee", sequence_names)
+        self.assertIn("Main deploy", sequence_names)
+        self.assertIn("Touchdown", sequence_names)
+        self.assertIn("Total descent", phase_names)
+        self.assertIn("Main descent", phase_names)
+        self.assertGreater(main_phase["duration_s"], 0)
+        self.assertGreater(main_phase["average_descent_rate_mps"], 0)
+        self.assertAlmostEqual(main_phase["drift_m"], result["landing_footprint"]["drift_after_main_deploy_m"], places=6)
+        self.assertEqual(analysis["touchdown_range_m"], result["landing_footprint"]["touchdown_range_m"])
+
     def test_drogue_main_recovery_has_two_deploy_events(self):
         config = base_config()
         config["landingSystem"].update({
@@ -344,6 +362,7 @@ class ActiveSimulationTests(unittest.TestCase):
         self.assertIn("Drogue deploy", event_names)
         self.assertIn("Main deploy", event_names)
         self.assertTrue(any(row["phase"] == "drogue" for row in landing["history"]))
+        self.assertIn("Drogue descent", [phase["name"] for phase in result["recovery_analysis"]["phases"]])
 
     def test_recovery_can_deploy_from_motor_ejection_event(self):
         rocket = sample_rocket()

@@ -63,6 +63,7 @@ def main() -> int:
     require("exportResults('forces')" in frontend_source, "Frontend force/moment CSV export is missing.")
     require("exportResults('active')" in frontend_source, "Frontend active-system CSV export is missing.")
     require("exportResults('recovery')" in frontend_source, "Frontend recovery CSV export is missing.")
+    require("exportResults('recovery-summary')" in frontend_source, "Frontend recovery summary CSV export is missing.")
     require("getDesignChecks" in frontend_source, "Frontend is missing live design checks.")
     require("fieldChecks" in frontend_source, "Frontend design checks are not wired to inputs.")
     require("field-message" in frontend_source, "Frontend fields do not render design-check messages.")
@@ -84,7 +85,9 @@ def main() -> int:
     require("motorPatchFromCurve" in frontend_source, "Frontend motor curve edits do not sync motor impulse fields.")
     require("Motor thrust curve must include at least two valid time/thrust points." in active_sim_source, "Backend does not reject invalid supplied thrust curves.")
     require("LandingFootprintMap" in frontend_source, "Frontend results view is missing landing footprint map.")
+    require("RecoveryAnalysisPanel" in frontend_source, "Frontend results view is missing recovery analysis panel.")
     require("landing_footprint" in active_sim_source, "Backend does not report landing footprint output.")
+    require("recovery_analysis" in active_sim_source, "Backend does not report recovery analysis output.")
     require("drift_after_main_deploy_m" in active_sim_source, "Backend does not report recovery drift after main deployment.")
     database_motor = next(
         (motor for motor in motors.get("motors", []) if motor.get("designation") == "Estes C6-5"),
@@ -187,7 +190,7 @@ ControlOutput control_function(SensorData sensor_data) {
         "totalHeight": 680,
         "simulationConfig": {
             "timeStep": 0.02,
-            "maxTime": 20,
+            "maxTime": 80,
             "windSpeed": 1.5,
             "temperature": 15,
             "pressure": 101325,
@@ -276,6 +279,9 @@ ControlOutput control_function(SensorData sensor_data) {
     require(landing_footprint.get("touchdown_range_m") is not None, "Landing footprint touchdown range is missing.")
     require(landing_footprint.get("touchdown_bearing_deg") is not None, "Landing footprint touchdown bearing is missing.")
     require(landing_footprint.get("drift_after_main_deploy_m") is not None, "Landing footprint main-deployment drift is missing.")
+    recovery_analysis = results.get("recovery_analysis") or {}
+    require(len(recovery_analysis.get("deployment_sequence", [])) >= 3, "Recovery analysis deployment sequence is missing.")
+    require(any(phase.get("name") == "Main descent" for phase in recovery_analysis.get("phases", [])), "Recovery analysis main descent phase is missing.")
     first_sample = results["trajectory"][0]
     for key in ("net_force_z", "thrust_force", "pitch_moment", "angular_velocity_y_deg_s", "drag_coefficient"):
         require(key in first_sample, f"Trajectory sample missing {key}: {first_sample}")
@@ -302,6 +308,7 @@ ControlOutput control_function(SensorData sensor_data) {
         "force_samples": len(results["force_history"]),
         "moment_samples": len(results["moment_history"]),
         "touchdown_range": round(landing_footprint["touchdown_range_m"], 2),
+        "recovery_phases": len(recovery_analysis["phases"]),
         "source": results["source"],
     }
     print(json.dumps(summary, indent=2, sort_keys=True))

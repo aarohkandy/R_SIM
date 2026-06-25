@@ -395,11 +395,13 @@ class ActiveSimulationManager:
         landing_deploy_altitude = None
         landing_deploy_x = None
         landing_deploy_y = None
+        landing_deploy_velocity_z = None
         drogue_deployed = False
         drogue_deploy_time = None
         drogue_deploy_altitude = None
         drogue_deploy_x = None
         drogue_deploy_y = None
+        drogue_deploy_velocity_z = None
 
         max_altitude = altitude
         apogee_x = x
@@ -459,6 +461,7 @@ class ActiveSimulationManager:
                     drogue_deploy_altitude = altitude
                     drogue_deploy_x = x
                     drogue_deploy_y = y
+                    drogue_deploy_velocity_z = velocity_z
 
                 if (
                     not landing_deployed
@@ -477,6 +480,7 @@ class ActiveSimulationManager:
                     landing_deploy_altitude = altitude
                     landing_deploy_x = x
                     landing_deploy_y = y
+                    landing_deploy_velocity_z = velocity_z
 
             sensor = {
                 "timestamp": t,
@@ -784,6 +788,27 @@ class ActiveSimulationManager:
             "drift_after_drogue_deploy_m": drogue_drift,
             "descent_time_s": descent_time,
         }
+        recovery_analysis = self._build_recovery_analysis(
+            max_altitude=max_altitude,
+            apogee_time=apogee_time,
+            apogee_x=apogee_x,
+            apogee_y=apogee_y,
+            drogue_deploy_time=drogue_deploy_time,
+            drogue_deploy_altitude=drogue_deploy_altitude,
+            drogue_deploy_velocity_z=drogue_deploy_velocity_z,
+            drogue_deploy_x=drogue_deploy_x,
+            drogue_deploy_y=drogue_deploy_y,
+            landing_deploy_time=landing_deploy_time,
+            landing_deploy_altitude=landing_deploy_altitude,
+            landing_deploy_velocity_z=landing_deploy_velocity_z,
+            landing_deploy_x=landing_deploy_x,
+            landing_deploy_y=landing_deploy_y,
+            touchdown_time=touchdown_time,
+            touchdown_velocity=landing_velocity,
+            touchdown_x=x,
+            touchdown_y=y,
+            footprint=landing_footprint,
+        )
         aero_center = self._aerodynamic_center_m(components, total_length_m, diameter_m)
         cp_m = aero_center["cp_m"]
         stability_margin = (cp_m - cg_m) / diameter_m
@@ -829,6 +854,7 @@ class ActiveSimulationManager:
             "motor_delay": motor_delay_s,
             "total_impulse": total_impulse_ns,
             "recovery_timing": recovery_timing,
+            "recovery_analysis": recovery_analysis,
             "stability_margin": stability_margin,
             "center_of_pressure_m": cp_m,
             "cp_contributions": aero_center["contributions"],
@@ -1239,6 +1265,176 @@ class ActiveSimulationManager:
             "timing_error_s": timing_error_s,
             "status": status,
             "before_touchdown": touchdown_time is None or ejection_time_s <= touchdown_time,
+        }
+
+    def _recovery_event_summary(
+        self,
+        name: str,
+        *,
+        time_s: Optional[float],
+        altitude_m: Optional[float],
+        velocity_z_mps: Optional[float],
+        x_m: Optional[float],
+        y_m: Optional[float],
+    ) -> Optional[Dict[str, float]]:
+        if time_s is None:
+            return None
+        return {
+            "name": name,
+            "time_s": time_s,
+            "altitude_m": altitude_m,
+            "velocity_z_mps": velocity_z_mps,
+            "range_m": self._distance_xy(x_m, y_m),
+            "bearing_deg": self._bearing_deg(x_m, y_m),
+        }
+
+    def _recovery_phase_summary(
+        self,
+        name: str,
+        *,
+        start_time_s: Optional[float],
+        start_altitude_m: Optional[float],
+        start_x_m: Optional[float],
+        start_y_m: Optional[float],
+        end_time_s: Optional[float],
+        end_altitude_m: Optional[float],
+        end_x_m: Optional[float],
+        end_y_m: Optional[float],
+    ) -> Optional[Dict[str, float]]:
+        if start_time_s is None or end_time_s is None or end_time_s <= start_time_s:
+            return None
+        if start_altitude_m is None or end_altitude_m is None:
+            return None
+        duration_s = end_time_s - start_time_s
+        altitude_loss_m = max(start_altitude_m - end_altitude_m, 0.0)
+        drift_m = (
+            self._distance_xy(end_x_m - start_x_m, end_y_m - start_y_m)
+            if None not in (start_x_m, start_y_m, end_x_m, end_y_m)
+            else None
+        )
+        return {
+            "name": name,
+            "start_time_s": start_time_s,
+            "end_time_s": end_time_s,
+            "duration_s": duration_s,
+            "start_altitude_m": start_altitude_m,
+            "end_altitude_m": end_altitude_m,
+            "altitude_loss_m": altitude_loss_m,
+            "average_descent_rate_mps": altitude_loss_m / duration_s if duration_s > 0 else None,
+            "start_range_m": self._distance_xy(start_x_m, start_y_m),
+            "end_range_m": self._distance_xy(end_x_m, end_y_m),
+            "drift_m": drift_m,
+        }
+
+    def _build_recovery_analysis(
+        self,
+        *,
+        max_altitude: float,
+        apogee_time: float,
+        apogee_x: float,
+        apogee_y: float,
+        drogue_deploy_time: Optional[float],
+        drogue_deploy_altitude: Optional[float],
+        drogue_deploy_velocity_z: Optional[float],
+        drogue_deploy_x: Optional[float],
+        drogue_deploy_y: Optional[float],
+        landing_deploy_time: Optional[float],
+        landing_deploy_altitude: Optional[float],
+        landing_deploy_velocity_z: Optional[float],
+        landing_deploy_x: Optional[float],
+        landing_deploy_y: Optional[float],
+        touchdown_time: Optional[float],
+        touchdown_velocity: float,
+        touchdown_x: float,
+        touchdown_y: float,
+        footprint: Dict[str, float],
+    ) -> Dict[str, List[Dict[str, float]]]:
+        sequence = [
+            self._recovery_event_summary(
+                "Apogee",
+                time_s=apogee_time,
+                altitude_m=max_altitude,
+                velocity_z_mps=0.0,
+                x_m=apogee_x,
+                y_m=apogee_y,
+            ),
+            self._recovery_event_summary(
+                "Drogue deploy",
+                time_s=drogue_deploy_time,
+                altitude_m=drogue_deploy_altitude,
+                velocity_z_mps=drogue_deploy_velocity_z,
+                x_m=drogue_deploy_x,
+                y_m=drogue_deploy_y,
+            ),
+            self._recovery_event_summary(
+                "Main deploy",
+                time_s=landing_deploy_time,
+                altitude_m=landing_deploy_altitude,
+                velocity_z_mps=landing_deploy_velocity_z,
+                x_m=landing_deploy_x,
+                y_m=landing_deploy_y,
+            ),
+            self._recovery_event_summary(
+                "Touchdown",
+                time_s=touchdown_time,
+                altitude_m=0.0,
+                velocity_z_mps=-abs(touchdown_velocity),
+                x_m=touchdown_x,
+                y_m=touchdown_y,
+            ),
+        ]
+        sequence = [event for event in sequence if event is not None]
+
+        phases = [
+            self._recovery_phase_summary(
+                "Total descent",
+                start_time_s=apogee_time,
+                start_altitude_m=max_altitude,
+                start_x_m=apogee_x,
+                start_y_m=apogee_y,
+                end_time_s=touchdown_time,
+                end_altitude_m=0.0,
+                end_x_m=touchdown_x,
+                end_y_m=touchdown_y,
+            )
+        ]
+        if drogue_deploy_time is not None:
+            drogue_end_time = landing_deploy_time if landing_deploy_time is not None else touchdown_time
+            drogue_end_altitude = landing_deploy_altitude if landing_deploy_time is not None else 0.0
+            drogue_end_x = landing_deploy_x if landing_deploy_time is not None else touchdown_x
+            drogue_end_y = landing_deploy_y if landing_deploy_time is not None else touchdown_y
+            phases.append(self._recovery_phase_summary(
+                "Drogue descent",
+                start_time_s=drogue_deploy_time,
+                start_altitude_m=drogue_deploy_altitude,
+                start_x_m=drogue_deploy_x,
+                start_y_m=drogue_deploy_y,
+                end_time_s=drogue_end_time,
+                end_altitude_m=drogue_end_altitude,
+                end_x_m=drogue_end_x,
+                end_y_m=drogue_end_y,
+            ))
+        phases.append(self._recovery_phase_summary(
+            "Main descent",
+            start_time_s=landing_deploy_time,
+            start_altitude_m=landing_deploy_altitude,
+            start_x_m=landing_deploy_x,
+            start_y_m=landing_deploy_y,
+            end_time_s=touchdown_time,
+            end_altitude_m=0.0,
+            end_x_m=touchdown_x,
+            end_y_m=touchdown_y,
+        ))
+        phases = [phase for phase in phases if phase is not None]
+
+        return {
+            "deployment_sequence": sequence,
+            "phases": phases,
+            "total_descent_time_s": footprint["descent_time_s"],
+            "touchdown_range_m": footprint["touchdown_range_m"],
+            "touchdown_bearing_deg": footprint["touchdown_bearing_deg"],
+            "main_drift_m": footprint["drift_after_main_deploy_m"],
+            "drogue_drift_m": footprint["drift_after_drogue_deploy_m"],
         }
 
     @staticmethod

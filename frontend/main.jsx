@@ -1489,6 +1489,60 @@ function LandingFootprintMap({ footprint = {} }) {
   );
 }
 
+function RecoveryAnalysisPanel({ analysis = {} }) {
+  const sequence = analysis.deployment_sequence || [];
+  const phases = analysis.phases || [];
+  if (!sequence.length && !phases.length) {
+    return null;
+  }
+
+  return (
+    <div className="recovery-panel">
+      <div className="comparison-title">Recovery analysis</div>
+      {sequence.length > 0 && (
+        <div className="recovery-table recovery-sequence">
+          <div className="recovery-row recovery-head">
+            <span>Event</span>
+            <span>Time</span>
+            <span>Altitude</span>
+            <span>V vertical</span>
+            <span>Range</span>
+          </div>
+          {sequence.map((event) => (
+            <div className="recovery-row" key={`${event.name}-${event.time_s}`}>
+              <strong>{event.name}</strong>
+              <span>{formatNumber(event.time_s, 2)} s</span>
+              <span>{formatNumber(event.altitude_m, 1)} m</span>
+              <span>{formatNumber(event.velocity_z_mps, 2)} m/s</span>
+              <span>{formatNumber(event.range_m, 1)} m</span>
+            </div>
+          ))}
+        </div>
+      )}
+      {phases.length > 0 && (
+        <div className="recovery-table recovery-phases">
+          <div className="recovery-row recovery-head">
+            <span>Phase</span>
+            <span>Duration</span>
+            <span>Alt loss</span>
+            <span>Avg descent</span>
+            <span>Drift</span>
+          </div>
+          {phases.map((phase) => (
+            <div className="recovery-row" key={phase.name}>
+              <strong>{phase.name}</strong>
+              <span>{formatNumber(phase.duration_s, 2)} s</span>
+              <span>{formatNumber(phase.altitude_loss_m, 1)} m</span>
+              <span>{formatNumber(phase.average_descent_rate_mps, 2)} m/s</span>
+              <span>{formatNumber(phase.drift_m, 1)} m</span>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function RocketDrawing({ components, selectedId, setSelectedId, metrics, results }) {
   const structural = layoutComponents(components);
   const length = Math.max(metrics.totalLength, 1);
@@ -2587,6 +2641,7 @@ function ResultsPanel({
   const momentHistory = data?.moment_history || [];
   const touchdown = data?.landing_system;
   const footprint = data?.landing_footprint || {};
+  const recoveryAnalysis = data?.recovery_analysis || {};
   const launchGuide = data?.launch_guide;
   const recoveryTiming = data?.recovery_timing;
   const events = data?.flight_events || [];
@@ -2694,6 +2749,7 @@ function ResultsPanel({
         </div>
         <LandingFootprintMap footprint={footprint} />
       </div>
+      <RecoveryAnalysisPanel analysis={recoveryAnalysis} />
       <div className="tuning-panel">
         <div className="comparison-title">Tuning notes</div>
         <div className="tuning-list">
@@ -2836,6 +2892,7 @@ function ResultsPanel({
         <button type="button" onClick={() => exportResults('forces')}>Force/moment CSV</button>
         <button type="button" onClick={() => exportResults('active')}>Active CSV</button>
         <button type="button" onClick={() => exportResults('recovery')}>Recovery CSV</button>
+        <button type="button" onClick={() => exportResults('recovery-summary')}>Recovery summary CSV</button>
       </div>
       {data.warnings?.length ? (
         <div className="warning-list">
@@ -3469,6 +3526,50 @@ function App() {
         ];
         content = rowsToCsv(result.results.landing_system?.history || [], headers);
         filename = 'active-rocket-recovery.csv';
+      } else if (format === 'recovery-summary') {
+        const analysis = result.results.recovery_analysis || {};
+        const rows = [
+          ...(analysis.deployment_sequence || []).map((event) => ({
+            type: 'event',
+            name: event.name,
+            time_s: event.time_s,
+            altitude_m: event.altitude_m,
+            velocity_z_mps: event.velocity_z_mps,
+            range_m: event.range_m,
+            bearing_deg: event.bearing_deg
+          })),
+          ...(analysis.phases || []).map((phase) => ({
+            type: 'phase',
+            name: phase.name,
+            start_time_s: phase.start_time_s,
+            end_time_s: phase.end_time_s,
+            duration_s: phase.duration_s,
+            start_altitude_m: phase.start_altitude_m,
+            end_altitude_m: phase.end_altitude_m,
+            altitude_loss_m: phase.altitude_loss_m,
+            average_descent_rate_mps: phase.average_descent_rate_mps,
+            drift_m: phase.drift_m
+          }))
+        ];
+        const headers = [
+          'type',
+          'name',
+          'time_s',
+          'altitude_m',
+          'velocity_z_mps',
+          'range_m',
+          'bearing_deg',
+          'start_time_s',
+          'end_time_s',
+          'duration_s',
+          'start_altitude_m',
+          'end_altitude_m',
+          'altitude_loss_m',
+          'average_descent_rate_mps',
+          'drift_m'
+        ];
+        content = rowsToCsv(rows, headers);
+        filename = 'active-rocket-recovery-summary.csv';
       }
     } else {
       content = JSON.stringify({ active: result, passive: comparisonResult }, null, 2);
