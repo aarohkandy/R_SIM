@@ -206,7 +206,18 @@ class ActiveSimulationTests(unittest.TestCase):
 
         self.assertEqual(result["thrust_profile"]["source"], "curve")
         self.assertGreater(result["thrust_profile"]["integrated_impulse"], 0)
+        self.assertAlmostEqual(result["total_impulse"], 12.77, places=2)
         self.assertGreater(len(thrust_values), 2)
+
+    def test_invalid_motor_thrust_curve_is_rejected(self):
+        rocket = sample_rocket()
+        motor = next(component for component in rocket["components"] if component["type"] == "Motor")
+        motor["thrustCurve"] = [{"time": 0.0, "thrust": 0.0}]
+        manager = ActiveSimulationManager()
+        result = manager.submit_cfd_simulation(rocket, base_config())
+
+        self.assertFalse(result["success"])
+        self.assertIn("Motor thrust curve must include at least two valid time/thrust points.", result["validation_errors"])
 
     def test_motor_delay_recovery_timing_is_reported(self):
         rocket = sample_rocket()

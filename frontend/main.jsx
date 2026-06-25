@@ -771,6 +771,8 @@ const getDesignChecks = ({ components, metrics, config, landingSizing, activeEnv
     if (component.type === 'Motor') {
       const thrust = numberValue(component.motorThrust, 0);
       const impulse = numberValue(component.motorTotalImpulse, 0);
+      const rawCurve = component.thrustCurve;
+      const normalizedCurve = normalizeThrustCurvePoints(rawCurve || []);
       if (numberValue(component.motorBurnTime, 0) <= 0) {
         add('error', 'Motor burn time', 'Burn time must be positive.', componentTarget(component, 'motorBurnTime'));
       }
@@ -782,6 +784,18 @@ const getDesignChecks = ({ components, metrics, config, landingSizing, activeEnv
       }
       if (numberValue(component.motorDelay, 0) < 0) {
         add('error', 'Motor delay', 'Delay must not be negative.', componentTarget(component, 'motorDelay'));
+      }
+      if (Array.isArray(rawCurve) && rawCurve.length > 0) {
+        if (normalizedCurve.length < 2) {
+          add('error', 'Thrust curve', 'Curve needs at least two valid time/thrust points.', componentTarget(component, 'thrustCurve'));
+        } else {
+          const curveImpulse = integrateThrustCurve(normalizedCurve);
+          if (curveImpulse <= 0) {
+            add('error', 'Thrust curve impulse', 'Curve area must be positive.', componentTarget(component, 'thrustCurve'));
+          } else if (impulse > 0 && Math.abs(curveImpulse - impulse) / Math.max(impulse, 1) > 0.15) {
+            add('info', 'Curve changed impulse', `Curve integrates to ${formatNumber(curveImpulse, 1)} Ns.`, componentTarget(component, 'thrustCurve'));
+          }
+        }
       }
     }
   });
@@ -1012,6 +1026,112 @@ const mergeRowsByTime = (...collections) => {
     merged.set(key, { ...(merged.get(key) || {}), ...row });
   });
   return [...merged.values()].sort((a, b) => numberValue(a.time) - numberValue(b.time));
+};
+
+const normalizeThrustCurvePoints = (rawCurve = []) => {
+  if (!Array.isArray(rawCurve)) return [];
+  const points = rawCurve.map((point) => (
+    Array.isArray(point)
+      ? { time: numberValue(point[0], NaN), thrust: numberValue(point[1], NaN) }
+      : { time: numberValue(point.time ?? point.time_s ?? point.t, NaN), thrust: numberValue(point.thrust ?? point.thrust_n ?? point.force, NaN) }
+  )).filter((point) => (
+    Number.isFinite(point.time) &&
+    Number.isFinite(point.thrust) &&
+    point.time >= 0 &&
+    point.thrust >= 0
+  )).sort((left, right) => left.time - right.time);
+
+  return points.reduce((deduped, point) => {
+    const cleanPoint = {
+      time: Number(point.time.toFixed(4)),
+      thrust: Number(point.thrust.toFixed(4))
+    };
+    if (deduped.length && Math.abs(deduped[deduped.length - 1].time - cleanPoint.time) < 1e-9) {
+      deduped[deduped.length - 1] = cleanPoint;
+    } else {
+      deduped.push(cleanPoint);
+    }
+    return deduped;
+  }, []);
+};
+
+const integrateThrustCurve = (points) => points.slice(1).reduce((sum, point, index) => {
+  const previous = points[index];
+  return sum + Math.max(point.time - previous.time, 0) * (point.thrust + previous.thrust) * 0.5;
+}, 0);
+
+const interpolateThrustCurve = (points, time) => {
+  if (!points.length || time < points[0].time || time > points[points.length - 1].time) return 0;
+  for (let index = 0; index < points.length - 1; index += 1) {
+    const left = points[index];
+    const right = points[index + 1];
+    if (left.time <= time && time <= right.time) {
+      const span = right.time - left.time;
+      if (span <= 1e-9) return right.thrust;
+      const fraction = (time - left.time) / span;
+      return left.thrust + (right.thrust - left.thrust) * fraction;
+    }
+  }
+  return 0;
+};
+
+const sampleThrustCurve = (points, count = 12) => {
+  const curve = normalizeThrustCurvePoints(points);
+  if (curve.length <= count) return curve;
+  const burnTime = curve[curve.length - 1].time;
+  if (burnTime <= 0) return curve.slice(0, count);
+  return Array.from({ length: count }, (_, index) => {
+    const time = (burnTime * index) / (count - 1);
+    return {
+      time: Number(time.toFixed(3)),
+      thrust: Number(interpolateThrustCurve(curve, time).toFixed(2))
+    };
+  });
+};
+
+const buildAverageThrustCurve = (motor) => {
+  const burnTime = Math.max(numberValue(motor.motorBurnTime, 0), 0.1);
+  const totalImpulse = Math.max(
+    numberValue(motor.motorTotalImpulse, 0),
+    numberValue(motor.motorThrust, 0) * burnTime
+  );
+  const plateau = totalImpulse > 0 ? totalImpulse / (burnTime * 0.9) : numberValue(motor.motorThrust, 0);
+  return normalizeThrustCurvePoints([
+    { time: 0, thrust: 0 },
+    { time: burnTime * 0.1, thrust: plateau },
+    { time: burnTime * 0.9, thrust: plateau },
+    { time: burnTime, thrust: 0 }
+  ]);
+};
+
+const getMotorCurveSummary = (motor) => {
+  const curve = normalizeThrustCurvePoints(motor.thrustCurve || []);
+  const hasCurve = curve.length >= 2 && curve[curve.length - 1].time > curve[0].time;
+  const burnTime = hasCurve ? curve[curve.length - 1].time : numberValue(motor.motorBurnTime, 0);
+  const totalImpulse = hasCurve ? integrateThrustCurve(curve) : numberValue(motor.motorTotalImpulse, 0);
+  const averageThrust = burnTime > 0 ? totalImpulse / burnTime : numberValue(motor.motorThrust, 0);
+  const peakThrust = hasCurve
+    ? Math.max(...curve.map((point) => point.thrust))
+    : Math.max(numberValue(motor.motorThrust, 0), averageThrust);
+  return {
+    curve,
+    hasCurve,
+    burnTime,
+    totalImpulse,
+    averageThrust,
+    peakThrust
+  };
+};
+
+const motorPatchFromCurve = (curve) => {
+  const summary = getMotorCurveSummary({ thrustCurve: curve });
+  if (!summary.hasCurve) return { thrustCurve: [] };
+  return {
+    thrustCurve: summary.curve,
+    motorBurnTime: Number(summary.burnTime.toFixed(3)),
+    motorTotalImpulse: Number(summary.totalImpulse.toFixed(3)),
+    motorThrust: Number(summary.averageThrust.toFixed(3))
+  };
 };
 
 const mergeConfig = (base, incoming = {}) => ({
@@ -1678,6 +1798,107 @@ function DesignAnalysis({ metrics, massBreakdown, config }) {
   );
 }
 
+function MotorCurvePanel({ component, updateComponent, fieldChecks = {} }) {
+  const summary = getMotorCurveSummary(component);
+  const displayCurve = summary.hasCurve ? summary.curve : buildAverageThrustCurve(component);
+  const editableCurve = summary.curve.length <= 18;
+  const checks = fieldChecks[componentTarget(component, 'thrustCurve')] || [];
+  const setCurve = (nextCurve) => updateComponent(component.id, motorPatchFromCurve(nextCurve));
+  const updatePoint = (index, key, value) => {
+    const nextCurve = summary.curve.map((point, pointIndex) => (
+      pointIndex === index ? { ...point, [key]: value } : point
+    ));
+    setCurve(nextCurve);
+  };
+  const addPoint = () => {
+    const lastPoint = summary.curve[summary.curve.length - 1] || { time: 0, thrust: 0 };
+    setCurve([...summary.curve, { time: Number((lastPoint.time + 0.1).toFixed(3)), thrust: 0 }]);
+  };
+  const removePoint = (index) => {
+    setCurve(summary.curve.filter((_, pointIndex) => pointIndex !== index));
+  };
+
+  return (
+    <div className="sizing-card motor-curve-panel">
+      <div className="comparison-title">Motor thrust curve</div>
+      <div className="sizing-grid">
+        <div><span>Curve source</span><strong>{summary.hasCurve ? `${summary.curve.length} points` : 'Average fields'}</strong></div>
+        <div><span>Peak thrust</span><strong>{formatNumber(summary.peakThrust, 1)} N</strong></div>
+        <div><span>Burn time</span><strong>{formatNumber(summary.burnTime, 2)} s</strong></div>
+        <div><span>Integrated impulse</span><strong>{formatNumber(summary.totalImpulse, 1)} Ns</strong></div>
+      </div>
+      <LineChart
+        compact
+        title="Motor thrust"
+        yUnit="N"
+        series={[
+          {
+            label: summary.hasCurve ? 'Curve' : 'Generated',
+            color: '#343a40',
+            points: displayCurve.map((point) => ({ x: point.time, y: point.thrust }))
+          }
+        ]}
+      />
+      {checks.length > 0 && (
+        <div className="field-messages curve-messages">
+          {checks.slice(0, 2).map((check) => (
+            <span className={`field-message ${check.severity}`} key={check.id}>{check.detail}</span>
+          ))}
+        </div>
+      )}
+      {summary.hasCurve && !editableCurve && (
+        <div className="curve-note">
+          Loaded curve has {summary.curve.length} points. Simplify it to edit sampled points by hand.
+        </div>
+      )}
+      {editableCurve && summary.hasCurve && (
+        <div className="curve-point-table">
+          <div className="curve-point-head">
+            <span>Time</span>
+            <span>Thrust</span>
+            <span />
+          </div>
+          {summary.curve.map((point, index) => (
+            <div className="curve-point-row" key={`${point.time}-${index}`}>
+              <input
+                aria-label={`Curve point ${index + 1} time`}
+                type="number"
+                step="0.01"
+                min="0"
+                value={point.time}
+                onChange={(event) => updatePoint(index, 'time', numberValue(event.target.value))}
+              />
+              <input
+                aria-label={`Curve point ${index + 1} thrust`}
+                type="number"
+                step="0.1"
+                min="0"
+                value={point.thrust}
+                onChange={(event) => updatePoint(index, 'thrust', numberValue(event.target.value))}
+              />
+              <button type="button" onClick={() => removePoint(index)} disabled={summary.curve.length <= 2}>Remove</button>
+            </div>
+          ))}
+        </div>
+      )}
+      <div className="sizing-actions curve-actions">
+        <button type="button" onClick={() => setCurve(buildAverageThrustCurve(component))}>
+          Build avg curve
+        </button>
+        <button type="button" onClick={() => setCurve(sampleThrustCurve(displayCurve, 12))}>
+          Simplify to edit
+        </button>
+        <button type="button" onClick={addPoint}>
+          Add point
+        </button>
+        <button type="button" onClick={() => updateComponent(component.id, { thrustCurve: [] })}>
+          Clear curve
+        </button>
+      </div>
+    </div>
+  );
+}
+
 function ComponentInspector({ component, updateComponent, metrics, fieldChecks = {} }) {
   if (!component) {
     return (
@@ -1777,6 +1998,9 @@ function ComponentInspector({ component, updateComponent, metrics, fieldChecks =
           </>
         )}
       </div>
+      {component.type === 'Motor' && (
+        <MotorCurvePanel component={component} updateComponent={updateComponent} fieldChecks={fieldChecks} />
+      )}
     </div>
   );
 }

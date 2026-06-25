@@ -17,6 +17,7 @@
 - Fake/random placeholder output must not be accepted as a passing main workflow result.
 - The frontend must default to the local simulation API, not a hardcoded cloud/GCP service.
 - Motor thrust curves and optional aerodynamic coefficient tables must affect local simulation output when supplied.
+- Supplied motor thrust curves must be inspectable/editable in the UI and must own simulated impulse when valid.
 - OpenRocket `.ork` import must return simulation-ready rocket components and warn when motor/mass/CG data must be inferred.
 - Frontend motor search must use the local backend motor database, not hardcoded placeholder motor data.
 - C++ controller code must compile before it is used by an active simulation.

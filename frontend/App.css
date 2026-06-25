@@ -1181,6 +1181,61 @@ button:focus-visible {
   white-space: nowrap;
 }
 
+.motor-curve-panel .chart.compact {
+  margin: 8px 9px 0;
+}
+
+.curve-note {
+  margin: 8px 9px 0;
+  border: 1px solid rgba(194, 123, 31, 0.28);
+  border-radius: 7px;
+  padding: 8px;
+  background: rgba(194, 123, 31, 0.08);
+  color: #7a4b12;
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+.curve-messages {
+  padding: 8px 9px 0;
+}
+
+.curve-point-table {
+  display: grid;
+  gap: 5px;
+  padding: 8px 9px 0;
+}
+
+.curve-point-head,
+.curve-point-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) 72px;
+  gap: 6px;
+  align-items: center;
+}
+
+.curve-point-head {
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.curve-point-row input {
+  min-height: 30px;
+}
+
+.curve-point-row button {
+  min-height: 30px;
+  padding: 4px 6px;
+  font-size: 11px;
+}
+
+.curve-actions {
+  grid-template-columns: 1fr 1fr;
+  padding-top: 9px;
+}
+
 .landing-presets,
 .result-actions {
   display: grid;

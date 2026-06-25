@@ -64,3 +64,4 @@
 - Added named simulation setups so users can save current flight settings, restore them, duplicate cases, and run or compare a selected setup against the current rocket.
 - Added editable axial placement for fins, motors, and rail buttons so drawing, mass properties, frontend CP analysis, and backend CP exports honor component location along the rocket.
 - Added active airbrake force-station controls and backend moment-arm reporting so airbrake placement affects moment histories and result exports.
+- Added selected-motor thrust curve inspection and editing, including curve summary, charting, sampled point editing, average-curve generation, and backend curve-owned impulse validation.

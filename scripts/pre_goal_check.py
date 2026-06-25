@@ -79,6 +79,10 @@ def main() -> int:
     require("active.locationFromNose" in frontend_source, "Frontend design checks do not target active airbrake station.")
     require("moment_arm_m" in active_sim_source, "Backend active system does not report active airbrake moment arm.")
     require("active_drag_force" in active_sim_source, "Backend force history is missing active drag force.")
+    require("MotorCurvePanel" in frontend_source, "Frontend is missing selected motor thrust curve inspection.")
+    require("Simplify to edit" in frontend_source, "Frontend motor curve editor is missing sampled editing controls.")
+    require("motorPatchFromCurve" in frontend_source, "Frontend motor curve edits do not sync motor impulse fields.")
+    require("Motor thrust curve must include at least two valid time/thrust points." in active_sim_source, "Backend does not reject invalid supplied thrust curves.")
     database_motor = next(
         (motor for motor in motors.get("motors", []) if motor.get("designation") == "Estes C6-5"),
         motors["motors"][0],

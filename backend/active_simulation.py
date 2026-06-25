@@ -145,6 +145,23 @@ class ActiveSimulationManager:
                 errors.append("Motor thrust or total impulse must be positive.")
             if motor_delay < 0:
                 errors.append("Motor delay must not be negative.")
+            raw_curve = (
+                motor.get("thrustCurve")
+                or motor.get("thrust_curve")
+                or motor.get("thrustCurvePoints")
+            )
+            if raw_curve:
+                thrust_curve = self._parse_thrust_curve(motor)
+                if not thrust_curve:
+                    errors.append("Motor thrust curve must include at least two valid time/thrust points.")
+                else:
+                    curve_impulse = self._integrate_curve(thrust_curve)
+                    if curve_impulse <= 0:
+                        errors.append("Motor thrust curve impulse must be positive.")
+                    if thrust_curve[0][1] > max(thrust_curve[-1][1], 0.5):
+                        warnings.append("Motor thrust curve starts above zero thrust; check ignition timing.")
+                    if thrust_curve[-1][1] > 0.5:
+                        warnings.append("Motor thrust curve ends above zero thrust; check burnout timing.")
 
         if self._rocket_diameter_m(components) <= 0.01 and components:
             warnings.append("Rocket diameter is very small; check units.")
@@ -317,8 +334,7 @@ class ActiveSimulationManager:
         if thrust_curve:
             burn_time_s = max(burn_time_s, thrust_curve[-1][0])
             curve_total_impulse_ns = self._integrate_curve(thrust_curve)
-            if total_impulse_ns <= 0:
-                total_impulse_ns = curve_total_impulse_ns
+            total_impulse_ns = curve_total_impulse_ns
             thrust_n = max(thrust_n, curve_total_impulse_ns / max(burn_time_s, 0.001))
 
         pressure_pa = self._as_float(config.get("pressure"), 101325.0)
