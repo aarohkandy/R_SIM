@@ -17,7 +17,7 @@
 - Let users edit fin planform shape, root/tip chord, span, sweep, thickness, through-wall tab dimensions, cant angle, cross-section, material, host, and station from the component inspector.
 - Let users add main/drogue parachutes, streamers, and shock cords as attached recovery components, then edit deployment event, altitude, drag area, Cd, opening-load limits, streamer strip geometry, and harness strength from the component inspector.
 - Let users add and remove split markers only between structural parts, with red markers in both the design tree and rocket side view.
-- Let users set the active airbrake force station and see its moment arm against CG before and after simulation.
+- Let users set active airbrake panel span, chord, thickness, hinge offset, Cd, count, max angle, and force station, see derived area and moment arm against CG, and carry those fields into simulation results.
 - Provide a built-in active demo rocket and accept full scenario JSON files with both `rocketData` and `simulationConfig`.
 - Let users import OpenRocket `.ork` designs from the builder view and continue editing/simulating the imported components.
 - Search and add motors from the local backend motor database, including designation-only search, impulse/manufacturer/diameter/TARC filters, and thrust-curve metadata used by the simulator.

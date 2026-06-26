@@ -12,6 +12,7 @@ This local model is not CFD and is not flight certification. Its output is marke
 - The local motor catalog can ingest RASP `.eng` and RockSim `.rse` files through `/api/environment/motors/import`, deriving burn time, total impulse, average thrust, peak thrust, and impulse class from the imported thrust samples.
 - Motor components may provide `thrustCurve` points as `{time, thrust}` records or `[time, thrust]` pairs. The local model linearly interpolates thrust, uses the integrated curve area as total impulse, and reports `thrust_profile.source: curve`.
 - Simulation config may provide `aerodynamics.baseDragCoefficient` and `aerodynamics.activeDragCoefficientTable` points with deployment-to-`cdIncrement` calibration. Without a table, the model falls back to surface-area drag coupling.
+- Active airbrake geometry can provide panel span/chord/thickness/hinge offset; span and chord derive per-panel area when `surfaceArea` is not supplied, and results echo the panel geometry used for active drag.
 - Output includes `trajectory`, `force_history`, and `moment_history` samples so the UI/export path can inspect net forces, thrust, drag, angular rates, and pitch/yaw/roll moments.
 - Output includes `landing_footprint` and recovery history ground-track fields so the UI/export path can inspect touchdown range, bearing, deployment points, descent time, and drift after recovery deployment.
 - Output includes `recovery_analysis` with an event sequence and phase summaries for drogue/main/total descent timing, descent rate, and drift.

@@ -52,6 +52,7 @@ The active scenario matrix uses importable files in `examples/scenarios/`:
 - Frontend palette, inspector, table, mass breakdown, and side-view drawing expose internal mass components, tube couplers, bulkheads, motor mount tubes, and centering rings.
 - Frontend palette, inspector, table, mass breakdown, and side-view drawing expose rail buttons and launch lugs as launch-guide hardware.
 - Frontend palette, inspector, table, side-view drawing, OpenRocket import, and backend simulation config expose parachute, streamer, and shock-cord recovery components.
+- Frontend active setup and Active Airbrake component inspector expose panel span/chord/thickness/hinge offset/Cd, derive surface area from span/chord, and backend results report the active panel geometry used.
 - Recovery safety output applies shock-cord rated strength as a harness opening-load limit and reports the effective opening-load limit.
 - Frontend results view renders live charts from trajectory, force, pressure, and active-system histories.
 - Frontend export actions include trajectory CSV, force/moment CSV, active-system CSV, and full JSON.

@@ -230,7 +230,12 @@ const componentDefaults = {
     material: 'aluminum',
     wallThickness: 1.4,
     surfaceCount: 3,
+    surfaceSpan: 80,
+    surfaceChord: 30,
+    surfaceThickness: 2,
+    surfaceHingeOffset: 6,
     surfaceArea: 0.0024,
+    surfaceCd: 1.35,
     surfaceMaxAngle: 65
   },
   Fins: {
@@ -471,6 +476,10 @@ const defaultConfig = {
     returnSpring: 18,
     linkageRatio: 1,
     surfaceMaxAngle: 65,
+    surfaceSpan: 80,
+    surfaceChord: 30,
+    surfaceThickness: 2,
+    surfaceHingeOffset: 6,
     surfaceArea: 0.0024,
     surfaceCount: 3,
     surfaceCd: 1.35,
@@ -955,6 +964,17 @@ const getLandingSizing = (metrics, config, overrides = {}) => {
   };
 };
 
+const getActiveSurfaceAreaFromGeometry = (active = {}) => {
+  const spanMm = numberValue(active.surfaceSpan ?? active.panelSpan ?? active.airbrakeSpan, 0);
+  const chordMm = numberValue(active.surfaceChord ?? active.panelChord ?? active.airbrakeChord, 0);
+  return spanMm > 0 && chordMm > 0 ? Number(((spanMm * chordMm) / 1000000).toFixed(6)) : 0;
+};
+
+const getActiveSurfaceArea = (active = {}) => {
+  const explicit = numberValue(active.surfaceArea, 0);
+  return explicit > 0 ? explicit : getActiveSurfaceAreaFromGeometry(active);
+};
+
 const getActiveEnvelope = (metrics, config) => {
   const diameterM = Math.max(metrics.maxDiameter / 1000, 0.001);
   const frontalArea = Math.PI * (diameterM / 2) ** 2;
@@ -962,7 +982,7 @@ const getActiveEnvelope = (metrics, config) => {
   const locationFromNoseM = numberValue(active.locationFromNose, 0);
   const locationFromNoseMm = locationFromNoseM * 1000;
   const momentArmMm = locationFromNoseMm - metrics.cg;
-  const surfaceArea = Math.max(numberValue(active.surfaceArea, 0), 0);
+  const surfaceArea = Math.max(getActiveSurfaceArea(active), 0);
   const surfaceCount = Math.max(numberValue(active.surfaceCount, 0), 0);
   const deployedArea = surfaceArea * surfaceCount;
   const cdIncrement = frontalArea > 0
@@ -1582,7 +1602,35 @@ const getDesignChecks = ({ components, splitPoints = [], metrics, config, landin
         componentTarget(activeComponent, 'surfaceCount')
       ]);
     }
-    if (numberValue(active.surfaceArea, 0) <= 0) {
+    const surfaceSpan = 'surfaceSpan' in active ? numberValue(active.surfaceSpan, 0) : 80;
+    const surfaceChord = 'surfaceChord' in active ? numberValue(active.surfaceChord, 0) : 30;
+    const surfaceThickness = 'surfaceThickness' in active ? numberValue(active.surfaceThickness, 0) : 2;
+    const hingeOffset = numberValue(active.surfaceHingeOffset, 0);
+    if (surfaceSpan <= 0) {
+      add('error', 'Panel span', 'Active airbrake panel span must be positive.', [
+        'active.surfaceSpan',
+        componentTarget(activeComponent, 'surfaceSpan')
+      ]);
+    }
+    if (surfaceChord <= 0) {
+      add('error', 'Panel chord', 'Active airbrake panel chord must be positive.', [
+        'active.surfaceChord',
+        componentTarget(activeComponent, 'surfaceChord')
+      ]);
+    }
+    if (surfaceThickness <= 0) {
+      add('error', 'Panel thickness', 'Active airbrake panel thickness must be positive.', [
+        'active.surfaceThickness',
+        componentTarget(activeComponent, 'surfaceThickness')
+      ]);
+    }
+    if (hingeOffset < 0 || (surfaceChord > 0 && hingeOffset > surfaceChord)) {
+      add('error', 'Hinge offset', 'Hinge offset must stay within the panel chord.', [
+        'active.surfaceHingeOffset',
+        componentTarget(activeComponent, 'surfaceHingeOffset')
+      ]);
+    }
+    if (getActiveSurfaceArea(active) <= 0) {
       add('error', 'Surface area', 'Active surface area must be positive.', [
         'active.surfaceArea',
         componentTarget(activeComponent, 'surfaceArea')
@@ -2391,12 +2439,17 @@ function RocketDrawing({ components, splitPoints, selectedId, setSelectedId, met
                 className={`rocket-part ${selected ? 'selected' : ''}`}
                 fill={componentColor[component.type] || '#ccd3dd'}
               />
-              {component.type === 'Active Airbrake' && (
-                <>
-                  <rect x={x + w * 0.26} y={centerY - h / 2 - 16} width={w * 0.18} height="18" className="airbrake-tab" />
-                  <rect x={x + w * 0.56} y={centerY + h / 2 - 2} width={w * 0.18} height="18" className="airbrake-tab" />
-                </>
-              )}
+              {component.type === 'Active Airbrake' && (() => {
+                const panelChordPx = Math.max(8, Math.min(w * 0.8, numberValue(component.surfaceChord, 30) * pxPerMm));
+                const panelSpanPx = Math.max(10, Math.min(36, numberValue(component.surfaceSpan, 80) * diameterScale * 0.34));
+                const hingeInset = Math.min(w - panelChordPx, Math.max(0, numberValue(component.surfaceHingeOffset, 0) * pxPerMm));
+                return (
+                  <>
+                    <rect x={x + hingeInset} y={centerY - h / 2 - panelSpanPx} width={panelChordPx} height={panelSpanPx} className="airbrake-tab" />
+                    <rect x={x + w - panelChordPx - hingeInset} y={centerY + h / 2} width={panelChordPx} height={panelSpanPx} className="airbrake-tab" />
+                  </>
+                );
+              })()}
               <title>{component.name}</title>
             </g>
           );
@@ -2885,6 +2938,9 @@ const getComponentDetailText = (component) => {
   if (component.type === 'Fins') {
     return `${component.finCount} ${component.finShape || 'trapezoidal'} fins, ${formatNumber(component.finHeight, 0)} mm span`;
   }
+  if (component.type === 'Active Airbrake') {
+    return `${formatNumber(component.surfaceCount ?? 3, 0)} panels, ${formatNumber(component.surfaceSpan ?? 0, 0)} x ${formatNumber(component.surfaceChord ?? 0, 0)} mm`;
+  }
   if (component.type === 'Mass Component') {
     return component.massRole || 'payload';
   }
@@ -3210,6 +3266,16 @@ function ComponentInspector({ component, components = [], updateComponent, metri
       dragArea: Number(Math.max(0, streamerLength * streamerWidth).toFixed(4))
     });
   };
+  const setAirbrakeGeometry = (key, value) => {
+    const surfaceSpan = key === 'surfaceSpan' ? value : numberValue(component.surfaceSpan, 80);
+    const surfaceChord = key === 'surfaceChord' ? value : numberValue(component.surfaceChord, 30);
+    updateComponent(component.id, {
+      [key]: value,
+      ...(key === 'surfaceSpan' || key === 'surfaceChord'
+        ? { surfaceArea: getActiveSurfaceAreaFromGeometry({ surfaceSpan, surfaceChord }) }
+        : {})
+    });
+  };
   const commonFields = (
     <>
       <Field label="Name" type="text" value={component.name} onChange={(value) => set('name', value)} />
@@ -3433,7 +3499,12 @@ function ComponentInspector({ component, components = [], updateComponent, metri
         {component.type === 'Active Airbrake' && (
           <>
             <Field label="Surface count" value={component.surfaceCount} checks={checks('surfaceCount')} onChange={(value) => set('surfaceCount', value)} />
+            <Field label="Panel span" value={component.surfaceSpan ?? 80} unit="mm" checks={checks('surfaceSpan')} onChange={(value) => setAirbrakeGeometry('surfaceSpan', value)} />
+            <Field label="Panel chord" value={component.surfaceChord ?? 30} unit="mm" checks={checks('surfaceChord')} onChange={(value) => setAirbrakeGeometry('surfaceChord', value)} />
+            <Field label="Panel thickness" value={component.surfaceThickness ?? 2} unit="mm" step="0.1" checks={checks('surfaceThickness')} onChange={(value) => setAirbrakeGeometry('surfaceThickness', value)} />
+            <Field label="Hinge offset" value={component.surfaceHingeOffset ?? 0} unit="mm" step="0.5" checks={checks('surfaceHingeOffset')} onChange={(value) => setAirbrakeGeometry('surfaceHingeOffset', value)} />
             <Field label="Surface area" value={component.surfaceArea} unit="m2" step="0.0001" checks={checks('surfaceArea')} onChange={(value) => set('surfaceArea', value)} />
+            <Field label="Surface Cd" value={component.surfaceCd ?? 1.35} step="0.01" checks={checks('surfaceCd')} onChange={(value) => set('surfaceCd', value)} />
             <Field label="Max angle" value={component.surfaceMaxAngle} unit="deg" checks={checks('surfaceMaxAngle')} onChange={(value) => set('surfaceMaxAngle', value)} />
           </>
         )}
@@ -3728,6 +3799,22 @@ function ActiveSetup({
     activePneumaticEnabled: key === 'enabled' ? value : current.activePneumaticEnabled,
     activeSystem: { ...current.activeSystem, [key]: value }
   }));
+  const setActivePatch = (patch) => setConfig((current) => ({
+    ...current,
+    activeSystem: { ...current.activeSystem, ...patch }
+  }));
+  const setActiveGeometry = (key, value) => {
+    const surfaceSpan = key === 'surfaceSpan' ? value : numberValue(active.surfaceSpan, 80);
+    const surfaceChord = key === 'surfaceChord' ? value : numberValue(active.surfaceChord, 30);
+    const patch = {
+      [key]: value,
+      ...(key === 'surfaceSpan' || key === 'surfaceChord'
+        ? { surfaceArea: getActiveSurfaceAreaFromGeometry({ surfaceSpan, surfaceChord }) }
+        : {})
+    };
+    setActivePatch(patch);
+    syncAirbrake(patch);
+  };
   const setRoot = (key, value) => setConfig((current) => ({
     ...current,
     [key]: value
@@ -3765,7 +3852,12 @@ function ActiveSetup({
           ]}
         />
         <Field label="Surface count" value={active.surfaceCount} checks={checks('active.surfaceCount')} onChange={(value) => { setActive('surfaceCount', value); syncAirbrake('surfaceCount', value); }} />
+        <Field label="Panel span" value={active.surfaceSpan ?? 80} unit="mm" checks={checks('active.surfaceSpan')} onChange={(value) => setActiveGeometry('surfaceSpan', value)} />
+        <Field label="Panel chord" value={active.surfaceChord ?? 30} unit="mm" checks={checks('active.surfaceChord')} onChange={(value) => setActiveGeometry('surfaceChord', value)} />
+        <Field label="Panel thickness" value={active.surfaceThickness ?? 2} unit="mm" step="0.1" checks={checks('active.surfaceThickness')} onChange={(value) => setActiveGeometry('surfaceThickness', value)} />
+        <Field label="Hinge offset" value={active.surfaceHingeOffset ?? 0} unit="mm" step="0.5" checks={checks('active.surfaceHingeOffset')} onChange={(value) => setActiveGeometry('surfaceHingeOffset', value)} />
         <Field label="Surface area" value={active.surfaceArea} unit="m2" step="0.0001" checks={checks('active.surfaceArea')} onChange={(value) => { setActive('surfaceArea', value); syncAirbrake('surfaceArea', value); }} />
+        <Field label="Surface Cd" value={active.surfaceCd ?? 1.35} step="0.01" checks={checks('active.surfaceCd')} onChange={(value) => { setActive('surfaceCd', value); syncAirbrake('surfaceCd', value); }} />
         <Field label="Max angle" value={active.surfaceMaxAngle} unit="deg" checks={checks('active.surfaceMaxAngle')} onChange={(value) => { setActive('surfaceMaxAngle', value); syncAirbrake('surfaceMaxAngle', value); }} />
         <Field label="Deploy altitude" value={controller.deployAltitude} unit="m" checks={checks('controller.deployAltitude')} onChange={(value) => setController('deployAltitude', value)} />
         <Field label="Kp" value={controller.kp} step="0.001" onChange={(value) => setController('kp', value)} />
@@ -4475,7 +4567,12 @@ function App() {
       activeSystem: airbrake ? {
         ...current.activeSystem,
         surfaceCount: numberValue(airbrake.surfaceCount, current.activeSystem.surfaceCount),
+        surfaceSpan: numberValue(airbrake.surfaceSpan, current.activeSystem.surfaceSpan),
+        surfaceChord: numberValue(airbrake.surfaceChord, current.activeSystem.surfaceChord),
+        surfaceThickness: numberValue(airbrake.surfaceThickness, current.activeSystem.surfaceThickness),
+        surfaceHingeOffset: numberValue(airbrake.surfaceHingeOffset, current.activeSystem.surfaceHingeOffset),
         surfaceArea: numberValue(airbrake.surfaceArea, current.activeSystem.surfaceArea),
+        surfaceCd: numberValue(airbrake.surfaceCd, current.activeSystem.surfaceCd),
         surfaceMaxAngle: numberValue(airbrake.surfaceMaxAngle, current.activeSystem.surfaceMaxAngle)
       } : current.activeSystem,
       landingSystem: buildLandingSystemFromRecoveryDevices(components, landing ? {
@@ -4506,8 +4603,9 @@ function App() {
   };
 
   const syncAirbrake = (key, value) => {
+    const patch = typeof key === 'object' ? key : { [key]: value };
     setComponents((current) => current.map((component) => (
-      component.type === 'Active Airbrake' ? { ...component, [key]: value } : component
+      component.type === 'Active Airbrake' ? { ...component, ...patch } : component
     )));
   };
 

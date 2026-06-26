@@ -12,7 +12,7 @@
 - Place main/drogue parachute, streamer, and shock-cord recovery components in the rocket tree so recovery area, Cd, deployment event, altitude, harness length, and opening-load limits can be edited as parts.
 - Import an existing OpenRocket `.ork` design when available, preserving common body, nose, fin, motor, mass, and CG data.
 - Import RASP `.eng` and RockSim `.rse` motor thrust-curve files into the local motor catalog.
-- Define an active air system with pressure source, valves, actuator geometry, deployment location, and surface limits.
+- Define an active air system with pressure source, valves, actuator geometry, deployment location, surface panel geometry, and surface limits.
 - Write controller code that receives simulated sensor data and commands the active system.
 - Add deterministic or seeded noise for sensors, atmosphere, actuator response, and pressure behavior.
 - Run a simulation and inspect trajectory, stability, controller, actuator, pressure, active-drag, moment, and landing outputs.
@@ -42,8 +42,9 @@
 - Frontend motor search must use the local backend motor database, not hardcoded placeholder motor data, and support designation, impulse class, manufacturer, diameter, and TARC filters.
 - Motor imports must accept common `.eng` and `.rse` thrust-curve files, compute impulse/burn/average/peak values from the curve, and make the imported motor selectable from the Motors tab.
 - C++ controller code must compile before it is used by an active simulation.
-- Pneumatic outputs must show pressure use, actuator movement, and surface deployment when active control commands it.
+- Pneumatic outputs must show pressure use, actuator movement, active airbrake panel geometry, and surface deployment when active control commands it.
 - Active airbrake location must be editable, validated against rocket length, and reflected in moment outputs.
+- Active airbrake panel span, chord, thickness, hinge offset, Cd, count, and max angle must be editable from the component inspector and active setup; panel span/chord must derive surface area when area is not manually supplied.
 - Landing outputs must include recovery footprint data and a visible touchdown/drift analysis in the results UI.
 - Landing outputs must include recovery sequence and phase analysis plus a CSV export for the recovery summary.
 - Landing outputs must include recovery safety/load analysis tied to configurable opening-load, shock-cord harness, and touchdown limits.

@@ -49,6 +49,10 @@ def base_config(enabled=True, target_apogee=60):
             "returnSpring": 18,
             "linkageRatio": 1,
             "surfaceMaxAngle": 65,
+            "surfaceSpan": 80,
+            "surfaceChord": 30,
+            "surfaceThickness": 2,
+            "surfaceHingeOffset": 6,
             "surfaceArea": 0.0024,
             "surfaceCount": 3,
             "surfaceCd": 1.35,
@@ -630,6 +634,40 @@ class ActiveSimulationTests(unittest.TestCase):
 
         self.assertFalse(result["success"])
         self.assertIn("Active airbrake location must be inside the rocket length.", result["validation_errors"])
+
+    def test_active_airbrake_panel_geometry_drives_surface_area(self):
+        config = base_config()
+        config["activeSystem"]["surfaceArea"] = 0
+        config["activeSystem"]["surfaceSpan"] = 90
+        config["activeSystem"]["surfaceChord"] = 25
+        manager = ActiveSimulationManager()
+
+        result = manager.submit_cfd_simulation(sample_rocket(), config)["results"]
+        active = result["active_system"]
+
+        self.assertAlmostEqual(active["surface_area_per_panel_m2"], 0.00225, places=6)
+        self.assertAlmostEqual(active["max_surface_area_m2"], 0.00675, places=6)
+        self.assertAlmostEqual(active["surface_span_m"], 0.09, places=4)
+        self.assertAlmostEqual(active["surface_chord_m"], 0.025, places=4)
+
+    def test_invalid_active_airbrake_panel_geometry_is_rejected(self):
+        config = base_config()
+        config["activeSystem"].update({
+            "surfaceArea": 0,
+            "surfaceSpan": 0,
+            "surfaceChord": -20,
+            "surfaceThickness": 0,
+            "surfaceHingeOffset": 40,
+        })
+        manager = ActiveSimulationManager()
+
+        result = manager.submit_cfd_simulation(sample_rocket(), config)
+
+        self.assertFalse(result["success"])
+        self.assertIn("Active surface area must be positive.", result["validation_errors"])
+        self.assertIn("Active airbrake panel span must be positive.", result["validation_errors"])
+        self.assertIn("Active airbrake panel chord must be positive.", result["validation_errors"])
+        self.assertIn("Active airbrake panel thickness must be positive.", result["validation_errors"])
 
     def test_force_and_moment_histories_are_exported(self):
         manager = ActiveSimulationManager()

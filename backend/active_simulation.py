@@ -522,8 +522,16 @@ class ActiveSimulationManager:
             min_operating_pressure = self._as_float(active.get("minOperatingPressure"), 180000.0)
             cylinder_bore = self._as_float(active.get("cylinderBore"), 0.012)
             cylinder_stroke = self._as_float(active.get("cylinderStroke"), 0.035)
-            surface_area = self._as_float(active.get("surfaceArea"), 0.0024)
+            has_surface_geometry = any(
+                key in active
+                for key in ("surfaceArea", "surfaceSpan", "panelSpan", "airbrakeSpan", "surfaceChord", "panelChord", "airbrakeChord")
+            )
+            surface_area = self._active_surface_area_m2(active) or (0.0024 if not has_surface_geometry else 0.0)
             surface_count = self._as_float(active.get("surfaceCount"), 3.0)
+            surface_span = self._as_float(active.get("surfaceSpan"), 0.0)
+            surface_chord = self._as_float(active.get("surfaceChord"), 0.0)
+            surface_thickness = self._as_float(active.get("surfaceThickness"), 0.0)
+            hinge_offset = self._as_float(active.get("surfaceHingeOffset"), 0.0)
             valve_flow = self._as_float(active.get("valveFlowRate"), 14.0)
 
             if tank_pressure <= pressure_pa:
@@ -542,6 +550,14 @@ class ActiveSimulationManager:
                 errors.append("Active surface area must be positive.")
             if surface_count < 1:
                 errors.append("Active surface count must be at least 1.")
+            if "surfaceSpan" in active and surface_span <= 0:
+                errors.append("Active airbrake panel span must be positive.")
+            if "surfaceChord" in active and surface_chord <= 0:
+                errors.append("Active airbrake panel chord must be positive.")
+            if "surfaceThickness" in active and surface_thickness <= 0:
+                errors.append("Active airbrake panel thickness must be positive.")
+            if hinge_offset < 0 or (surface_chord > 0 and hinge_offset > surface_chord):
+                errors.append("Active airbrake hinge offset must stay within the panel chord.")
             if valve_flow <= 0:
                 errors.append("Valve flow rate must be positive.")
             active_location = self._distance_m(active.get("locationFromNose"), 0.42)
@@ -1248,6 +1264,13 @@ class ActiveSimulationManager:
                 "max_surface_deployment": max_deployment,
                 "max_surface_angle_deg": max_surface_angle,
                 "max_surface_area_m2": active["surface_area_m2"] * active["surface_count"],
+                "surface_area_per_panel_m2": active["surface_area_m2"],
+                "surface_count": active["surface_count"],
+                "surface_span_m": active["surface_span_m"],
+                "surface_chord_m": active["surface_chord_m"],
+                "surface_thickness_m": active["surface_thickness_m"],
+                "surface_hinge_offset_m": active["surface_hinge_offset_m"],
+                "surface_cd": active["surface_cd"],
                 "location_from_nose_m": active["location_from_nose_m"],
                 "moment_arm_m": active["moment_arm_m"],
                 "max_active_drag_force": max_active_drag_force,
@@ -1979,10 +2002,26 @@ class ActiveSimulationManager:
                 return left["cd_increment"] + (right["cd_increment"] - left["cd_increment"]) * fraction
         return table[-1]["cd_increment"]
 
+    def _active_surface_area_m2(self, active: Dict) -> float:
+        explicit_area = self._as_float(active.get("surfaceArea"), 0.0)
+        if explicit_area > 0:
+            return explicit_area
+        span_m = self._distance_m(
+            self._first_value(active, ["surfaceSpan", "panelSpan", "airbrakeSpan"], 0.0),
+            0.0,
+        )
+        chord_m = self._distance_m(
+            self._first_value(active, ["surfaceChord", "panelChord", "airbrakeChord"], 0.0),
+            0.0,
+        )
+        return max(0.0, span_m * chord_m)
+
     def _build_active_config(self, config: Dict) -> Dict:
         active = config.get("activeSystem") or {}
         enabled = self._as_bool(active.get("enabled"), self._as_bool(config.get("activePneumaticEnabled"), False))
         surface_count = int(self._clamp(self._as_float(active.get("surfaceCount"), 3), 1, 8))
+        surface_span_m = self._distance_m(self._first_value(active, ["surfaceSpan", "panelSpan", "airbrakeSpan"], 80.0), 0.08)
+        surface_chord_m = self._distance_m(self._first_value(active, ["surfaceChord", "panelChord", "airbrakeChord"], 30.0), 0.03)
         return {
             "enabled": enabled,
             "tank_pressure_pa": self._as_float(active.get("tankPressure"), 650000.0),
@@ -1998,8 +2037,12 @@ class ActiveSimulationManager:
             "return_spring_n": self._as_float(active.get("returnSpring"), 18.0),
             "linkage_ratio": self._as_float(active.get("linkageRatio"), 1.0),
             "surface_max_angle_deg": self._as_float(active.get("surfaceMaxAngle"), 65.0),
-            "surface_area_m2": self._as_float(active.get("surfaceArea"), 0.0024),
+            "surface_area_m2": self._active_surface_area_m2(active) or surface_span_m * surface_chord_m or 0.0024,
             "surface_count": surface_count,
+            "surface_span_m": surface_span_m,
+            "surface_chord_m": surface_chord_m,
+            "surface_thickness_m": self._distance_m(self._first_value(active, ["surfaceThickness", "panelThickness"], 2.0), 0.002),
+            "surface_hinge_offset_m": self._distance_m(self._first_value(active, ["surfaceHingeOffset", "hingeOffset"], 6.0), 0.006),
             "surface_cd": self._as_float(active.get("surfaceCd"), 1.35),
             "location_from_nose_m": self._distance_m(active.get("locationFromNose"), 0.42),
             "max_dynamic_pressure_pa": self._as_float(active.get("maxDynamicPressure"), 85000.0),

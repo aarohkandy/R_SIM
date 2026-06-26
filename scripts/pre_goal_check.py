@@ -153,9 +153,13 @@ def main() -> int:
     require("_material_fields" in openrocket_source and "materialDensity" in openrocket_source, "OpenRocket import does not preserve material density metadata.")
     require("material density must be positive" in active_sim_source, "Backend does not validate density-driven material mass inputs.")
     require("Airbrake station" in frontend_source, "Frontend is missing active airbrake station controls.")
+    require("Panel span" in frontend_source and "surfaceSpan" in frontend_source, "Frontend is missing active airbrake panel-span controls.")
+    require("Panel chord" in frontend_source and "surfaceChord" in frontend_source, "Frontend is missing active airbrake panel-chord controls.")
+    require("Hinge offset" in frontend_source and "surfaceHingeOffset" in frontend_source, "Frontend is missing active airbrake hinge geometry.")
     require("active.locationFromNose" in frontend_source, "Frontend design checks do not target active airbrake station.")
     require("moment_arm_m" in active_sim_source, "Backend active system does not report active airbrake moment arm.")
     require("active_drag_force" in active_sim_source, "Backend force history is missing active drag force.")
+    require("surface_span_m" in active_sim_source and "surface_chord_m" in active_sim_source, "Backend active system does not report airbrake panel geometry.")
     require("MotorCurvePanel" in frontend_source, "Frontend is missing selected motor thrust curve inspection.")
     require("Simplify to edit" in frontend_source, "Frontend motor curve editor is missing sampled editing controls.")
     require("motorPatchFromCurve" in frontend_source, "Frontend motor curve edits do not sync motor impulse fields.")
@@ -344,6 +348,10 @@ ControlOutput control_function(SensorData sensor_data) {
                 "returnSpring": 18,
                 "linkageRatio": 1,
                 "surfaceMaxAngle": 65,
+                "surfaceSpan": 80,
+                "surfaceChord": 30,
+                "surfaceThickness": 2,
+                "surfaceHingeOffset": 6,
                 "surfaceArea": 0.0024,
                 "surfaceCount": 3,
                 "surfaceCd": 1.35,
@@ -404,6 +412,7 @@ ControlOutput control_function(SensorData sensor_data) {
     active_system = results.get("active_system") or {}
     require(active_system.get("enabled") is True, f"Active system did not run: {active_system}")
     require(active_system.get("max_surface_deployment", 0) > 0, f"Active surface never deployed: {active_system}")
+    require(active_system.get("surface_span_m") == 0.08 and active_system.get("surface_chord_m") == 0.03, f"Airbrake panel geometry missing from results: {active_system}")
     require(active_system.get("tank_pressure_final", 0) < active_system.get("tank_pressure_start", 0), f"Tank pressure did not decrease: {active_system}")
     require(len(active_system.get("history", [])) > 5, "Active-system history is missing or too short.")
     require(len(results.get("trajectory", [])) > 5, "Trajectory history is missing or too short.")
