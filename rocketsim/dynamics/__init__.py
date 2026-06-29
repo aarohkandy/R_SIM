@@ -1,1 +1,41 @@
-"""6-DOF dynamics package placeholder for Phase 6."""
+"""Fixed-step 6-DOF rigid-body dynamics."""
+
+from rocketsim.dynamics.rigid_body import (
+    DynamicsForces,
+    DynamicsPlant,
+    ForceMoment,
+    RigidBodyState,
+    StateDerivative,
+    analytic_ballistic_position,
+    compute_derivative,
+    inertial_angular_momentum,
+    integrate_fixed_step,
+    mechanical_energy_j,
+    normalize_quaternion,
+    quat_conjugate,
+    quat_multiply,
+    rk4_step,
+    rotate_body_to_inertial,
+    rotate_inertial_to_body,
+    trajectory_hash,
+)
+
+__all__ = [
+    "DynamicsForces",
+    "DynamicsPlant",
+    "ForceMoment",
+    "RigidBodyState",
+    "StateDerivative",
+    "analytic_ballistic_position",
+    "compute_derivative",
+    "inertial_angular_momentum",
+    "integrate_fixed_step",
+    "mechanical_energy_j",
+    "normalize_quaternion",
+    "quat_conjugate",
+    "quat_multiply",
+    "rotate_body_to_inertial",
+    "rotate_inertial_to_body",
+    "rk4_step",
+    "trajectory_hash",
+]

@@ -72,3 +72,21 @@
   regulator, and nozzle bench data before treating thrust/temperature outputs as
   engineering evidence.
 - Next: Phase 6 fixed-step 6-DOF rigid-body dynamics.
+
+## 2026-06-29 — Phase 6 6-DOF dynamics
+
+- Implemented fixed-step RK4 rigid-body dynamics over inertial position/velocity,
+  body-to-inertial quaternion attitude, and body angular rates.
+- Added gravity, live wind-relative aero forces/moments, solid-motor thrust, cold-gas
+  bang-bang nozzle forces/torques with zero-order-held valve inputs, time-varying
+  mass/CG/inertia coupling, mechanical-energy reporting, and deterministic trajectory
+  hashing.
+- Added strict `config/sim.yaml` validation for dynamics settings and documented the
+  RK4/ZOH integration scheme in `docs/modules/dynamics.md`.
+- Added unit, property-based, regression/golden, conservation, determinism, and
+  integration tests for Phase 6.
+- Verification passed: `make lint`, `make typecheck`, and `make test` (`84 passed`).
+- Dynamics geometry/settings remain placeholders; replace them with measured thrust-line,
+  damping, and application-point data before treating trajectory outputs as engineering
+  evidence.
+- Next: Phase 7 sensor models with noise on from the start.

@@ -9,3 +9,8 @@ data:
   integrator_dt_s: 0.001
   renode_sync_quantum_s: 0.001
   end_condition: touchdown
+  dynamics:
+    minimum_aero_speed_m_s: 0.05
+    angular_damping_n_m_s: 0.0
+    motor_thrust_axis_unit: [0.0, 0.0, 1.0]
+    motor_thrust_position_m: [0.0, 0.0, -0.10]
