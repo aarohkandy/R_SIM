@@ -1,0 +1,23 @@
+{
+  "mesh_convergence": [
+    {
+      "element_subdivisions": 1,
+      "peak_displacement_m": 3.579839329434428e-05,
+      "peak_stress_pa": 8237189.054455375
+    },
+    {
+      "element_subdivisions": 2,
+      "peak_displacement_m": 3.579839329434428e-05,
+      "peak_stress_pa": 8237189.054455375
+    },
+    {
+      "element_subdivisions": 4,
+      "peak_displacement_m": 3.579839329434428e-05,
+      "peak_stress_pa": 8237189.054455377
+    }
+  ],
+  "peak_displacement_case_id": "landing_impact",
+  "peak_displacement_m": 3.579839329434428e-05,
+  "peak_stress_case_id": "landing_impact",
+  "peak_stress_pa": 8237189.054455377
+}

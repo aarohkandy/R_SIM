@@ -37,6 +37,9 @@ rocketsim = "rocketsim.cli:main"
 [tool.setuptools.packages.find]
 include = ["rocketsim*"]
 
+[tool.setuptools.package-data]
+"rocketsim.gui" = ["static/*"]
+
 [tool.pytest.ini_options]
 addopts = "--strict-markers --strict-config"
 testpaths = ["tests"]

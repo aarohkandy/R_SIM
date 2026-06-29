@@ -186,3 +186,47 @@
   structure, material, solenoid, and electronics thermal data before treating temperature
   margins as engineering evidence.
 - Next: Phase 11 event-triggered structural load-case extraction and FEA driver.
+
+## 2026-06-29 — Localhost GUI workbench
+
+- Added `rocketsim.gui` plus `make gui` / `rocketsim gui`, serving a localhost workbench
+  at `http://127.0.0.1:8765` by default.
+- The GUI opens directly into an OpenRocket-style inspection workspace: run tree,
+  pipeline tree, metrics, animation, manifest preview, plot tabs, thermal and structural
+  summaries, emulator status, right-side inspector, and telemetry preview table.
+- The GUI reads the same run bundles and manifests as the CLI; it does not maintain a
+  separate truth source. Artifact serving is path-confined to the selected run directory.
+- Browser verification passed on localhost: overview, thermal, structural, and emulator
+  tabs rendered without horizontal overflow; structural rendered three FEA plots after the
+  refreshed e2e bundle.
+- Added GUI API and CLI dispatch tests.
+- Next GUI work: keep extending the emulator tab during Phase 12 and add run/config
+  editing controls only after the underlying config mutation path is tested.
+
+## 2026-06-29 — Phase 11 structural load cases + FEA fallback
+
+- Implemented strict structural config validation, event-triggered load-case extraction,
+  and structural artifact writing for landing impact, thrust transient, max-Q, and leg
+  deployment cases.
+- Added an internal deterministic 3D linear-truss FEA fallback behind the structural
+  interface. Because CalculiX/Gmsh/FEniCS are absent locally, the fallback is used and the
+  solver status is reported explicitly.
+- End-to-end bundles now include `structural/load_cases.json`, `load_cases.csv`,
+  `fea_results.csv`, `fea_results.parquet`, `mesh_convergence.csv`,
+  `structural_summary.json`, `structural/calculix/landing_impact.inp`, and three FEA
+  plots.
+- Gate evidence: `make e2e` reached touchdown and wrote
+  `outputs/phase8_sil_seed20260629`; the placeholder structural run reported
+  `peak_stress_pa=7564674.305064796`,
+  `peak_displacement_m=3.287030829274456e-05`, and peak case `landing_impact`
+  (all reported as DATA).
+- Added unit, property-based, regression/golden, artifact, strict-validation, and e2e
+  integration tests for Phase 11.
+- Verification passed: `make e2e`, `make lint`, `make typecheck`,
+  `tests/test_structural.py` and `tests/test_gui.py` (`10 passed`), the e2e artifact
+  test, and `make test` (`124 passed`).
+- Structural hardware/solver values remain placeholders; install an external FEA solver
+  and replace geometry/material/load assumptions before treating stresses or displacements
+  as engineering evidence.
+- Next: Phase 12 Renode HIL emulator bring-up, with the GUI emulator tab becoming the
+  status surface.

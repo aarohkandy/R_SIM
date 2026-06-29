@@ -29,3 +29,14 @@
 - The landing summary includes the nested thermal summary plus top-level
   `peak_thermal_temperature_deg_c` and `minimum_thermal_margin_deg_c` fields. These are
   reported values, not pass/fail verdicts.
+
+## Phase 11 Implementation Notes
+
+- End-to-end bundles now include a `structural` artifact group in `run_manifest.json`
+  with load cases, FEA result tables, mesh-convergence data, a CalculiX input deck, and
+  structural plots.
+- `landing_summary.json` includes nested structural results plus top-level
+  `peak_structural_stress_pa` and `peak_structural_displacement_m` fields. These are
+  reported values, not pass/fail verdicts.
+- JSON writers sanitize non-finite numeric values to `null` so browser clients can read
+  summaries and manifests with standards-compliant JSON parsing.

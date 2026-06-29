@@ -1,13 +1,93 @@
 schema_version: 1
 name: structural
-description: Placeholder event-triggered FEA configuration.
+description: Placeholder event-triggered structural FEA configuration.
 placeholder: true
 units:
+  area: m^2
+  displacement: m
   force: N
+  length: m
+  stress: Pa
 data:
   solver_preference: calculix
+  external_solver:
+    calculix_executable: ccx
+    gmsh_executable: gmsh
+    allow_internal_fallback: true
   load_cases:
-    - landing_impact
-    - thrust_transient
-    - max_q
-  enabled_after_phase: 11
+    enabled:
+      - landing_impact
+      - thrust_transient
+      - max_q
+      - leg_deploy
+    application_node: payload_node
+    gravity_m_s2: 9.80665
+    landing_stop_distance_m: 0.08
+    thrust_axis_unit: [0.0, 0.0, 1.0]
+    max_q_reference_area_m2: 0.00312
+    max_q_lateral_coefficient: 1.2
+    leg_deploy_time_s: 1.8
+    leg_deploy_shock_force_n: 18.0
+  mesh_convergence:
+    element_subdivisions: [1, 2, 4]
+  materials:
+    carbon_fiber_tube:
+      young_modulus_pa: 70000000000.0
+      allowable_stress_pa: 450000000.0
+      density_kg_m3: 1600.0
+    printed_petg:
+      young_modulus_pa: 2100000000.0
+      allowable_stress_pa: 35000000.0
+      density_kg_m3: 1270.0
+  nodes:
+    - id: payload_node
+      position_m: [0.0, 0.0, 0.18]
+      fixed: false
+    - id: lower_hub
+      position_m: [0.0, 0.0, -0.02]
+      fixed: false
+    - id: foot_0
+      position_m: [0.12, 0.0, -0.18]
+      fixed: true
+    - id: foot_1
+      position_m: [-0.06, 0.103923, -0.18]
+      fixed: true
+    - id: foot_2
+      position_m: [-0.06, -0.103923, -0.18]
+      fixed: true
+  members:
+    - id: spine
+      from_node: payload_node
+      to_node: lower_hub
+      material: carbon_fiber_tube
+      area_m2: 0.000031416
+    - id: leg_0
+      from_node: lower_hub
+      to_node: foot_0
+      material: carbon_fiber_tube
+      area_m2: 0.000031416
+    - id: leg_1
+      from_node: lower_hub
+      to_node: foot_1
+      material: carbon_fiber_tube
+      area_m2: 0.000031416
+    - id: leg_2
+      from_node: lower_hub
+      to_node: foot_2
+      material: carbon_fiber_tube
+      area_m2: 0.000031416
+    - id: brace_0
+      from_node: payload_node
+      to_node: foot_0
+      material: carbon_fiber_tube
+      area_m2: 0.000031416
+    - id: brace_1
+      from_node: payload_node
+      to_node: foot_1
+      material: carbon_fiber_tube
+      area_m2: 0.000031416
+    - id: brace_2
+      from_node: payload_node
+      to_node: foot_2
+      material: carbon_fiber_tube
+      area_m2: 0.000031416

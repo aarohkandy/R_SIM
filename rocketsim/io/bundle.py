@@ -89,11 +89,11 @@ def write_full_data_bundle(
     artifact_payload = artifacts.manifest_payload(output_dir)
     if extra_artifacts:
         artifact_payload.update(extra_artifacts)
-    deferred_artifacts = {
-        "fea_stress_summary_plots": "Phase 11",
-    }
+    deferred_artifacts: dict[str, str] = {}
     if not extra_artifacts or "thermal" not in extra_artifacts:
         deferred_artifacts["thermal_node_temperature_plots"] = "Phase 10"
+    if not extra_artifacts or "structural" not in extra_artifacts:
+        deferred_artifacts["fea_stress_summary_plots"] = "Phase 11"
     if animation_mp4 is None:
         deferred_artifacts["animation_mp4"] = "ffmpeg not installed"
     if extra_deferred_artifacts:
@@ -156,7 +156,10 @@ def write_animation_artifacts(
 def write_json(path: Path, payload: dict[str, Any]) -> None:
     """Write deterministic JSON."""
 
-    path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    path.write_text(
+        json.dumps(_json_safe(payload), indent=2, sort_keys=True, allow_nan=False) + "\n",
+        encoding="utf-8",
+    )
 
 
 def _plot_altitude_velocity_accel(frame: pd.DataFrame) -> Any:
@@ -429,3 +432,13 @@ def _series(frame: pd.DataFrame, name: str) -> np.ndarray:
     if name not in frame:
         return np.zeros(len(frame), dtype=float)
     return np.asarray(frame[name].fillna(0.0).to_numpy(dtype=float), dtype=float)
+
+
+def _json_safe(value: Any) -> Any:
+    if isinstance(value, float) and not np.isfinite(value):
+        return None
+    if isinstance(value, dict):
+        return {key: _json_safe(item) for key, item in value.items()}
+    if isinstance(value, list):
+        return [_json_safe(item) for item in value]
+    return value

@@ -15,13 +15,13 @@ invariants visible when working in a specific subsystem.
 | 6 | `dynamics.md`, `vehicle.md`, `aero.md`, `propulsion.md` |
 | 7 | `sensors.md`, `control.md` |
 | 8 | `control.md`, `actuation.md`, `sim.md`, `dynamics.md` |
-| 9 | `io.md`, `sim.md` |
+| 9 | `io.md`, `sim.md`, `gui.md` |
 | 10 | `thermal.md`, `io.md` |
-| 11 | `structural.md`, `thermal.md`, `io.md` |
-| 12 | `control.md`, `sim.md`, `renode.md`, `sensors.md`, `actuation.md` |
+| 11 | `structural.md`, `thermal.md`, `io.md`, `gui.md` |
+| 12 | `control.md`, `sim.md`, `renode.md`, `sensors.md`, `actuation.md`, `gui.md` |
 | 13 | `sim.md`, `dynamics.md`, `aero.md`, `renode.md` |
-| 14 | `sim.md`, `io.md` |
-| 15 | `sim.md`, `io.md` |
-| 16 | `control.md`, `renode.md`, `sim.md`, `io.md` |
-| 17 | `sim.md`, `control.md`, `io.md` |
+| 14 | `sim.md`, `io.md`, `gui.md` |
+| 15 | `sim.md`, `io.md`, `gui.md` |
+| 16 | `control.md`, `renode.md`, `sim.md`, `io.md`, `gui.md` |
+| 17 | `sim.md`, `control.md`, `io.md`, `gui.md` |
 | high-fidelity aero expansion | `aero.md`, `cfd.md`, `io.md` |

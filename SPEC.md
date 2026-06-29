@@ -246,6 +246,7 @@ rocketsim/
   structural/        # load-case extraction + FEA driver
   sim/               # orchestrator, time-sync, run loop
   io/                # logging, data bundle, plotting, 3D animation
+  gui/               # localhost OpenRocket-style inspection workbench
   tests/             # unit + integration + conservation suite
 inputs/              # user data: .eng, BOM, OpenRocket exports, material props
 outputs/             # per-run artifact bundles
@@ -416,6 +417,16 @@ Every run writes a timestamped bundle under `outputs/<run_id>/`:
   CO2 remaining at touchdown, peak loads, peak temps. **DATA, not a verdict.**
 - **`run_manifest.json`** — config used, seed, code version, input file hashes (for
   reproducibility).
+
+### 5.12 gui/ — localhost workbench
+- Serve a local browser GUI from the repo with `make gui` / `rocketsim gui`.
+- The GUI must open directly into a usable engineering workbench, not a landing page:
+  run tree, phase/status tree, metrics, plots, animation, telemetry preview, thermal
+  summary, structural/FEA summary, and emulator/HIL status.
+- Layout should stay dense and inspection-oriented, closer to OpenRocket than to a
+  marketing dashboard. It must be usable on localhost without network access at runtime.
+- GUI data comes from the same output bundles and manifests as the CLI analysis; it must
+  not maintain a separate truth source.
 
 ---
 

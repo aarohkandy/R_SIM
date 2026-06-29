@@ -19,3 +19,8 @@
 - Phase 10 runs the thermal analysis immediately after the logged SIL flight and before
   the final bundle manifest is written, so the manifest and landing summary include the
   thermal timeseries, plots, peak node temperature, and minimum material-limit margin.
+- Phase 11 runs structural load-case extraction and event-triggered FEA after thermal
+  post-processing and before the final manifest is written. The flight loop remains
+  uncoupled from FEA.
+- The localhost GUI command reads the finished bundle from disk; it does not alter the
+  simulation or become a second source of truth.

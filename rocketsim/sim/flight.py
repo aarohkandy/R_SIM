@@ -24,6 +24,12 @@ from rocketsim.io import write_full_data_bundle
 from rocketsim.propulsion import ColdGasSystem, load_configured_motor
 from rocketsim.sensors import SensorPacket, SensorSuite, SensorTruth, sensor_packet_hash
 from rocketsim.sim.schema import SimConfig, load_sim_config
+from rocketsim.structural import (
+    StructuralArtifacts,
+    load_structural_config,
+    run_configured_structural_analysis,
+    write_structural_artifacts,
+)
 from rocketsim.thermal import (
     ThermalArtifacts,
     run_configured_thermal_analysis,
@@ -47,6 +53,7 @@ class SILRunResult:
     animation_html: Path
     animation_mp4: Path | None
     thermal_artifacts: ThermalArtifacts
+    structural_artifacts: StructuralArtifacts
     telemetry_hash: str
     sensor_hash: str
     state_hash: str
@@ -184,6 +191,22 @@ def run_native_sil_e2e(
     summary["peak_thermal_temperature_deg_c"] = thermal_result.summary["peak_temperature_deg_c"]
     summary["minimum_thermal_margin_deg_c"] = thermal_result.summary["minimum_margin_deg_c"]
     thermal_artifacts = write_thermal_artifacts(thermal_result, output_dir)
+    structural_config_path = root / "config" / "structural.yaml"
+    structural_config = load_structural_config(structural_config_path)
+    structural_result = run_configured_structural_analysis(
+        structural_config_path,
+        telemetry_rows,
+        root,
+        thermal_frame=thermal_result.frame,
+    )
+    summary["structural"] = structural_result.summary
+    summary["peak_structural_stress_pa"] = structural_result.summary["peak_stress_pa"]
+    summary["peak_structural_displacement_m"] = structural_result.summary["peak_displacement_m"]
+    structural_artifacts = write_structural_artifacts(
+        structural_result,
+        structural_config,
+        output_dir,
+    )
     sensor_hash = sensor_packet_hash(sensor_packets)
     state_hash = trajectory_hash(states)
     manifest = {
@@ -200,7 +223,10 @@ def run_native_sil_e2e(
         telemetry_rows=telemetry_rows,
         landing_summary=summary,
         manifest=manifest,
-        extra_artifacts={"thermal": thermal_artifacts.manifest_payload(output_dir)},
+        extra_artifacts={
+            "thermal": thermal_artifacts.manifest_payload(output_dir),
+            "structural": structural_artifacts.manifest_payload(output_dir),
+        },
     )
     return SILRunResult(
         output_dir=output_dir,
@@ -214,6 +240,7 @@ def run_native_sil_e2e(
         animation_html=artifacts.animation_html,
         animation_mp4=artifacts.animation_mp4,
         thermal_artifacts=thermal_artifacts,
+        structural_artifacts=structural_artifacts,
         telemetry_hash=telemetry_hash,
         sensor_hash=sensor_hash,
         state_hash=state_hash,
