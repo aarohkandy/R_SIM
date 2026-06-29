@@ -21,7 +21,7 @@ from rocketsim.dynamics import (
     trajectory_hash,
 )
 from rocketsim.environment import EnvironmentModel
-from rocketsim.io import write_full_data_bundle
+from rocketsim.io import telemetry_dataframe, write_full_data_bundle, write_json
 from rocketsim.propulsion import ColdGasSystem, load_configured_motor
 from rocketsim.sensors import SensorPacket, SensorSuite, SensorTruth, sensor_packet_hash
 from rocketsim.sim.schema import SimConfig, load_sim_config
@@ -61,6 +61,36 @@ class SILRunResult:
     summary: dict[str, Any]
 
 
+@dataclass(frozen=True)
+class SILMetricsResult:
+    """Native-SIL metric artifacts for non-retained Monte Carlo runs."""
+
+    output_dir: Path
+    landing_summary_json: Path
+    landing_summary_csv: Path
+    run_manifest_json: Path
+    telemetry_hash: str
+    sensor_hash: str
+    state_hash: str
+    summary: dict[str, Any]
+
+
+@dataclass(frozen=True)
+class _SILCoreResult:
+    root: Path
+    sim_config: SimConfig
+    run_id: str
+    output_dir: Path
+    telemetry_rows: list[dict[str, Any]]
+    sensor_packets: list[SensorPacket]
+    states: list[RigidBodyState]
+    telemetry_hash: str
+    sensor_hash: str
+    state_hash: str
+    summary: dict[str, Any]
+    input_hashes: dict[str, str]
+
+
 def run_native_sil_e2e(
     repo_root: Path | str = Path("."),
     output_root: Path | str | None = None,
@@ -68,6 +98,121 @@ def run_native_sil_e2e(
     run_id_override: str | None = None,
 ) -> SILRunResult:
     """Run the Phase-8 native-SIL rail-to-touchdown simulation."""
+
+    core = _simulate_native_sil(
+        repo_root=repo_root,
+        output_root=output_root,
+        sim_config_override=sim_config_override,
+        run_id_override=run_id_override,
+    )
+    summary = dict(core.summary)
+    thermal_result = run_configured_thermal_analysis(
+        core.root / "config" / "thermal.yaml",
+        core.telemetry_rows,
+        core.root,
+    )
+    summary["thermal"] = thermal_result.summary
+    summary["peak_thermal_temperature_deg_c"] = thermal_result.summary["peak_temperature_deg_c"]
+    summary["minimum_thermal_margin_deg_c"] = thermal_result.summary["minimum_margin_deg_c"]
+    thermal_artifacts = write_thermal_artifacts(thermal_result, core.output_dir)
+    structural_config_path = core.root / "config" / "structural.yaml"
+    structural_config = load_structural_config(structural_config_path)
+    structural_result = run_configured_structural_analysis(
+        structural_config_path,
+        core.telemetry_rows,
+        core.root,
+        thermal_frame=thermal_result.frame,
+    )
+    summary["structural"] = structural_result.summary
+    summary["peak_structural_stress_pa"] = structural_result.summary["peak_stress_pa"]
+    summary["peak_structural_displacement_m"] = structural_result.summary["peak_displacement_m"]
+    structural_artifacts = write_structural_artifacts(
+        structural_result,
+        structural_config,
+        core.output_dir,
+    )
+    artifacts = write_full_data_bundle(
+        output_dir=core.output_dir,
+        telemetry_rows=core.telemetry_rows,
+        landing_summary=summary,
+        manifest=_base_manifest(core, artifact_mode="full_bundle"),
+        extra_artifacts={
+            "thermal": thermal_artifacts.manifest_payload(core.output_dir),
+            "structural": structural_artifacts.manifest_payload(core.output_dir),
+        },
+    )
+    return SILRunResult(
+        output_dir=core.output_dir,
+        telemetry_csv=artifacts.telemetry_csv,
+        telemetry_parquet=artifacts.telemetry_parquet,
+        landing_summary_json=artifacts.landing_summary_json,
+        landing_summary_csv=artifacts.landing_summary_csv,
+        run_manifest_json=artifacts.run_manifest_json,
+        plot_paths=artifacts.plot_paths,
+        animation_gif=artifacts.animation_gif,
+        animation_html=artifacts.animation_html,
+        animation_mp4=artifacts.animation_mp4,
+        thermal_artifacts=thermal_artifacts,
+        structural_artifacts=structural_artifacts,
+        telemetry_hash=core.telemetry_hash,
+        sensor_hash=core.sensor_hash,
+        state_hash=core.state_hash,
+        summary=summary,
+    )
+
+
+def run_native_sil_metrics(
+    repo_root: Path | str = Path("."),
+    output_root: Path | str | None = None,
+    sim_config_override: SimConfig | None = None,
+    run_id_override: str | None = None,
+) -> SILMetricsResult:
+    """Run native SIL and write only summary artifacts for large Monte Carlo batches."""
+
+    core = _simulate_native_sil(
+        repo_root=repo_root,
+        output_root=output_root,
+        sim_config_override=sim_config_override,
+        run_id_override=run_id_override,
+    )
+    landing_summary_json = core.output_dir / "landing_summary.json"
+    landing_summary_csv = core.output_dir / "landing_summary.csv"
+    run_manifest_json = core.output_dir / "run_manifest.json"
+    write_json(landing_summary_json, core.summary)
+    telemetry_dataframe([core.summary]).to_csv(landing_summary_csv, index=False)
+    manifest = _base_manifest(core, artifact_mode="metrics_only")
+    manifest["artifacts"] = {
+        "landing_summary_json": landing_summary_json.relative_to(core.output_dir).as_posix(),
+        "landing_summary_csv": landing_summary_csv.relative_to(core.output_dir).as_posix(),
+    }
+    manifest["deferred_artifacts"] = {
+        "telemetry_csv": "metrics_only mode for non-retained Monte Carlo run",
+        "telemetry_parquet": "metrics_only mode for non-retained Monte Carlo run",
+        "plots": "metrics_only mode for non-retained Monte Carlo run",
+        "animation": "metrics_only mode for non-retained Monte Carlo run",
+        "thermal": "metrics_only mode for non-retained Monte Carlo run",
+        "structural": "metrics_only mode for non-retained Monte Carlo run",
+    }
+    write_json(run_manifest_json, manifest)
+    return SILMetricsResult(
+        output_dir=core.output_dir,
+        landing_summary_json=landing_summary_json,
+        landing_summary_csv=landing_summary_csv,
+        run_manifest_json=run_manifest_json,
+        telemetry_hash=core.telemetry_hash,
+        sensor_hash=core.sensor_hash,
+        state_hash=core.state_hash,
+        summary=core.summary,
+    )
+
+
+def _simulate_native_sil(
+    repo_root: Path | str,
+    output_root: Path | str | None,
+    sim_config_override: SimConfig | None,
+    run_id_override: str | None,
+) -> _SILCoreResult:
+    """Advance the shared native-SIL plant and return in-memory flight data."""
 
     root = Path(repo_root).resolve()
     sim_config = sim_config_override or load_sim_config(root / "config" / "sim.yaml")
@@ -191,70 +336,35 @@ def run_native_sil_e2e(
         "controller_backend": "sil",
         "telemetry_rows": len(telemetry_rows),
     }
-    thermal_result = run_configured_thermal_analysis(
-        root / "config" / "thermal.yaml",
-        telemetry_rows,
-        root,
-    )
-    summary["thermal"] = thermal_result.summary
-    summary["peak_thermal_temperature_deg_c"] = thermal_result.summary["peak_temperature_deg_c"]
-    summary["minimum_thermal_margin_deg_c"] = thermal_result.summary["minimum_margin_deg_c"]
-    thermal_artifacts = write_thermal_artifacts(thermal_result, output_dir)
-    structural_config_path = root / "config" / "structural.yaml"
-    structural_config = load_structural_config(structural_config_path)
-    structural_result = run_configured_structural_analysis(
-        structural_config_path,
-        telemetry_rows,
-        root,
-        thermal_frame=thermal_result.frame,
-    )
-    summary["structural"] = structural_result.summary
-    summary["peak_structural_stress_pa"] = structural_result.summary["peak_stress_pa"]
-    summary["peak_structural_displacement_m"] = structural_result.summary["peak_displacement_m"]
-    structural_artifacts = write_structural_artifacts(
-        structural_result,
-        structural_config,
-        output_dir,
-    )
     sensor_hash = sensor_packet_hash(sensor_packets)
     state_hash = trajectory_hash(states)
-    manifest = {
-        "run_id": run_id,
-        "seed": sim_config.data.master_seed,
-        "backend": "sil",
-        "telemetry_hash": telemetry_hash,
-        "sensor_hash": sensor_hash,
-        "state_hash": state_hash,
-        "input_hashes": _input_hashes(root),
-    }
-    artifacts = write_full_data_bundle(
+    return _SILCoreResult(
+        root=root,
+        sim_config=sim_config,
+        run_id=run_id,
         output_dir=output_dir,
         telemetry_rows=telemetry_rows,
-        landing_summary=summary,
-        manifest=manifest,
-        extra_artifacts={
-            "thermal": thermal_artifacts.manifest_payload(output_dir),
-            "structural": structural_artifacts.manifest_payload(output_dir),
-        },
-    )
-    return SILRunResult(
-        output_dir=output_dir,
-        telemetry_csv=artifacts.telemetry_csv,
-        telemetry_parquet=artifacts.telemetry_parquet,
-        landing_summary_json=artifacts.landing_summary_json,
-        landing_summary_csv=artifacts.landing_summary_csv,
-        run_manifest_json=artifacts.run_manifest_json,
-        plot_paths=artifacts.plot_paths,
-        animation_gif=artifacts.animation_gif,
-        animation_html=artifacts.animation_html,
-        animation_mp4=artifacts.animation_mp4,
-        thermal_artifacts=thermal_artifacts,
-        structural_artifacts=structural_artifacts,
+        sensor_packets=sensor_packets,
+        states=states,
         telemetry_hash=telemetry_hash,
         sensor_hash=sensor_hash,
         state_hash=state_hash,
         summary=summary,
+        input_hashes=_input_hashes(root),
     )
+
+
+def _base_manifest(core: _SILCoreResult, *, artifact_mode: str) -> dict[str, Any]:
+    return {
+        "run_id": core.run_id,
+        "seed": core.sim_config.data.master_seed,
+        "backend": "sil",
+        "artifact_mode": artifact_mode,
+        "telemetry_hash": core.telemetry_hash,
+        "sensor_hash": core.sensor_hash,
+        "state_hash": core.state_hash,
+        "input_hashes": core.input_hashes,
+    }
 
 
 def _initial_state(sim_config: SimConfig) -> RigidBodyState:

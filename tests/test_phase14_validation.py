@@ -159,6 +159,37 @@ def test_phase14_runner_writes_samples_histograms_and_manifest(tmp_path: Path) -
     assert manifest["scenario_generation"]["seed_strategy"] == "numpy.random.SeedSequence.spawn"
 
 
+def test_phase14_default_dispatch_retains_full_bundles_only_at_stride(tmp_path: Path) -> None:
+    import pandas as pd  # type: ignore[import-untyped]
+
+    repo = write_phase14_repo(tmp_path / "repo")
+    calls = {"full": 0, "metrics": 0}
+
+    def full_runner(**kwargs: Any) -> SILRunResult:
+        calls["full"] += 1
+        return fake_phase14_runner(**kwargs)
+
+    def metrics_runner(**kwargs: Any) -> SILRunResult:
+        calls["metrics"] += 1
+        return fake_phase14_runner(**kwargs)
+
+    result = run_phase14_monte_carlo(
+        repo,
+        full_runner=full_runner,
+        metrics_runner=metrics_runner,
+        run_count_override=3,
+    )
+    samples = pd.read_csv(result.samples_csv)
+
+    assert calls == {"full": 1, "metrics": 2}
+    assert samples["artifact_mode"].tolist() == [
+        "full_bundle",
+        "metrics_only",
+        "metrics_only",
+    ]
+    assert samples["retained_bundle"].tolist() == [True, False, False]
+
+
 def test_cli_montecarlo_dispatch_can_be_monkeypatched(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -186,7 +217,7 @@ def test_cli_montecarlo_dispatch_can_be_monkeypatched(
 
 
 def _sample_frame() -> Any:
-    import pandas as pd  # type: ignore[import-untyped]
+    import pandas as pd
 
     return pd.DataFrame(
         [

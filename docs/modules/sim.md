@@ -41,3 +41,7 @@
 - Phase-14 outputs are distributions and plots for landing speed, touchdown tilt, lateral
   error, and CO2 remaining. They are data for engineering judgment, not pass/fail
   verdicts.
+- Phase 14 has two native-SIL artifact modes that share the exact same `_simulate_native_sil`
+  physics loop. Retained scenarios use the normal full Phase-9/10/11 bundle; non-retained
+  scenarios use metrics-only summary artifacts so a 1000-run study does not waste time
+  rendering throwaway animations, plots, thermal outputs, and structural outputs.

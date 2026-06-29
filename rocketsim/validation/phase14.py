@@ -16,12 +16,18 @@ import pandas as pd  # type: ignore[import-untyped]
 import yaml
 from matplotlib import pyplot as plt
 
-from rocketsim.sim.flight import SILRunResult, run_native_sil_e2e
+from rocketsim.sim.flight import (
+    SILMetricsResult,
+    SILRunResult,
+    run_native_sil_e2e,
+    run_native_sil_metrics,
+)
 from rocketsim.sim.schema import Phase14Settings, SimConfig, load_sim_config
 
 plt.switch_backend("Agg")
 
-SilRunner = Callable[..., SILRunResult]
+SilResult = SILRunResult | SILMetricsResult
+SilRunner = Callable[..., SilResult]
 Vector3 = tuple[float, float, float]
 NozzleCant = tuple[float, float]
 
@@ -87,7 +93,9 @@ class Phase14Result:
 def run_phase14_monte_carlo(
     repo_root: Path | str = Path("."),
     *,
-    runner: SilRunner = run_native_sil_e2e,
+    runner: SilRunner | None = None,
+    full_runner: SilRunner = run_native_sil_e2e,
+    metrics_runner: SilRunner = run_native_sil_metrics,
     run_count_override: int | None = None,
 ) -> Phase14Result:
     """Run the configured native-SIL Monte Carlo study."""
@@ -117,7 +125,8 @@ def run_phase14_monte_carlo(
             scenario_root = Path(tmp) / "scenario"
             apply_scenario_to_repo(root, scenario, scenario_root)
             scenario_output = runs_dir if retain_bundle else Path(tmp) / "discarded_outputs"
-            result = runner(
+            selected_runner = runner or (full_runner if retain_bundle else metrics_runner)
+            result = selected_runner(
                 repo_root=scenario_root,
                 output_root=scenario_output,
                 run_id_override=run_id,
@@ -411,7 +420,7 @@ def _retain_bundle(phase: Phase14Settings, run_index: int) -> bool:
 
 
 def _result_metric_row(
-    result: SILRunResult,
+    result: SilResult,
     *,
     run_id: str,
     retained_bundle: bool,
@@ -420,6 +429,7 @@ def _result_metric_row(
     return {
         "run_id": run_id,
         "retained_bundle": retained_bundle,
+        "artifact_mode": "full_bundle" if retained_bundle else "metrics_only",
         "touchdown": bool(summary["touchdown"]),
         "touchdown_time_s": float(summary["touchdown_time_s"]),
         "landing_speed_m_s": float(summary["touchdown_speed_m_s"]),

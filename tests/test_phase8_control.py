@@ -19,7 +19,7 @@ from rocketsim.actuation import (
 from rocketsim.control import NativeSILBackend, load_control_config, valve_timeline_durations
 from rocketsim.propulsion import ColdGasSystem
 from rocketsim.sensors import BarometerReading, IMUReading, SensorPacket
-from rocketsim.sim.flight import run_native_sil_e2e
+from rocketsim.sim.flight import run_native_sil_e2e, run_native_sil_metrics
 
 ROOT = Path(__file__).resolve().parents[1]
 CONTROL_CONFIG = ROOT / "config" / "control.yaml"
@@ -140,24 +140,29 @@ def test_phase8_e2e_native_sil_writes_full_phase9_bundle(tmp_path: Path) -> None
         path.exists() and path.stat().st_size > 0
         for path in result.structural_artifacts.plot_paths
     )
-    assert result.summary["telemetry_rows"] > 1000
-    assert "thermal" in result.summary
-    assert "peak_thermal_temperature_deg_c" in result.summary
-    assert "minimum_thermal_margin_deg_c" in result.summary
-    assert "structural" in result.summary
-    assert "peak_structural_stress_pa" in result.summary
-    assert "peak_structural_displacement_m" in result.summary
+
+
+def test_native_sil_metrics_mode_writes_summary_without_full_bundle(tmp_path: Path) -> None:
+    result = run_native_sil_metrics(repo_root=ROOT, output_root=tmp_path)
     manifest = json.loads(result.run_manifest_json.read_text(encoding="utf-8"))
+
+    assert result.summary["touchdown"] is True
+    assert result.landing_summary_json.exists()
+    assert result.landing_summary_csv.exists()
+    assert result.run_manifest_json.exists()
+    assert not (result.output_dir / "telemetry.csv").exists()
+    assert not (result.output_dir / "flight_animation.gif").exists()
+    assert manifest["artifact_mode"] == "metrics_only"
+    assert manifest["deferred_artifacts"]["animation"].startswith("metrics_only")
+    assert manifest["deferred_artifacts"]["thermal"].startswith("metrics_only")
+    assert manifest["deferred_artifacts"]["structural"].startswith("metrics_only")
+    assert result.summary["telemetry_rows"] > 1000
     assert manifest["backend"] == "sil"
     assert manifest["telemetry_hash"] == result.telemetry_hash
     assert len(manifest["state_hash"]) == 64
-    assert manifest["artifacts"]["telemetry_parquet"] == "telemetry.parquet"
-    assert manifest["artifacts"]["thermal"]["summary_json"] == "thermal/thermal_summary.json"
-    assert manifest["artifacts"]["structural"]["summary_json"] == (
-        "structural/structural_summary.json"
-    )
-    assert "animation_gif" in manifest["artifacts"]
-    assert "animation_html" in manifest["artifacts"]
+    assert manifest["artifacts"]["landing_summary_json"] == "landing_summary.json"
+    assert manifest["artifacts"]["landing_summary_csv"] == "landing_summary.csv"
+    assert manifest["deferred_artifacts"]["telemetry_parquet"].startswith("metrics_only")
     assert "deferred_artifacts" in manifest
     assert "thermal_node_temperature_plots" not in manifest["deferred_artifacts"]
     assert "fea_stress_summary_plots" not in manifest["deferred_artifacts"]

@@ -343,3 +343,25 @@
 - Next: run the full un-overridden `make montecarlo` large-N study to the configured
   target and stability criteria, then commit a gate-complete progress entry only if it
   actually stabilizes.
+
+## 2026-06-29 — Phase 14 Monte Carlo artifact scaling
+
+- Split the native-SIL runner into a shared `_simulate_native_sil` physics core plus two
+  artifact writers: the existing full Phase-9/10/11 bundle path and a new metrics-only
+  summary path for non-retained Monte Carlo scenarios.
+- Updated Phase 14 so retained scenarios still write complete bundles, while non-retained
+  scenarios write only `landing_summary.json`, `landing_summary.csv`, and a manifest that
+  explicitly marks telemetry, plots, animation, thermal, and structural artifacts as
+  deferred by metrics-only mode.
+- Smoke evidence: `ROCKETSIM_MC_RUNS=4 make montecarlo` ran four native-SIL flights with
+  one retained full bundle and three metrics-only scenarios. The sample table reports
+  `artifact_mode` as `full_bundle, metrics_only, metrics_only, metrics_only`; the summary
+  still correctly reports `gate_complete: false` and `stability.status:
+  insufficient_batches`.
+- The Phase-14 distribution values for the 4-run smoke were unchanged from the prior smoke
+  because the physics path is shared; only artifact writing changed.
+- Verification passed: focused Phase-8/Phase-14 tests, `make lint`, `make typecheck`, and
+  `make test` (`146 passed`).
+- Next: run a larger pilot batch and then the full un-overridden 1000-run Monte Carlo
+  study when ready; do not claim the Phase-14 gate until target count and percentile
+  stability criteria both hold.
