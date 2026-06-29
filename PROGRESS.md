@@ -253,3 +253,36 @@
   (`126 passed`).
 - Next: resume Phase 12 Renode HIL emulator bring-up, with GUI emulator status becoming
   backed by real bring-up reports.
+
+## 2026-06-29 — Phase 12 Renode HIL bring-up scaffold
+
+- Added strict `config/control.yaml:data.renode` settings for Backend B: Renode executable,
+  Python bridge module, ESP32 and Teensy firmware ELFs, `.repl` platform files,
+  dual-machine `.resc` script, sensor-injection channels, solenoid GPIO lines,
+  Teensy↔ESP32 UART link, sync timeout, and loop-overrun margin.
+- Implemented `rocketsim.control.backend_renode`: the swappable `ControllerBackend`
+  implementation for Backend B, a HIL preflight/status report, plant sensor-packet
+  serialization for Renode injection, and GPIO/PWM actuator-line conversion back to
+  bang-bang valve commands. The backend refuses to step when blockers are present rather
+  than faking a firmware flight.
+- Added `make hil` / `rocketsim hil`, which writes
+  `outputs/phase12_renode_hil_status/renode_hil_status.json` and `.md`.
+- Added Renode scaffolding under `renode/`: a dual-MCU `.resc` script plus placeholder
+  ESP32 and Teensy/i.MX RT1062 `.repl` files. These platform files are intentionally
+  marked unverified in config until real board/peripheral bring-up is complete.
+- Extended localhost GUI emulator status to read the HIL status report and show Backend-B
+  readiness, blockers, components, time-sync values, and next steps.
+- Gate evidence: `make hil` generated a blocked status with six exact blockers:
+  `renode_executable_missing`, `python_bridge_module_missing`,
+  `esp32_firmware_elf_missing`, `esp32_platform_repl_unverified`,
+  `teensy_firmware_elf_missing`, and `teensy_platform_repl_unverified`.
+- This satisfies the Phase-12 allowed blocker path; no real firmware flight is claimed.
+  Required remaining work is to install Renode/pyrenode3, provide real ESP32 and Teensy
+  ELFs, replace/verify the board `.repl` models, and then run a real lockstep co-sim.
+- Added unit/integration tests for preflight blockers, synthetic ready status, status
+  artifact writing, backend-seam refusal, sensor/actuator exchange, CLI dispatch, and GUI
+  HIL status API.
+- Verification passed: `make hil`, `make e2e`, `make lint`, `make typecheck`, and
+  `make test` (`132 passed`).
+- Next: commit/push, then proceed to Phase 13 convergence and cross-validation while
+  keeping the Backend-B blocker report visible.

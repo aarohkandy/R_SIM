@@ -6,12 +6,14 @@ import argparse
 from collections.abc import Sequence
 from pathlib import Path
 
+from rocketsim.control import run_renode_hil_status
 from rocketsim.gui import serve_gui
 from rocketsim.sim.flight import run_native_sil_e2e
 
 PHASE_COMMANDS = {
     "e2e": "Phase 8",
     "gui": "Local GUI",
+    "hil": "Phase 12",
     "converge": "Phase 13",
     "montecarlo": "Phase 14",
     "sensitivity": "Phase 15",
@@ -33,14 +35,19 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
     if args.command == "e2e":
-        result = run_native_sil_e2e(
+        e2e_result = run_native_sil_e2e(
             repo_root=Path(args.repo_root),
             output_root=Path(args.output_root) if args.output_root is not None else None,
         )
-        print(result.output_dir)
+        print(e2e_result.output_dir)
         return 0
     if args.command == "gui":
         serve_gui(repo_root=Path(args.repo_root), host=args.host, port=args.port)
+        return 0
+    if args.command == "hil":
+        hil_result = run_renode_hil_status(repo_root=Path(args.repo_root))
+        print(hil_result.status_json)
+        print(f"status={hil_result.report.status} blockers={len(hil_result.report.blockers)}")
         return 0
     phase = PHASE_COMMANDS[args.command]
     parser.exit(

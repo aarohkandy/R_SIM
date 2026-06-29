@@ -1,0 +1,11 @@
+// Placeholder ESP32 platform description for Phase-12 bring-up tracking.
+//
+// This is intentionally not marked verified in config/control.yaml. Replace it with a
+// Renode-supported ESP32/Xtensa platform that exposes the firmware's UART/SPI/I2C,
+// timer, GPIO, telemetry, and backup-storage peripherals before real HIL execution.
+
+using "platforms/cpus/esp32.repl"
+
+// Planned virtual telemetry link endpoint:
+uart0: UART.NS16550 @ sysbus 0x60000000
+    frequency: 80000000

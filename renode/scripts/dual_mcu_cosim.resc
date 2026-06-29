@@ -1,0 +1,28 @@
+# R-SIM Phase-12 dual-MCU Renode co-simulation scaffold.
+#
+# This script is a bring-up artifact, not proof of a runnable board model. The platform
+# descriptions referenced below are placeholders until verified ESP32 and Teensy/i.MX
+# RT1062 peripherals are available. `make hil` reports that status explicitly.
+
+$esp32_elf?=@firmware/esp32_flight.elf
+$teensy_elf?=@firmware/teensy_flight.elf
+
+mach create "teensy"
+machine LoadPlatformDescription @renode/platforms/teensy_imxrt1062_placeholder.repl
+sysbus LoadELF $teensy_elf
+
+mach create "esp32"
+machine LoadPlatformDescription @renode/platforms/esp32_placeholder.repl
+sysbus LoadELF $esp32_elf
+
+# Planned co-sim boundary:
+# - Plant -> Teensy sensor injection through the External Control API channels declared
+#   in config/control.yaml:data.renode.sensor_injection.
+# - Teensy GPIO/PWM -> plant valve actuation through the solenoid lines declared in
+#   config/control.yaml:data.renode.actuation.
+# - Teensy <-> ESP32 inter-MCU telemetry link through the UART endpoints declared in
+#   config/control.yaml:data.renode.inter_mcu_link.
+# - Renode virtual time and the fixed-step plant advance in equal sync quanta from
+#   config/sim.yaml:data.renode_sync_quantum_s.
+
+emulation SetSeed 20260629

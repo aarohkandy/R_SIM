@@ -14,6 +14,7 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import parse_qs, unquote, urlparse
 
+from rocketsim.control import read_latest_hil_status
 from rocketsim.gui.workbench import (
     list_workbench_files,
     read_workbench_file,
@@ -202,6 +203,12 @@ def _handle_get(handler: BaseHTTPRequestHandler, repo_root: Path) -> None:
     if path == "/api/rocket-summary":
         try:
             _send_json(handler, {"summary": rocket_summary(repo_root)})
+        except (FileNotFoundError, ValueError, TypeError) as exc:
+            _send_error(handler, HTTPStatus.BAD_REQUEST, str(exc))
+        return
+    if path == "/api/hil-status":
+        try:
+            _send_json(handler, {"hil": read_latest_hil_status(repo_root)})
         except (FileNotFoundError, ValueError, TypeError) as exc:
             _send_error(handler, HTTPStatus.BAD_REQUEST, str(exc))
         return

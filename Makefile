@@ -1,6 +1,6 @@
 PYTHON ?= .venv/bin/python
 
-.PHONY: test lint typecheck e2e gui converge montecarlo sensitivity soak
+.PHONY: test lint typecheck e2e gui hil converge montecarlo sensitivity soak
 
 test:
 	$(PYTHON) -m pytest -q --cov=rocketsim --cov-report=term-missing
@@ -16,6 +16,9 @@ e2e:
 
 gui:
 	$(PYTHON) -m rocketsim.cli gui
+
+hil:
+	$(PYTHON) -m rocketsim.cli hil
 
 converge:
 	$(PYTHON) -m rocketsim.cli converge

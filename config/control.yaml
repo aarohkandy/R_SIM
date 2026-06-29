@@ -24,3 +24,39 @@ data:
     max_collective_duty: 1.0
     max_torque_duty: 0.6
     pwm_frequency_hz: 25.0
+  renode:
+    renode_executable: renode
+    python_bridge_module: pyrenode3
+    script_path: renode/scripts/dual_mcu_cosim.resc
+    status_output_dir: outputs/phase12_renode_hil_status
+    sync_timeout_s: 10.0
+    loop_overrun_margin_s: 0.0001
+    machines:
+      - name: esp32
+        role: telemetry_streaming_and_crash_backup
+        elf_path: firmware/esp32_flight.elf
+        platform_repl_path: renode/platforms/esp32_placeholder.repl
+        platform_verified: false
+      - name: teensy
+        role: control_and_full_rate_logging
+        elf_path: firmware/teensy_flight.elf
+        platform_repl_path: renode/platforms/teensy_imxrt1062_placeholder.repl
+        platform_verified: false
+    sensor_injection:
+      mode: external_control
+      imu_channel: teensy.virtual_imu
+      barometer_channel: teensy.virtual_barometer
+      pressure_transducer_channel: teensy.virtual_pressure_transducer
+      tof_channel: teensy.virtual_tof
+    actuation:
+      mode: gpio
+      source_machine: teensy
+      solenoid_lines:
+        - gpioPort1.0
+        - gpioPort1.1
+        - gpioPort1.2
+    inter_mcu_link:
+      kind: uart
+      teensy_endpoint: lpuart1
+      esp32_endpoint: uart0
+      baud_rate: 115200

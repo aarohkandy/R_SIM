@@ -596,6 +596,42 @@ th {
   color: var(--orange);
 }
 
+.status-list {
+  display: grid;
+  gap: 6px;
+}
+
+.status-row {
+  display: grid;
+  gap: 3px;
+  border: 1px solid var(--line);
+  background: var(--panel-soft);
+  padding: 7px;
+}
+
+.status-row.good {
+  border-color: #9bc7aa;
+}
+
+.status-row.bad {
+  border-color: #e2bd82;
+}
+
+.status-row span {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.plain-list {
+  margin: 0;
+  padding-left: 18px;
+  color: var(--muted);
+}
+
+.plain-list li {
+  margin: 5px 0;
+}
+
 .empty-state {
   border: 1px dashed var(--line-strong);
   background: #fbfcfe;

@@ -6,6 +6,7 @@ const state = {
   detail: null,
   configDetail: null,
   rocketSummary: null,
+  hilStatus: null,
   activeView: "design",
   dirty: false,
 };
@@ -46,14 +47,16 @@ const els = {
 
 async function loadWorkbench() {
   setStatus("Loading workbench...");
-  const [runsPayload, configsPayload, summaryPayload] = await Promise.all([
+  const [runsPayload, configsPayload, summaryPayload, hilPayload] = await Promise.all([
     fetchJson("/api/runs"),
     fetchJson("/api/configs"),
     fetchJson("/api/rocket-summary"),
+    fetchJson("/api/hil-status"),
   ]);
   state.runs = runsPayload.runs || [];
   state.configs = configsPayload.configs || [];
   state.rocketSummary = summaryPayload.summary || null;
+  state.hilStatus = hilPayload.hil || null;
   renderRunList();
   renderConfigList();
   renderRocketSummary();
@@ -145,12 +148,14 @@ async function refreshRuns() {
 }
 
 async function refreshConfigsAndSummary() {
-  const [configsPayload, summaryPayload] = await Promise.all([
+  const [configsPayload, summaryPayload, hilPayload] = await Promise.all([
     fetchJson("/api/configs"),
     fetchJson("/api/rocket-summary"),
+    fetchJson("/api/hil-status"),
   ]);
   state.configs = configsPayload.configs || [];
   state.rocketSummary = summaryPayload.summary || null;
+  state.hilStatus = hilPayload.hil || null;
   renderConfigList();
   renderRocketSummary();
 }
@@ -361,7 +366,11 @@ function renderStructural() {
 function renderEmulators() {
   const manifest = state.detail?.manifest || {};
   const backend = manifest.backend || "sil";
-  els.renodePhase.className = backend === "renode" ? "done" : "";
+  const hil = state.hilStatus || {};
+  const blockers = hil.blockers || [];
+  const components = hil.components || [];
+  const ready = hil.ready === true;
+  els.renodePhase.className = ready || backend === "renode" ? "done" : "";
   els.emulatorGrid.innerHTML = `
     <div class="emulator-panel">
       <div class="pane-title">Backend A</div>
@@ -374,14 +383,46 @@ function renderEmulators() {
     </div>
     <div class="emulator-panel">
       <div class="pane-title">Backend B</div>
-      <div class="large-state waiting">Renode HIL queued</div>
+      <div class="large-state ${ready ? "good" : "waiting"}">${ready ? "Renode ready" : "Renode blocked"}</div>
       ${keyValueTable([
-        ["ESP32 firmware", "not loaded"],
-        ["Teensy firmware", "not loaded"],
-        ["Board bring-up", "Phase 12"],
+        ["Status", hil.status || "not checked"],
+        ["Blockers", blockers.length],
+        ["Sync quantum", formatSeconds(hil.time_sync?.renode_sync_quantum_s)],
+        ["Loop period", formatSeconds(hil.time_sync?.controller_loop_period_s)],
       ])}
+      <div class="pane-title stacked">Blockers</div>
+      ${blockerList(blockers)}
+      <div class="pane-title stacked">Components</div>
+      ${componentList(components)}
+      <div class="pane-title stacked">Next Steps</div>
+      ${simpleList(hil.next_steps || [])}
     </div>
   `;
+}
+
+function blockerList(blockers) {
+  if (!blockers.length) return `<div class="empty-state small">No HIL blockers reported.</div>`;
+  return `<div class="status-list">${blockers.map((blocker) => `
+    <div class="status-row bad">
+      <strong>${escapeHtml(blocker.code)}</strong>
+      <span>${escapeHtml(blocker.message)}</span>
+    </div>
+  `).join("")}</div>`;
+}
+
+function componentList(components) {
+  if (!components.length) return `<div class="empty-state small">No component status available.</div>`;
+  return `<div class="status-list">${components.map((component) => `
+    <div class="status-row ${component.verified ? "good" : "bad"}">
+      <strong>${escapeHtml(component.id)}</strong>
+      <span>${escapeHtml(`${component.present ? "present" : "missing"} / ${component.verified ? "verified" : "unverified"}`)}</span>
+    </div>
+  `).join("")}</div>`;
+}
+
+function simpleList(items) {
+  if (!items.length) return `<div class="empty-state small">No next steps reported.</div>`;
+  return `<ul class="plain-list">${items.map((item) => `<li>${escapeHtml(item)}</li>`).join("")}</ul>`;
 }
 
 function renderTelemetry() {

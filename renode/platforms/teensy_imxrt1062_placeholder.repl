@@ -1,0 +1,19 @@
+// Placeholder Teensy 4.x / NXP i.MX RT1062 platform description.
+//
+// This is intentionally not marked verified in config/control.yaml. Replace it with a
+// board model exposing the hardware timer ISR source, GPIO/PWM solenoid outputs,
+// IMU/barometer bus, microSD logging interface, and Teensy<->ESP32 link.
+
+cpu: CPU.CortexM @ sysbus
+    cpuType: "cortex-m7"
+    nvic: nvic
+
+nvic: IRQControllers.NVIC @ sysbus 0xE000E000
+    priorityMask: 0xF0
+    systickFrequency: 600000000
+
+gpioPort1: GPIOPort.MIMXRT_GPIO @ sysbus 0x401B8000
+    numberOfConnections: 32
+
+lpuart1: UART.MIMXRT_LPUART @ sysbus 0x40184000
+    frequency: 24000000

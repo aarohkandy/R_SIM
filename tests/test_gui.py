@@ -158,6 +158,7 @@ def test_gui_http_config_api_validates_and_saves(tmp_path: Path) -> None:
     base = f"http://{str(server.server_address[0])}:{server.server_address[1]}"
     try:
         configs = json.loads(urllib.request.urlopen(f"{base}/api/configs", timeout=5).read())
+        hil = json.loads(urllib.request.urlopen(f"{base}/api/hil-status", timeout=5).read())
         bom = json.loads(urllib.request.urlopen(f"{base}/api/configs/bom", timeout=5).read())
         bad_request = urllib.request.Request(
             f"{base}/api/configs/bom/validate",
@@ -180,6 +181,8 @@ def test_gui_http_config_api_validates_and_saves(tmp_path: Path) -> None:
         thread.join(timeout=5)
 
     assert any(item["name"] == "bom" for item in configs["configs"])
+    assert hil["hil"]["status"] == "blocked"
+    assert hil["hil"]["blockers"]
     assert bom["valid"] is True
     assert invalid["valid"] is False
     assert saved["valid"] is True

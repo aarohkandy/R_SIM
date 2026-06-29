@@ -17,6 +17,9 @@ brew install openfoam
 
 # Renode HIL co-simulation for Phase 12
 brew install --cask renode
+
+# Python-side Renode programmatic control bridge, if available for the chosen install
+python -m pip install pyrenode3
 ```
 
 If these tools are unavailable or cannot be installed during the long goal run, keep the

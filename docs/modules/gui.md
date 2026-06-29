@@ -26,6 +26,8 @@
   motor parser before touching disk.
 - Definition routes include `/api/configs`, `/api/configs/<name>`,
   `/api/configs/<name>/validate`, `/api/rocket-summary`, and `/api/run/e2e`.
+- HIL status is exposed through `/api/hil-status`, which reads the latest Phase-12
+  Renode report or builds a live preflight report when no status artifact exists.
 - The Design tab opens on the BOM/parts editor because that is where rocket masses,
   part positions, propellant depletion, CO2 mass, and deployable leg kinematics are
   currently defined. A definition-file picker remains visible when the sidebar collapses.
