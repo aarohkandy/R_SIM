@@ -7,4 +7,5 @@ units:
 data:
   thrust_curve_path: inputs/motor_D21_placeholder.eng
   ignition_time_s: 0.0
+  declared_total_impulse_ns: 20.1
   notes: Replace with measured or vendor .eng/.rse data before trusting motor results.

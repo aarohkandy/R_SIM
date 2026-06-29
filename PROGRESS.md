@@ -49,3 +49,13 @@
 
 - Added durable module notes for future CFD validation/refinement and reiterated that
   Renode HIL/emulator work remains a core deliverable, not optional polish.
+
+## 2026-06-29 — Phase 4 solid motor
+
+- Implemented RASP `.eng` and minimal RockSim `.rse` parsing, thrust interpolation,
+  trapezoidal total impulse integration, propellant mass-flow, cumulative propellant
+  depletion, body-axis thrust vector output, and a vehicle-compatible depletion profile.
+- Corrected the placeholder motor header so total mass exceeds propellant mass.
+- Added unit, property-based, regression/golden, RSE parsing, and vehicle-coupling tests.
+- Verification passed: `make lint`, `make typecheck`, and `make test` (`65 passed`).
+- Next: Phase 5 CO2 cold-gas propulsion with CoolProp real-gas/two-phase behavior.

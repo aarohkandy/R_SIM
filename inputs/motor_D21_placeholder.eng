@@ -1,6 +1,6 @@
-; Placeholder motor curve for Phase-0 scaffolding only.
+; Placeholder motor curve for Phase-4 scaffolding only.
 ; Replace with real AeroTech D21T-class .eng/.rse data before motor modeling.
-D21_PLACEHOLDER 18 70 0-0-0 0.050 0.025 Placeholder
+D21_PLACEHOLDER 18 70 0-0-0 0.025 0.050 Placeholder
 0.000 0.0
 0.050 12.0
 0.300 24.0

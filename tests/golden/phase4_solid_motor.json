@@ -1,0 +1,25 @@
+{
+  "designation": "D21_PLACEHOLDER",
+  "total_impulse_ns": 20.1,
+  "average_thrust_n": 16.750000000000004,
+  "samples": {
+    "0.025": {
+      "thrust_n": 6.0,
+      "cumulative_impulse_ns": 0.07500000000000001,
+      "propellant_remaining_kg": 0.02490671641791045,
+      "mass_flow_kg_s": 0.00746268656716418
+    },
+    "0.3": {
+      "thrust_n": 24.0,
+      "cumulative_impulse_ns": 4.8,
+      "propellant_remaining_kg": 0.01902985074626866,
+      "mass_flow_kg_s": 0.02985074626865672
+    },
+    "1.2": {
+      "thrust_n": 0.0,
+      "cumulative_impulse_ns": 20.1,
+      "propellant_remaining_kg": 0.0,
+      "mass_flow_kg_s": 0.0
+    }
+  }
+}
