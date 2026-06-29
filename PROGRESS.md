@@ -59,3 +59,16 @@
 - Added unit, property-based, regression/golden, RSE parsing, and vehicle-coupling tests.
 - Verification passed: `make lint`, `make typecheck`, and `make test` (`65 passed`).
 - Next: Phase 5 CO2 cold-gas propulsion with CoolProp real-gas/two-phase behavior.
+
+## 2026-06-29 — Phase 5 cold-gas propulsion
+
+- Implemented CoolProp-backed CO2 cold-gas propulsion: saturated liquid/vapor tank state,
+  regulator output and sag, choked/subcritical fixed-nozzle flow, evaporative cooling,
+  per-nozzle forces/torques, and step-level mass/energy balance reporting.
+- Added unit, property-based, regression/golden, and vehicle-coupling tests for Phase 5.
+- Verification passed: `make test` (`76 passed`). Final lint/typecheck/full-suite
+  verification will be rerun before the Phase 5 commit.
+- Cold-gas hardware values remain placeholders; replace them with measured cartridge,
+  regulator, and nozzle bench data before treating thrust/temperature outputs as
+  engineering evidence.
+- Next: Phase 6 fixed-step 6-DOF rigid-body dynamics.

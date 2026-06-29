@@ -1,5 +1,24 @@
 """Solid motor and cold-gas propulsion."""
 
+from rocketsim.propulsion.coldgas import (
+    CO2TankState,
+    ColdGasConfig,
+    ColdGasData,
+    ColdGasForces,
+    ColdGasStepResult,
+    ColdGasSystem,
+    NozzleBankConfig,
+    NozzleConfig,
+    NozzleFlow,
+    RegulatorConfig,
+    RegulatorState,
+    TankConfig,
+    co2_gamma_and_specific_gas_constant,
+    co2_phase_state,
+    co2_saturation_pressure_pa,
+    load_coldgas_config,
+    nozzle_flow_rate,
+)
 from rocketsim.propulsion.solid import (
     MotorConfig,
     MotorConfigData,
@@ -15,15 +34,32 @@ from rocketsim.propulsion.solid import (
 )
 
 __all__ = [
+    "CO2TankState",
+    "ColdGasConfig",
+    "ColdGasData",
+    "ColdGasForces",
+    "ColdGasStepResult",
+    "ColdGasSystem",
     "MotorConfig",
     "MotorConfigData",
     "MotorMetadata",
+    "NozzleBankConfig",
+    "NozzleConfig",
+    "NozzleFlow",
+    "RegulatorConfig",
+    "RegulatorState",
     "SolidMotor",
+    "TankConfig",
     "ThrustCurvePoint",
+    "co2_gamma_and_specific_gas_constant",
+    "co2_phase_state",
+    "co2_saturation_pressure_pa",
     "impulse_class_bounds",
+    "load_coldgas_config",
     "load_configured_motor",
     "load_motor_config",
     "load_solid_motor",
+    "nozzle_flow_rate",
     "parse_eng",
     "parse_rse",
 ]

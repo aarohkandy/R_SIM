@@ -1,0 +1,39 @@
+{
+  "saturation_pressure_293_15_pa": 5729052.581475148,
+  "gamma_at_regulator": 1.345540417606293,
+  "specific_gas_constant_j_kg_k": 188.92405782348476,
+  "initial": {
+    "time_s": 0.0,
+    "total_mass_kg": 0.088,
+    "liquid_mass_kg": 0.0837952347419294,
+    "vapor_mass_kg": 0.004204765258070599,
+    "temperature_k": 293.15,
+    "pressure_pa": 5729052.581475148,
+    "co2_internal_energy_j": 22410.76616612944,
+    "shell_energy_j": 14657.499999999998
+  },
+  "one_nozzle": {
+    "mass_flow_kg_s": 0.0010091114639527526,
+    "thrust_n": 0.42611951277301574,
+    "force_body_n": [
+      0.0,
+      0.0,
+      0.42611951277301574
+    ],
+    "torque_body_n": [
+      0.0,
+      -0.012783585383190472,
+      0.0
+    ],
+    "output_pressure_pa": 827371.0
+  },
+  "three_nozzle_step_0_1s": {
+    "mass_out_kg": 0.0003027334391858258,
+    "temperature_k": 292.84094958355274,
+    "pressure_pa": 5687619.241548671,
+    "liquid_mass_kg": 0.08334548291807567,
+    "vapor_mass_kg": 0.004351783642738505,
+    "energy_balance_residual_j": 0.0,
+    "mass_balance_residual_kg": 0.0
+  }
+}

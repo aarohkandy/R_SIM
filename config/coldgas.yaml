@@ -7,8 +7,32 @@ units:
   pressure: Pa
   area: m2
 data:
-  cartridge_co2_mass_kg: 0.088
-  regulator_setpoint_pa: 827371.0
-  second_stage_enabled: false
-  nozzle_count: 3
-  nozzle_throat_area_m2: 0.0000005
+  tank:
+    initial_co2_mass_kg: 0.088
+    volume_m3: 0.00013
+    initial_temperature_k: 293.15
+    shell_mass_kg: 0.10
+    shell_specific_heat_j_kg_k: 500.0
+    ambient_temperature_k: 293.15
+    heat_transfer_w_per_k: 1.5
+    evaporation_time_constant_s: 0.35
+  regulator:
+    setpoint_pa: 827371.0
+    second_stage_enabled: false
+    second_stage_setpoint_pa: 689476.0
+  nozzles:
+    discharge_coefficient: 0.85
+    ambient_pressure_pa: 101325.0
+    items:
+      - id: nozzle_1
+        throat_area_m2: 0.0000005
+        position_m: [0.03, 0.0, -0.10]
+        axis_unit: [0.0, 0.0, 1.0]
+      - id: nozzle_2
+        throat_area_m2: 0.0000005
+        position_m: [-0.015, 0.0259807621, -0.10]
+        axis_unit: [0.0, 0.0, 1.0]
+      - id: nozzle_3
+        throat_area_m2: 0.0000005
+        position_m: [-0.015, -0.0259807621, -0.10]
+        axis_unit: [0.0, 0.0, 1.0]
