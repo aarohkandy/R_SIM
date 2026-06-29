@@ -45,3 +45,8 @@
   physics loop. Retained scenarios use the normal full Phase-9/10/11 bundle; non-retained
   scenarios use metrics-only summary artifacts so a 1000-run study does not waste time
   rendering throwaway animations, plots, thermal outputs, and structural outputs.
+- Phase 14 writes checkpoint artifacts every
+  `config/sim.yaml:data.phase14.checkpoint_interval_runs` completed runs and can resume
+  existing `montecarlo_samples.csv` rows when their resume signature matches the master
+  seed, nozzle count, retained-bundle stride, and dispersion settings. Set
+  `ROCKETSIM_MC_RESUME=0` for a clean rerun without editing the production config.

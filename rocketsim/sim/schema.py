@@ -115,6 +115,8 @@ class Phase14Settings(BaseModel):
     batch_size: int = Field(gt=0)
     stability_window_batches: int = Field(gt=0)
     percentile_stability_tolerance: float = Field(gt=0.0)
+    resume_enabled: bool
+    checkpoint_interval_runs: int = Field(gt=0)
     retained_bundle_stride: int = Field(ge=0)
     histogram_bins: int = Field(gt=0)
     percentiles: tuple[float, ...] = Field(min_length=1)

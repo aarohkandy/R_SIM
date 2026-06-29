@@ -365,3 +365,30 @@
 - Next: run a larger pilot batch and then the full un-overridden 1000-run Monte Carlo
   study when ready; do not claim the Phase-14 gate until target count and percentile
   stability criteria both hold.
+
+## 2026-06-29 — Phase 14 Monte Carlo resume + checkpoints
+
+- Added strict Phase-14 resume/checkpoint settings: `resume_enabled: true` and
+  `checkpoint_interval_runs: 25`.
+- Added a deterministic resume signature based on master seed, nozzle count,
+  retained-bundle stride, and dispersion settings. Existing `montecarlo_samples.csv`
+  rows are reused only when the signature matches, so stale rows from older settings do
+  not silently contaminate a study.
+- The Phase-14 runner now writes complete sample/parquet/summary/stability/manifest and
+  histogram artifacts at checkpoints as well as at the final requested count. This makes a
+  long 1000-run study recoverable after interruption.
+- Added `ROCKETSIM_MC_RESUME=0` as a clean-rerun override for smoke tests or deliberate
+  restarts without changing the production YAML.
+- Smoke evidence: `ROCKETSIM_MC_RUNS=2 ROCKETSIM_MC_RESUME=0 make montecarlo` produced two
+  fresh runs, then `ROCKETSIM_MC_RUNS=3 make montecarlo` resumed those rows and added only
+  the missing third run. The summary recorded `runs_completed: 3`, `requested_runs: 3`,
+  `resumed_rows: 2`, `resume_enabled: true`, and a 64-character `phase14_signature`.
+- The resumed smoke sample table reported artifact modes
+  `full_bundle, metrics_only, metrics_only`; the Phase-14 gate remained correctly
+  incomplete with `stability.status: insufficient_batches`.
+- Added tests for config fields, resume-signature propagation, resume skipping of
+  completed indices, and Parquet-safe sample column normalization.
+- Verification passed: focused Phase-14 tests, `make lint`, `make typecheck`, and
+  `make test` (`147 passed`).
+- Next: use the checkpointed runner for a larger pilot batch, then allow the un-overridden
+  1000-run study to accumulate to stability.

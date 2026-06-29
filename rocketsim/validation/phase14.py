@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import shutil
@@ -115,9 +116,26 @@ def run_phase14_monte_carlo(
     runs_dir = output_dir / "retained_runs"
     output_dir.mkdir(parents=True, exist_ok=True)
     runs_dir.mkdir(exist_ok=True)
-
-    rows: list[dict[str, Any]] = []
+    samples_csv = output_dir / "montecarlo_samples.csv"
+    samples_parquet = output_dir / "montecarlo_samples.parquet"
+    summary_json = output_dir / "montecarlo_summary.json"
+    stability_csv = output_dir / "stability_table.csv"
+    manifest_json = output_dir / "phase14_manifest.json"
+    resume_enabled = _resolve_resume_enabled(phase)
+    signature = phase14_resume_signature(
+        sim_config=sim_config,
+        phase=phase,
+        nozzle_count=nozzle_count,
+    )
+    rows_by_index = (
+        _load_resume_rows(samples_csv, signature=signature, requested_runs=run_count)
+        if resume_enabled
+        else {}
+    )
+    resumed_rows = len(rows_by_index)
     for scenario in scenarios:
+        if scenario.index in rows_by_index:
+            continue
         run_id = f"phase14_mc{scenario.index:04d}_seed{scenario.sensor_seed}"
         retain_bundle = _retain_bundle(phase, scenario.index)
         temp_prefix = f"rocketsim_phase14_case_{scenario.index:04d}_"
@@ -133,38 +151,128 @@ def run_phase14_monte_carlo(
             )
         row = scenario.flat_row()
         row.update(_result_metric_row(result, run_id=run_id, retained_bundle=retain_bundle))
-        rows.append(row)
+        row["phase14_signature"] = signature
+        rows_by_index[scenario.index] = row
+        if len(rows_by_index) % phase.checkpoint_interval_runs == 0:
+            _write_phase14_artifacts(
+                output_dir=output_dir,
+                samples_csv=samples_csv,
+                samples_parquet=samples_parquet,
+                summary_json=summary_json,
+                stability_csv=stability_csv,
+                manifest_json=manifest_json,
+                rows=_ordered_rows(rows_by_index),
+                phase=phase,
+                sim_config=sim_config,
+                requested_runs=run_count,
+                resumed_rows=resumed_rows,
+                resume_enabled=resume_enabled,
+                signature=signature,
+                checkpoint=True,
+            )
 
-    frame = pd.DataFrame(rows)
-    samples_csv = output_dir / "montecarlo_samples.csv"
-    samples_parquet = output_dir / "montecarlo_samples.parquet"
+    artifacts = _write_phase14_artifacts(
+        output_dir=output_dir,
+        samples_csv=samples_csv,
+        samples_parquet=samples_parquet,
+        summary_json=summary_json,
+        stability_csv=stability_csv,
+        manifest_json=manifest_json,
+        rows=_ordered_rows(rows_by_index),
+        phase=phase,
+        sim_config=sim_config,
+        requested_runs=run_count,
+        resumed_rows=resumed_rows,
+        resume_enabled=resume_enabled,
+        signature=signature,
+        checkpoint=False,
+    )
+    return Phase14Result(
+        output_dir=output_dir,
+        samples_csv=samples_csv,
+        samples_parquet=samples_parquet,
+        summary_json=summary_json,
+        stability_csv=stability_csv,
+        manifest_json=manifest_json,
+        histogram_paths=artifacts["histogram_paths"],
+        summary=artifacts["summary"],
+    )
+
+
+def phase14_resume_signature(
+    *,
+    sim_config: SimConfig,
+    phase: Phase14Settings,
+    nozzle_count: int,
+) -> str:
+    """Hash the scenario-generation inputs that make completed rows resumable."""
+
+    payload = {
+        "master_seed": sim_config.data.master_seed,
+        "nozzle_count": nozzle_count,
+        "retained_bundle_stride": phase.retained_bundle_stride,
+        "dispersions": phase.dispersions.model_dump(mode="json"),
+    }
+    text = json.dumps(payload, sort_keys=True, separators=(",", ":"))
+    return hashlib.sha256(text.encode("utf-8")).hexdigest()
+
+
+def _write_phase14_artifacts(
+    *,
+    output_dir: Path,
+    samples_csv: Path,
+    samples_parquet: Path,
+    summary_json: Path,
+    stability_csv: Path,
+    manifest_json: Path,
+    rows: Sequence[dict[str, Any]],
+    phase: Phase14Settings,
+    sim_config: SimConfig,
+    requested_runs: int,
+    resumed_rows: int,
+    resume_enabled: bool,
+    signature: str,
+    checkpoint: bool,
+) -> dict[str, Any]:
+    if not rows:
+        msg = "Phase 14 cannot write artifacts without at least one completed run"
+        raise ValueError(msg)
+    frame = _samples_frame(rows)
     frame.to_csv(samples_csv, index=False)
     frame.to_parquet(samples_parquet, index=False)
 
     histogram_paths = write_histograms(frame, output_dir, phase)
     distributions = distribution_summary(frame, MONTE_CARLO_METRICS, phase.percentiles)
     stability = stability_report(frame, phase)
-    stability_csv = output_dir / "stability_table.csv"
     pd.DataFrame(stability["rows"]).to_csv(stability_csv, index=False)
+    runs_completed = len(frame)
     gate_complete = bool(
-        run_count >= phase.target_runs and stability["status"] == "stable" and stability["stable"]
+        runs_completed >= phase.target_runs
+        and stability["status"] == "stable"
+        and stability["stable"]
     )
+    retained_bundles = int(frame["retained_bundle"].astype(bool).sum())
     summary = {
-        "runs_completed": run_count,
+        "runs_completed": runs_completed,
+        "requested_runs": requested_runs,
         "target_runs": phase.target_runs,
         "batch_size": phase.batch_size,
         "gate_complete": gate_complete,
+        "checkpoint": checkpoint,
+        "resume_enabled": resume_enabled,
+        "resumed_rows": resumed_rows,
+        "phase14_signature": signature,
+        "checkpoint_interval_runs": phase.checkpoint_interval_runs,
         "stability": stability,
         "distributions": distributions,
         "retained_bundle_stride": phase.retained_bundle_stride,
-        "retained_bundles": int(sum(bool(row["retained_bundle"]) for row in rows)),
+        "retained_bundles": retained_bundles,
         "notes": (
             "Physics outcomes are reported as distributions only. The Phase-14 gate is "
             "complete only when the configured large-N target and percentile stability "
             "criteria are both satisfied."
         ),
     }
-    summary_json = output_dir / "montecarlo_summary.json"
     _write_json(summary_json, summary)
 
     manifest = {
@@ -180,6 +288,7 @@ def run_phase14_monte_carlo(
         "scenario_generation": {
             "master_seed": sim_config.data.master_seed,
             "seed_strategy": "numpy.random.SeedSequence.spawn",
+            "resume_signature": signature,
             "dispersion_fields": [
                 "wind",
                 "mass_scale",
@@ -190,18 +299,82 @@ def run_phase14_monte_carlo(
             ],
         },
     }
-    manifest_json = output_dir / "phase14_manifest.json"
     _write_json(manifest_json, manifest)
-    return Phase14Result(
-        output_dir=output_dir,
-        samples_csv=samples_csv,
-        samples_parquet=samples_parquet,
-        summary_json=summary_json,
-        stability_csv=stability_csv,
-        manifest_json=manifest_json,
-        histogram_paths=histogram_paths,
-        summary=summary,
+    return {"histogram_paths": histogram_paths, "summary": summary}
+
+
+def _load_resume_rows(
+    samples_csv: Path,
+    *,
+    signature: str,
+    requested_runs: int,
+) -> dict[int, dict[str, Any]]:
+    if not samples_csv.exists():
+        return {}
+    frame = pd.read_csv(
+        samples_csv,
+        dtype={
+            "spawn_key": "string",
+            "run_id": "string",
+            "artifact_mode": "string",
+            "telemetry_hash": "string",
+            "state_hash": "string",
+            "phase14_signature": "string",
+        },
     )
+    required_columns = {"run_index", "phase14_signature"}
+    if not required_columns.issubset(frame.columns):
+        return {}
+    resumable = frame[
+        (frame["phase14_signature"] == signature) & (frame["run_index"] < requested_runs)
+    ].copy()
+    if resumable.empty:
+        return {}
+    resumable = resumable.drop_duplicates(subset=["run_index"], keep="first")
+    rows: dict[int, dict[str, Any]] = {}
+    for row in resumable.to_dict(orient="records"):
+        if _row_has_metric_payload(row):
+            rows[int(row["run_index"])] = cast(dict[str, Any], row)
+    return dict(sorted(rows.items()))
+
+
+def _row_has_metric_payload(row: dict[str, Any]) -> bool:
+    required = {
+        "run_id",
+        "retained_bundle",
+        "artifact_mode",
+        "touchdown",
+        "landing_speed_m_s",
+        "touchdown_tilt_deg",
+        "touchdown_lateral_error_m",
+        "co2_margin_kg",
+        "telemetry_hash",
+        "state_hash",
+    }
+    return required.issubset(row)
+
+
+def _samples_frame(rows: Sequence[dict[str, Any]]) -> pd.DataFrame:
+    frame = pd.DataFrame(rows)
+    string_columns = (
+        "spawn_key",
+        "run_id",
+        "artifact_mode",
+        "telemetry_hash",
+        "state_hash",
+        "phase14_signature",
+    )
+    for column in string_columns:
+        if column in frame.columns:
+            frame[column] = frame[column].astype("string").fillna("")
+    for column in ("retained_bundle", "touchdown"):
+        if column in frame.columns:
+            frame[column] = frame[column].astype(bool)
+    return frame
+
+
+def _ordered_rows(rows_by_index: dict[int, dict[str, Any]]) -> list[dict[str, Any]]:
+    return [rows_by_index[index] for index in sorted(rows_by_index)]
 
 
 def generate_monte_carlo_scenarios(
@@ -413,6 +586,19 @@ def _resolve_run_count(phase: Phase14Settings, override: int | None) -> int:
         msg = "ROCKETSIM_MC_RUNS must be positive"
         raise ValueError(msg)
     return run_count
+
+
+def _resolve_resume_enabled(phase: Phase14Settings) -> bool:
+    env_value = os.environ.get("ROCKETSIM_MC_RESUME")
+    if env_value is None:
+        return phase.resume_enabled
+    normalized = env_value.strip().lower()
+    if normalized in {"1", "true", "yes", "on"}:
+        return True
+    if normalized in {"0", "false", "no", "off"}:
+        return False
+    msg = "ROCKETSIM_MC_RESUME must be one of 1/0, true/false, yes/no, or on/off"
+    raise ValueError(msg)
 
 
 def _retain_bundle(phase: Phase14Settings, run_index: int) -> bool:

@@ -71,6 +71,8 @@ def test_phase14_config_loads_large_n_contract() -> None:
 
     assert sim.data.phase14.target_runs == 1000
     assert sim.data.phase14.batch_size == 100
+    assert sim.data.phase14.resume_enabled is True
+    assert sim.data.phase14.checkpoint_interval_runs == 25
     assert sim.data.phase14.dispersions.wind_xy_std_m_s == pytest.approx(2.0)
 
 
@@ -153,10 +155,15 @@ def test_phase14_runner_writes_samples_histograms_and_manifest(tmp_path: Path) -
     assert result.stability_csv.exists()
     assert all(path.exists() and path.stat().st_size > 0 for path in result.histogram_paths)
     assert summary["runs_completed"] == 8
+    assert summary["requested_runs"] == 8
     assert summary["target_runs"] == 1000
     assert summary["gate_complete"] is False
+    assert summary["resume_enabled"] is True
+    assert summary["resumed_rows"] == 0
+    assert len(summary["phase14_signature"]) == 64
     assert summary["stability"]["status"] == "insufficient_batches"
     assert manifest["scenario_generation"]["seed_strategy"] == "numpy.random.SeedSequence.spawn"
+    assert manifest["scenario_generation"]["resume_signature"] == summary["phase14_signature"]
 
 
 def test_phase14_default_dispatch_retains_full_bundles_only_at_stride(tmp_path: Path) -> None:
@@ -188,6 +195,38 @@ def test_phase14_default_dispatch_retains_full_bundles_only_at_stride(tmp_path: 
         "metrics_only",
     ]
     assert samples["retained_bundle"].tolist() == [True, False, False]
+
+
+def test_phase14_resume_skips_completed_indices(tmp_path: Path) -> None:
+    import pandas as pd
+
+    repo = write_phase14_repo(tmp_path / "repo")
+    first = run_phase14_monte_carlo(
+        repo,
+        runner=fake_phase14_runner,
+        run_count_override=3,
+    )
+    first_samples = pd.read_csv(first.samples_csv)
+    calls: list[str] = []
+
+    def tracking_runner(**kwargs: Any) -> SILRunResult:
+        calls.append(str(kwargs["run_id_override"]))
+        return fake_phase14_runner(**kwargs)
+
+    second = run_phase14_monte_carlo(
+        repo,
+        runner=tracking_runner,
+        run_count_override=5,
+    )
+    second_samples = pd.read_csv(second.samples_csv)
+
+    assert first.summary["runs_completed"] == 3
+    assert first_samples["run_index"].tolist() == [0, 1, 2]
+    assert calls == [second_samples.loc[3, "run_id"], second_samples.loc[4, "run_id"]]
+    assert second.summary["runs_completed"] == 5
+    assert second.summary["resumed_rows"] == 3
+    assert second_samples["run_index"].tolist() == [0, 1, 2, 3, 4]
+    assert second_samples["phase14_signature"].nunique() == 1
 
 
 def test_cli_montecarlo_dispatch_can_be_monkeypatched(
