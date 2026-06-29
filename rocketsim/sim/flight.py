@@ -24,6 +24,11 @@ from rocketsim.io import write_full_data_bundle
 from rocketsim.propulsion import ColdGasSystem, load_configured_motor
 from rocketsim.sensors import SensorPacket, SensorSuite, SensorTruth, sensor_packet_hash
 from rocketsim.sim.schema import SimConfig, load_sim_config
+from rocketsim.thermal import (
+    ThermalArtifacts,
+    run_configured_thermal_analysis,
+    write_thermal_artifacts,
+)
 from rocketsim.vehicle import VehicleModel
 
 
@@ -41,6 +46,7 @@ class SILRunResult:
     animation_gif: Path
     animation_html: Path
     animation_mp4: Path | None
+    thermal_artifacts: ThermalArtifacts
     telemetry_hash: str
     sensor_hash: str
     state_hash: str
@@ -154,7 +160,7 @@ def run_native_sil_e2e(
 
     touchdown = state.position_m[2] <= sim_config.data.e2e.touchdown_altitude_m
     telemetry_hash = _rows_hash(telemetry_rows)
-    summary = {
+    summary: dict[str, Any] = {
         "touchdown": bool(touchdown),
         "touchdown_time_s": state.time_s,
         "touchdown_speed_m_s": float(np.linalg.norm(state.velocity_m_s)),
@@ -169,6 +175,15 @@ def run_native_sil_e2e(
         "controller_backend": "sil",
         "telemetry_rows": len(telemetry_rows),
     }
+    thermal_result = run_configured_thermal_analysis(
+        root / "config" / "thermal.yaml",
+        telemetry_rows,
+        root,
+    )
+    summary["thermal"] = thermal_result.summary
+    summary["peak_thermal_temperature_deg_c"] = thermal_result.summary["peak_temperature_deg_c"]
+    summary["minimum_thermal_margin_deg_c"] = thermal_result.summary["minimum_margin_deg_c"]
+    thermal_artifacts = write_thermal_artifacts(thermal_result, output_dir)
     sensor_hash = sensor_packet_hash(sensor_packets)
     state_hash = trajectory_hash(states)
     manifest = {
@@ -185,6 +200,7 @@ def run_native_sil_e2e(
         telemetry_rows=telemetry_rows,
         landing_summary=summary,
         manifest=manifest,
+        extra_artifacts={"thermal": thermal_artifacts.manifest_payload(output_dir)},
     )
     return SILRunResult(
         output_dir=output_dir,
@@ -197,6 +213,7 @@ def run_native_sil_e2e(
         animation_gif=artifacts.animation_gif,
         animation_html=artifacts.animation_html,
         animation_mp4=artifacts.animation_mp4,
+        thermal_artifacts=thermal_artifacts,
         telemetry_hash=telemetry_hash,
         sensor_hash=sensor_hash,
         state_hash=state_hash,

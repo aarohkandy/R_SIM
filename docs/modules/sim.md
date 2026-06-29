@@ -16,3 +16,6 @@
 - Phase 9 expands the bundle to include CSV and Parquet telemetry, JSON and CSV landing
   summaries, plot artifacts, animated GIF plus interactive HTML animation, and a manifest
   that records produced and deferred artifacts.
+- Phase 10 runs the thermal analysis immediately after the logged SIL flight and before
+  the final bundle manifest is written, so the manifest and landing summary include the
+  thermal timeseries, plots, peak node temperature, and minimum material-limit margin.

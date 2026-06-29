@@ -18,5 +18,14 @@
   the per-valve telemetry.
 - MP4 export is intentionally deferred when `ffmpeg` is absent. The manifest records the
   deferred artifact instead of pretending the MP4 exists.
-- Thermal and FEA plot slots remain deferred to Phases 10 and 11 and are recorded in the
-  manifest as future-phase artifacts.
+- FEA plot slots remain deferred to Phase 11 and are recorded in the manifest as
+  future-phase artifacts.
+
+## Phase 10 Implementation Notes
+
+- End-to-end bundles now include a `thermal` artifact group in `run_manifest.json` with
+  thermal timeseries CSV/Parquet, `thermal_summary.json`, and the thermal temperature and
+  margin plots.
+- The landing summary includes the nested thermal summary plus top-level
+  `peak_thermal_temperature_deg_c` and `minimum_thermal_margin_deg_c` fields. These are
+  reported values, not pass/fail verdicts.

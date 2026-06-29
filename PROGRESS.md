@@ -159,3 +159,30 @@
   `ASSUMPTIONS.md` record this explicitly. Thermal plots and FEA summaries remain deferred
   to Phases 10 and 11.
 - Next: Phase 10 lumped-node thermal network on the logged flight.
+
+## 2026-06-29 — Phase 10 thermal network
+
+- Implemented a strict YAML-configured lumped-node thermal network with motor casing,
+  foil shield, printed body, carbon frame, solenoids, and electronics bay nodes.
+- The post-flight thermal runner consumes logged SIL telemetry, integrates a fixed-step
+  transient network, and models configured conduction, motor-to-shield radiation,
+  speed-dependent convection, motor thrust-scaled heat, valve-driven solenoid heat, and
+  electronics self-heating.
+- End-to-end bundles now include `thermal/thermal_timeseries.csv`,
+  `thermal/thermal_timeseries.parquet`, `thermal/thermal_summary.json`,
+  `plots/thermal_node_temperatures.png`, and
+  `plots/thermal_margin_to_limits.png`. The manifest now records thermal artifacts rather
+  than deferring them.
+- Gate evidence: `make e2e` reached touchdown and wrote
+  `outputs/phase8_sil_seed20260629`; the placeholder thermal run reported
+  `peak_temperature_deg_c=24.798655538535186`,
+  `minimum_margin_deg_c=57.987206409511515`, and no material-limit crossing times
+  (all reported as DATA).
+- Added unit, property-based, regression/golden, artifact, strict-validation, and e2e
+  integration tests for Phase 10.
+- Verification passed: `make e2e`, `make lint`, `make typecheck`,
+  `tests/test_thermal.py` (`7 passed`), and `make test` (`114 passed`).
+- Thermal hardware values remain placeholders; replace them with measured motor,
+  structure, material, solenoid, and electronics thermal data before treating temperature
+  margins as engineering evidence.
+- Next: Phase 11 event-triggered structural load-case extraction and FEA driver.

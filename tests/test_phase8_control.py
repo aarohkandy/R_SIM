@@ -119,17 +119,30 @@ def test_phase8_e2e_native_sil_writes_full_phase9_bundle(tmp_path: Path) -> None
     assert result.run_manifest_json.exists()
     assert result.animation_gif.exists()
     assert result.animation_html.exists()
+    assert result.thermal_artifacts.timeseries_csv.exists()
+    assert result.thermal_artifacts.timeseries_parquet.exists()
+    assert result.thermal_artifacts.summary_json.exists()
+    assert len(result.thermal_artifacts.plot_paths) == 2
     assert len(result.plot_paths) >= 6
     assert all(path.exists() and path.stat().st_size > 0 for path in result.plot_paths)
+    assert all(
+        path.exists() and path.stat().st_size > 0
+        for path in result.thermal_artifacts.plot_paths
+    )
     assert result.summary["telemetry_rows"] > 1000
+    assert "thermal" in result.summary
+    assert "peak_thermal_temperature_deg_c" in result.summary
+    assert "minimum_thermal_margin_deg_c" in result.summary
     manifest = json.loads(result.run_manifest_json.read_text(encoding="utf-8"))
     assert manifest["backend"] == "sil"
     assert manifest["telemetry_hash"] == result.telemetry_hash
     assert len(manifest["state_hash"]) == 64
     assert manifest["artifacts"]["telemetry_parquet"] == "telemetry.parquet"
+    assert manifest["artifacts"]["thermal"]["summary_json"] == "thermal/thermal_summary.json"
     assert "animation_gif" in manifest["artifacts"]
     assert "animation_html" in manifest["artifacts"]
     assert "deferred_artifacts" in manifest
+    assert "thermal_node_temperature_plots" not in manifest["deferred_artifacts"]
 
 
 def test_invalid_actuation_fault_index_rejected() -> None:

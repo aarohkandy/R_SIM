@@ -1,0 +1,30 @@
+{
+  "minimum_margin_deg_c": 57.9988393965898,
+  "nodes": {
+    "carbon_frame": {
+      "minimum_margin_deg_c": 159.99929387204563,
+      "peak_temperature_deg_c": 20.000706127954373
+    },
+    "electronics_bay": {
+      "minimum_margin_deg_c": 64.9186255547852,
+      "peak_temperature_deg_c": 20.08137444521481
+    },
+    "foil_shield": {
+      "minimum_margin_deg_c": 379.60009832911095,
+      "peak_temperature_deg_c": 20.39990167088905
+    },
+    "motor_casing": {
+      "minimum_margin_deg_c": 375.43717746160337,
+      "peak_temperature_deg_c": 24.562822538396645
+    },
+    "printed_body": {
+      "minimum_margin_deg_c": 57.9988393965898,
+      "peak_temperature_deg_c": 20.0011606034102
+    },
+    "solenoids": {
+      "minimum_margin_deg_c": 379.88022050882665,
+      "peak_temperature_deg_c": 20.119779491173354
+    }
+  },
+  "peak_temperature_deg_c": 24.562822538396645
+}

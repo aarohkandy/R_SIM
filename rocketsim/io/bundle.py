@@ -52,6 +52,8 @@ def write_full_data_bundle(
     telemetry_rows: list[dict[str, Any]],
     landing_summary: dict[str, Any],
     manifest: dict[str, Any],
+    extra_artifacts: dict[str, Any] | None = None,
+    extra_deferred_artifacts: dict[str, str] | None = None,
 ) -> DataBundleArtifacts:
     """Write Phase-9 telemetry, plots, summary, manifest, and animation artifacts."""
 
@@ -84,14 +86,23 @@ def write_full_data_bundle(
         animation_html=animation_html,
         animation_mp4=animation_mp4,
     )
+    artifact_payload = artifacts.manifest_payload(output_dir)
+    if extra_artifacts:
+        artifact_payload.update(extra_artifacts)
+    deferred_artifacts = {
+        "fea_stress_summary_plots": "Phase 11",
+    }
+    if not extra_artifacts or "thermal" not in extra_artifacts:
+        deferred_artifacts["thermal_node_temperature_plots"] = "Phase 10"
+    if animation_mp4 is None:
+        deferred_artifacts["animation_mp4"] = "ffmpeg not installed"
+    if extra_deferred_artifacts:
+        deferred_artifacts.update(extra_deferred_artifacts)
+
     manifest = {
         **manifest,
-        "artifacts": artifacts.manifest_payload(output_dir),
-        "deferred_artifacts": {
-            "thermal_node_temperature_plots": "Phase 10",
-            "fea_stress_summary_plots": "Phase 11",
-            "animation_mp4": "ffmpeg not installed" if animation_mp4 is None else "available",
-        },
+        "artifacts": artifact_payload,
+        "deferred_artifacts": deferred_artifacts,
     }
     write_json(artifacts.run_manifest_json, manifest)
     return artifacts

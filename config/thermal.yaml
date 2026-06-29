@@ -1,10 +1,97 @@
 schema_version: 1
 name: thermal
-description: Placeholder lumped-node thermal network configuration.
+description: Placeholder lumped-node thermal network for post-flight Phase-10 analysis.
 placeholder: true
 units:
+  conductance: W/K
+  heat_capacity: J/K
+  heat_flux: W
   temperature: degC
 data:
   ambient_temperature_deg_c: 20.0
   material_limits_path: inputs/materials_placeholder.yaml
-  enabled_after_phase: 10
+  max_step_s: 0.01
+  nodes:
+    - id: motor_casing
+      material: steel
+      thermal_mass_j_per_k: 45.0
+      initial_temperature_deg_c: 20.0
+      convection_area_m2: 0.004
+      convection_h_base_w_m2_k: 8.0
+      convection_h_per_m_s_w_m2_k: 0.8
+    - id: foil_shield
+      material: steel
+      thermal_mass_j_per_k: 12.0
+      initial_temperature_deg_c: 20.0
+      convection_area_m2: 0.006
+      convection_h_base_w_m2_k: 6.0
+      convection_h_per_m_s_w_m2_k: 0.5
+    - id: printed_body
+      material: petg
+      thermal_mass_j_per_k: 80.0
+      initial_temperature_deg_c: 20.0
+      convection_area_m2: 0.018
+      convection_h_base_w_m2_k: 5.0
+      convection_h_per_m_s_w_m2_k: 0.9
+    - id: carbon_frame
+      material: carbon_fiber
+      thermal_mass_j_per_k: 35.0
+      initial_temperature_deg_c: 20.0
+      convection_area_m2: 0.012
+      convection_h_base_w_m2_k: 5.0
+      convection_h_per_m_s_w_m2_k: 0.7
+    - id: solenoids
+      material: steel
+      thermal_mass_j_per_k: 60.0
+      initial_temperature_deg_c: 20.0
+      convection_area_m2: 0.010
+      convection_h_base_w_m2_k: 5.0
+      convection_h_per_m_s_w_m2_k: 0.6
+    - id: electronics_bay
+      material: electronics
+      thermal_mass_j_per_k: 55.0
+      initial_temperature_deg_c: 20.0
+      convection_area_m2: 0.010
+      convection_h_base_w_m2_k: 4.0
+      convection_h_per_m_s_w_m2_k: 0.4
+  conductive_links:
+    - from_node: motor_casing
+      to_node: foil_shield
+      conductance_w_per_k: 0.45
+    - from_node: foil_shield
+      to_node: printed_body
+      conductance_w_per_k: 0.18
+    - from_node: printed_body
+      to_node: carbon_frame
+      conductance_w_per_k: 0.22
+    - from_node: carbon_frame
+      to_node: electronics_bay
+      conductance_w_per_k: 0.10
+    - from_node: solenoids
+      to_node: carbon_frame
+      conductance_w_per_k: 0.15
+  radiative_links:
+    - from_node: motor_casing
+      to_node: foil_shield
+      area_m2: 0.003
+      emissivity: 0.75
+      view_factor: 0.8
+  heat_sources:
+    - id: motor_case_heat
+      node: motor_casing
+      kind: motor_thrust_scaled
+      power_w: 260.0
+      start_time_s: 0.0
+      end_time_s: 2.0
+    - id: solenoid_self_heat
+      node: solenoids
+      kind: valve_power
+      power_w: 9.0
+      start_time_s: 0.0
+      end_time_s: 20.0
+    - id: avionics_self_heat
+      node: electronics_bay
+      kind: constant
+      power_w: 1.5
+      start_time_s: 0.0
+      end_time_s: 20.0
