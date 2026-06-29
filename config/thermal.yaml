@@ -1,0 +1,10 @@
+schema_version: 1
+name: thermal
+description: Placeholder lumped-node thermal network configuration.
+placeholder: true
+units:
+  temperature: degC
+data:
+  ambient_temperature_deg_c: 20.0
+  material_limits_path: inputs/materials_placeholder.yaml
+  enabled_after_phase: 10

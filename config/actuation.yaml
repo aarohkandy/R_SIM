@@ -1,0 +1,12 @@
+schema_version: 1
+name: actuation
+description: Placeholder solenoid latency and pulse constraints.
+placeholder: true
+units:
+  time: s
+data:
+  valve_count: 3
+  open_latency_s: 0.01
+  close_latency_s: 0.01
+  min_reliable_pulse_s: 0.02
+  fault_injection_enabled: false

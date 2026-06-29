@@ -1,0 +1,13 @@
+schema_version: 1
+name: structural
+description: Placeholder event-triggered FEA configuration.
+placeholder: true
+units:
+  force: N
+data:
+  solver_preference: calculix
+  load_cases:
+    - landing_impact
+    - thrust_transient
+    - max_q
+  enabled_after_phase: 11

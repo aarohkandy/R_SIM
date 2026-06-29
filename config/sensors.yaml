@@ -1,0 +1,12 @@
+schema_version: 1
+name: sensors
+description: Placeholder IMU and barometer sensor configuration.
+placeholder: true
+units:
+  frequency: Hz
+data:
+  imu_sample_rate_hz: 500
+  barometer_sample_rate_hz: 100
+  noise_enabled: true
+  tof_rangefinder_enabled: false
+  pressure_transducer_enabled: false

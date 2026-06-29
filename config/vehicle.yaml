@@ -1,0 +1,15 @@
+schema_version: 1
+name: vehicle
+description: Placeholder vehicle geometry, parts, and material defaults.
+placeholder: true
+units:
+  length: m
+  mass: kg
+  temperature: degC
+data:
+  body:
+    diameter_m: 0.063
+    length_m: 0.2
+  target_wet_mass_kg: 0.9
+  parts_path: inputs/bom_placeholder.yaml
+  materials_path: inputs/materials_placeholder.yaml

@@ -1,0 +1,14 @@
+schema_version: 1
+name: coldgas
+description: Placeholder CO2 cold-gas landing system configuration.
+placeholder: true
+units:
+  mass: kg
+  pressure: Pa
+  area: m2
+data:
+  cartridge_co2_mass_kg: 0.088
+  regulator_setpoint_pa: 827371.0
+  second_stage_enabled: false
+  nozzle_count: 3
+  nozzle_throat_area_m2: 0.0000005

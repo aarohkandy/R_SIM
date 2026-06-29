@@ -1,0 +1,14 @@
+schema_version: 1
+name: environment
+description: Placeholder atmosphere, wind, and launch rail scenario.
+placeholder: true
+units:
+  length: m
+  angle: deg
+  speed: m/s
+data:
+  atmosphere: ISA
+  wind_enabled: false
+  launch_rail_length_m: 1.0
+  launch_rail_angle_deg: 90.0
+  minimum_rail_exit_speed_mps: 10.0

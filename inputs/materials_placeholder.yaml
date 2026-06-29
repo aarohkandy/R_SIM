@@ -1,0 +1,15 @@
+schema_version: 1
+name: materials_placeholder
+description: Placeholder material limits for Phase-0 path checks only.
+placeholder: true
+materials:
+  pla:
+    heat_deflection_temperature_deg_c: 58
+  petg:
+    heat_deflection_temperature_deg_c: 78
+  abs:
+    heat_deflection_temperature_deg_c: 100
+  carbon_fiber:
+    heat_deflection_temperature_deg_c: 180
+  steel:
+    heat_deflection_temperature_deg_c: 400

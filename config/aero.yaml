@@ -1,0 +1,12 @@
+schema_version: 1
+name: aero
+description: Placeholder aerodynamic geometry and OpenRocket anchor paths.
+placeholder: true
+units:
+  length: m
+  angle: deg
+data:
+  body_diameter_m: 0.063
+  leg_deploy_angle_deg: 75.0
+  openrocket_anchor_dir: inputs/openrocket
+  notes: OpenRocket files are comparison anchors only, not runtime sources.

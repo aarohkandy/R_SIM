@@ -1,0 +1,11 @@
+schema_version: 1
+name: sim
+description: Placeholder master simulation settings.
+placeholder: true
+units:
+  time: s
+data:
+  master_seed: 20260629
+  integrator_dt_s: 0.001
+  renode_sync_quantum_s: 0.001
+  end_condition: touchdown

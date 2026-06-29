@@ -1,0 +1,62 @@
+[build-system]
+requires = ["setuptools>=69", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "self-landing-rocket-sim"
+version = "0.1.0"
+description = "Phase-0 scaffold for the self-landing rocket simulation and HIL emulator."
+readme = "SPEC.md"
+requires-python = ">=3.12"
+dependencies = [
+  "CoolProp>=6.6",
+  "matplotlib>=3.9",
+  "numpy>=2.0",
+  "pandas>=2.2",
+  "pydantic>=2.8",
+  "pyarrow>=17.0",
+  "pyvista>=0.44",
+  "pyyaml>=6.0",
+  "scipy>=1.14",
+]
+
+[project.optional-dependencies]
+dev = [
+  "hypothesis>=6.112",
+  "mypy>=1.11",
+  "pytest>=8.3",
+  "pytest-cov>=5.0",
+  "ruff>=0.6",
+  "types-PyYAML>=6.0",
+]
+
+[project.scripts]
+rocketsim = "rocketsim.cli:main"
+
+[tool.setuptools.packages.find]
+include = ["rocketsim*"]
+
+[tool.pytest.ini_options]
+addopts = "--strict-markers --strict-config"
+testpaths = ["tests"]
+
+[tool.coverage.run]
+branch = true
+source = ["rocketsim"]
+
+[tool.coverage.report]
+show_missing = true
+skip_covered = true
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["B", "E", "F", "I", "UP"]
+
+[tool.mypy]
+python_version = "3.12"
+packages = ["rocketsim", "tests"]
+strict = true
+warn_unused_configs = true
