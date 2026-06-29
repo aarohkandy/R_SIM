@@ -84,6 +84,51 @@ class Phase13Settings(BaseModel):
         return value
 
 
+class MonteCarloDispersions(BaseModel):
+    """Phase-14 input dispersion widths for the native-SIL Monte Carlo."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    wind_xy_std_m_s: float = Field(ge=0.0)
+    mass_scale_std_fraction: float = Field(ge=0.0)
+    cg_shift_std_m: Vector3
+    nozzle_cant_std_deg: float = Field(ge=0.0)
+    valve_latency_std_s: float = Field(ge=0.0)
+    sensor_seed_enabled: bool
+
+    @field_validator("cg_shift_std_m")
+    @classmethod
+    def cg_shift_stds_must_be_nonnegative(cls, value: Vector3) -> Vector3:
+        if any(component < 0.0 for component in value):
+            msg = "phase 14 CG-shift standard deviations must be non-negative"
+            raise ValueError(msg)
+        return value
+
+
+class Phase14Settings(BaseModel):
+    """Large-N Monte Carlo study settings."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    output_dir: str = Field(min_length=1)
+    target_runs: int = Field(ge=1000)
+    batch_size: int = Field(gt=0)
+    stability_window_batches: int = Field(gt=0)
+    percentile_stability_tolerance: float = Field(gt=0.0)
+    retained_bundle_stride: int = Field(ge=0)
+    histogram_bins: int = Field(gt=0)
+    percentiles: tuple[float, ...] = Field(min_length=1)
+    dispersions: MonteCarloDispersions
+
+    @field_validator("percentiles")
+    @classmethod
+    def percentiles_must_be_in_range(cls, value: tuple[float, ...]) -> tuple[float, ...]:
+        if any(percentile < 0.0 or percentile > 100.0 for percentile in value):
+            msg = "phase 14 percentiles must be between 0 and 100"
+            raise ValueError(msg)
+        return value
+
+
 class SimData(BaseModel):
     """Validated payload under config/sim.yaml:data."""
 
@@ -95,6 +140,7 @@ class SimData(BaseModel):
     end_condition: Literal["touchdown"]
     e2e: E2ESettings
     phase13: Phase13Settings
+    phase14: Phase14Settings
     dynamics: DynamicsSettings
 
 

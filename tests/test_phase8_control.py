@@ -112,6 +112,8 @@ def test_phase8_e2e_native_sil_writes_full_phase9_bundle(tmp_path: Path) -> None
     result = run_native_sil_e2e(repo_root=ROOT, output_root=tmp_path)
 
     assert result.summary["touchdown"] is True
+    assert "touchdown_lateral_error_m" in result.summary
+    assert "touchdown_tilt_deg" in result.summary
     assert result.telemetry_csv.exists()
     assert result.telemetry_parquet.exists()
     assert result.landing_summary_json.exists()

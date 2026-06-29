@@ -27,6 +27,22 @@ data:
     landing_metric_absolute_tolerance: 0.05
     ballistic_validation_duration_s: 1.0
     rocketpy_reference_required: false
+  phase14:
+    output_dir: outputs/phase14_montecarlo
+    target_runs: 1000
+    batch_size: 100
+    stability_window_batches: 3
+    percentile_stability_tolerance: 0.02
+    retained_bundle_stride: 25
+    histogram_bins: 40
+    percentiles: [1.0, 5.0, 50.0, 95.0, 99.0]
+    dispersions:
+      wind_xy_std_m_s: 2.0
+      mass_scale_std_fraction: 0.03
+      cg_shift_std_m: [0.003, 0.003, 0.005]
+      nozzle_cant_std_deg: 1.5
+      valve_latency_std_s: 0.002
+      sensor_seed_enabled: true
   dynamics:
     minimum_aero_speed_m_s: 0.05
     angular_damping_n_m_s: 0.0

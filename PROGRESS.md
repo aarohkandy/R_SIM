@@ -312,3 +312,34 @@
 - Verification passed: `make converge`, `make lint`, `make typecheck`, and `make test`
   (`138 passed`).
 - Next: commit/push, then proceed to Phase 14 Monte Carlo at scale.
+
+## 2026-06-29 — Phase 14 Monte Carlo framework + native-SIL smoke
+
+- Added strict Phase-14 settings under `config/sim.yaml:data.phase14`, including the
+  production `target_runs: 1000`, 100-run batch size, percentile stability tolerance,
+  retained-bundle stride, histogram bins, and dispersions over wind, mass scale, CG shift,
+  nozzle cant, valve latency, and sensor seed.
+- Added `rocketsim.validation.phase14` and wired `make montecarlo` / `rocketsim
+  montecarlo`. The runner uses `numpy.random.SeedSequence.spawn` from the master seed,
+  copies config/input YAML into a per-scenario temp repo, applies the dispersions there,
+  then calls the same native-SIL flight runner used by the Phase-8 keystone.
+- Extended the native-SIL landing summary with touchdown x/y, lateral error, and tilt so
+  Monte Carlo distributions can be computed from real flight summaries rather than a
+  separate reporting path.
+- Added Phase-14 artifacts: `montecarlo_samples.csv`, `montecarlo_samples.parquet`,
+  metric histograms, `stability_table.csv`, `montecarlo_summary.json`, and
+  `phase14_manifest.json` under `outputs/phase14_montecarlo/`.
+- Smoke evidence: `ROCKETSIM_MC_RUNS=4 make montecarlo` ran four real native-SIL flights,
+  retained one full bundle, and wrote the Phase-14 manifest. The summary correctly reports
+  `gate_complete: false` and `stability.status: insufficient_batches`; this is a pilot
+  verification, not the full 1000-run Phase-14 gate.
+- Smoke distributions, reported as data only: landing-speed mean
+  `16.627659924215486 m/s`, touchdown-tilt mean `124.39096051083646 deg`,
+  lateral-error mean `35.3073011297847 m`, and CO2-remaining mean
+  `0.08333835746783905 kg`.
+- Added unit/integration tests for Phase-14 config, deterministic spawned scenarios,
+  YAML dispersion application, distribution summaries, artifact writing, and CLI dispatch.
+- Verification passed: `make lint`, `make typecheck`, and `make test` (`144 passed`).
+- Next: run the full un-overridden `make montecarlo` large-N study to the configured
+  target and stability criteria, then commit a gate-complete progress entry only if it
+  actually stabilizes.

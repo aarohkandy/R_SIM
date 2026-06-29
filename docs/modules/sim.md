@@ -30,3 +30,14 @@
   cross-validation, and a manifest under `outputs/phase13_convergence/`.
 - RocketPy passive-ascent cross-validation is reported as unavailable when RocketPy is
   not installed; the code must not fabricate a comparison.
+- Phase 14 uses `SeedSequence.spawn` from the master seed to build deterministic native-SIL
+  Monte Carlo scenarios. Each scenario perturbs copied YAML inputs for wind, mass scale,
+  CG shift, nozzle cant, valve latency, and sensor seed, then calls the same native-SIL
+  flight runner used by the Phase-8 keystone.
+- `config/sim.yaml:data.phase14.target_runs` is the production gate target and remains
+  `1000`. `ROCKETSIM_MC_RUNS=<N> make montecarlo` is only a local smoke/pilot override;
+  the Phase-14 summary keeps `gate_complete=false` until the configured target and
+  percentile-stability criteria are both satisfied.
+- Phase-14 outputs are distributions and plots for landing speed, touchdown tilt, lateral
+  error, and CO2 remaining. They are data for engineering judgment, not pass/fail
+  verdicts.

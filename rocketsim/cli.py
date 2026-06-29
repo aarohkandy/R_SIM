@@ -9,7 +9,7 @@ from pathlib import Path
 from rocketsim.control import run_renode_hil_status
 from rocketsim.gui import serve_gui
 from rocketsim.sim.flight import run_native_sil_e2e
-from rocketsim.validation import run_phase13_convergence
+from rocketsim.validation import run_phase13_convergence, run_phase14_monte_carlo
 
 PHASE_COMMANDS = {
     "e2e": "Phase 8",
@@ -57,6 +57,16 @@ def main(argv: Sequence[str] | None = None) -> int:
             "phase13 "
             f"rows={convergence_result.summary['convergence_rows']} "
             f"rocketpy={convergence_result.summary['rocketpy_status']}"
+        )
+        return 0
+    if args.command == "montecarlo":
+        monte_carlo_result = run_phase14_monte_carlo(repo_root=Path(args.repo_root))
+        print(monte_carlo_result.manifest_json)
+        print(
+            "phase14 "
+            f"runs={monte_carlo_result.summary['runs_completed']} "
+            f"gate_complete={monte_carlo_result.summary['gate_complete']} "
+            f"stability={monte_carlo_result.summary['stability']['status']}"
         )
         return 0
     phase = PHASE_COMMANDS[args.command]

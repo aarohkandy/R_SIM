@@ -16,6 +16,7 @@ from rocketsim.control import NativeSILBackend
 from rocketsim.dynamics import (
     DynamicsPlant,
     RigidBodyState,
+    rotate_body_to_inertial,
     rotate_inertial_to_body,
     trajectory_hash,
 )
@@ -177,6 +178,10 @@ def run_native_sil_e2e(
         "touchdown_speed_m_s": float(np.linalg.norm(state.velocity_m_s)),
         "touchdown_vertical_speed_m_s": float(state.velocity_m_s[2]),
         "touchdown_altitude_m": float(state.position_m[2]),
+        "touchdown_x_m": float(state.position_m[0]),
+        "touchdown_y_m": float(state.position_m[1]),
+        "touchdown_lateral_error_m": float(np.linalg.norm(state.position_m[:2])),
+        "touchdown_tilt_deg": _tilt_from_vertical_deg(state.attitude_quat),
         "max_altitude_m": max_altitude_m,
         "max_dynamic_pressure_pa": max_dynamic_pressure_pa,
         "rail_exit_time_s": rail_exit_time_s,
@@ -402,6 +407,13 @@ def _angle_of_attack_rad(state: RigidBodyState) -> float:
     transverse = float(np.linalg.norm(velocity_body[:2]))
     axial = abs(float(velocity_body[2]))
     return float(np.arctan2(transverse, max(axial, 1.0e-12)))
+
+
+def _tilt_from_vertical_deg(quaternion: np.ndarray) -> float:
+    body_axis = rotate_body_to_inertial(quaternion, np.asarray((0.0, 0.0, 1.0)))
+    axis_norm = max(float(np.linalg.norm(body_axis)), 1.0e-12)
+    cos_tilt = np.clip(float(body_axis[2]) / axis_norm, -1.0, 1.0)
+    return float(np.degrees(np.arccos(cos_tilt)))
 
 
 def _input_hashes(root: Path) -> dict[str, str]:
