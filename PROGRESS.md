@@ -25,3 +25,11 @@
 - Placeholder BOM values remain assumptions; replace them with measured vehicle data
   before treating outputs as engineering evidence.
 - Next: Phase 2 environment model.
+
+## 2026-06-29 — Phase 2 environment
+
+- Implemented data-driven ISA atmosphere, deterministic wind with altitude shear and
+  1-cosine gusts, and launch rail constraint/exit-speed reporting.
+- Added unit, property-based, regression/golden, and integration tests for Phase 2.
+- Verification passed: `make lint`, `make typecheck`, and `make test` (`39 passed`).
+- Next: Phase 3 aerodynamics.

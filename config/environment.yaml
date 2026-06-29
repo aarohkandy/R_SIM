@@ -7,8 +7,23 @@ units:
   angle: deg
   speed: m/s
 data:
-  atmosphere: ISA
-  wind_enabled: false
-  launch_rail_length_m: 1.0
-  launch_rail_angle_deg: 90.0
-  minimum_rail_exit_speed_mps: 10.0
+  atmosphere:
+    kind: ISA
+    sea_level_temperature_k: 288.15
+    sea_level_pressure_pa: 101325.0
+    sea_level_density_kg_m3: 1.225
+    lapse_rate_k_per_m: -0.0065
+    tropopause_altitude_m: 11000.0
+    gravity_m_s2: 9.80665
+    gas_constant_air_j_kg_k: 287.05287
+    heat_capacity_ratio: 1.4
+  wind:
+    enabled: false
+    steady_m_s: [0.0, 0.0, 0.0]
+    shear_reference_altitude_m: 10.0
+    shear_exponent: 0.14
+    gusts: []
+  launch_rail:
+    length_m: 1.0
+    angle_from_vertical_deg: 0.0
+    minimum_exit_speed_mps: 10.0
