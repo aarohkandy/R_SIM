@@ -9,3 +9,8 @@
 - Stubs/placeholders are documented in `ASSUMPTIONS.md`.
 - Next: start the long `/goal` run using `GOAL_PROMPT.md`; do not implement later
   phases outside the goal contract.
+
+## 2026-06-29 — Invariant update
+
+- Added non-negotiable invariants to `SPEC.md`, `AGENTS.md`, and `GOAL_PROMPT.md`.
+- Added `docs/modules/` notes as required reading before phase work.

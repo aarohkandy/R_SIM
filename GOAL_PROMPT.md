@@ -25,7 +25,9 @@ against the plant for ≥1 full flight OR PROGRESS.md documents the exact board-
 blocker and what remains. Treat ALL physics outputs (landing speed, tilt, CO2 remaining,
 temps, stresses) as DATA to log and plot — never pass/fail asserts; there is no "the
 rocket passed," only the numbers. Keep making visible progress (frequent green commits,
-current PROGRESS.md). Stop and report only if blocked with no defensible path. Read
+current PROGRESS.md). Enforce SPEC.md §0.1 invariants on every phase, regardless of
+which file is open. Before building each phase, read SPEC.md and the relevant
+docs/modules/*.md. Stop and report only if blocked with no defensible path. Read
 SPEC.md §8 guardrails before coding.
 ```
 

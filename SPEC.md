@@ -36,6 +36,34 @@
 > Phase 0 — they're required for Phases 11–12; document the `brew install` commands now so
 > the later phases can attempt them and stub/log if absent (per §1 iteration policy).
 
+## 0.1 NON-NEGOTIABLE INVARIANTS (apply on EVERY phase)
+
+These rules apply regardless of which file is open:
+
+- **Physics fidelity:** real-gas CO2 via CoolProp (NEVER ideal gas); aero CP/Cd computed
+  live as f(Mach, leg-deploy angle, depletion) — OpenRocket is a comparison anchor, never
+  the runtime source; fixed-step RK4 + zero-order-hold on valve states (NEVER adaptive
+  `solve_ivp`); cold gas is bang-bang through fixed nozzles (no continuous throttle);
+  structural FEA is event-triggered on logged load cases (NEVER coupled into the flight loop).
+- **Architecture:** the `ControllerBackend` seam stays swappable (SIL ↔ Renode); the plant
+  never imports controller internals.
+- **Rigor over speed:** time and compute are NOT constraints — always prefer slow,
+  convergent, exhaustively-tested correctness; never trade accuracy for runtime. Every
+  module gets unit + property-based (`hypothesis`) + golden/regression + integration tests
+  before its gate passes. Conservation, convergence, cross-validation, ≥1000-run Monte
+  Carlo, and sensitivity are first-class phases, not extras.
+- **Keystone:** once the Phase-8 end-to-end SIL flight is green, run the FULL suite before
+  every commit; no later phase may regress it. Commit only green; push to main after each
+  green gate; keep `PROGRESS.md` current.
+- **Determinism is sacred:** thread the master seed everywhere (including parallel Monte
+  Carlo via `SeedSequence.spawn`); same seed ⇒ identical telemetry hash.
+- **Physics outputs are DATA, never pass/fail:** report numbers + plots; asserts are for
+  code/conservation/convergence/determinism only — never on flight outcomes.
+- **No silent stubbing / no gold-plating:** every placeholder gets a `PROGRESS.md` +
+  `ASSUMPTIONS.md` entry; reach each phase's test bar, commit, move on (heavy compute lives
+  in phases 13–17); never fake completion.
+- Read `SPEC.md` and the relevant `docs/modules/*.md` before building each phase.
+
 ---
 
 ## 1. THE GOAL CONTRACT (paste this after `/goal`)
@@ -62,7 +90,9 @@ against the plant for ≥1 full flight OR PROGRESS.md documents the exact board-
 blocker and what remains. Treat ALL physics outputs (landing speed, tilt, CO2 remaining,
 temps, stresses) as DATA to log and plot — never pass/fail asserts; there is no "the
 rocket passed," only the numbers. Keep making visible progress (frequent green commits,
-current PROGRESS.md). Stop and report only if blocked with no defensible path. Read
+current PROGRESS.md). Enforce SPEC.md §0.1 invariants on every phase, regardless of
+which file is open. Before building each phase, read SPEC.md and the relevant
+docs/modules/*.md. Stop and report only if blocked with no defensible path. Read
 SPEC.md §8 guardrails before coding.
 ```
 
