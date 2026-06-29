@@ -14,3 +14,14 @@
 
 - Added non-negotiable invariants to `SPEC.md`, `AGENTS.md`, and `GOAL_PROMPT.md`.
 - Added `docs/modules/` notes as required reading before phase work.
+
+## 2026-06-29 — Phase 1 mass properties
+
+- Implemented config-driven vehicle mass properties: parts-to-CG, full inertia tensor
+  about the instantaneous CG, propellant/CO2 depletion profiles, propellant position
+  profiles, and continuous deployable-leg kinematics.
+- Added unit, property-based, regression/golden, and integration tests for Phase 1.
+- Verification passed: `make lint`, `make typecheck`, and `make test` (`30 passed`).
+- Placeholder BOM values remain assumptions; replace them with measured vehicle data
+  before treating outputs as engineering evidence.
+- Next: Phase 2 environment model.

@@ -1,6 +1,6 @@
 schema_version: 1
 name: bom_placeholder
-description: Placeholder BOM for Phase-0 schema and path checks only.
+description: Placeholder BOM for Phase-1 mass-property checks only.
 placeholder: true
 parts:
   - id: body_tube
@@ -8,13 +8,81 @@ parts:
     mass_kg: 0.08
     position_m: [0.0, 0.0, 0.0]
     state_tag: fixed
-  - id: co2_cartridge
+    inertia_kg_m2:
+      - [0.00020, 0.0, 0.0]
+      - [0.0, 0.00020, 0.0]
+      - [0.0, 0.0, 0.00004]
+  - id: avionics
+    material: electronics
+    mass_kg: 0.05
+    position_m: [0.0, 0.0, 0.045]
+    state_tag: fixed
+  - id: motor_propellant_placeholder
+    material: composite_propellant
+    mass_kg: 0.025
+    position_m: [0.0, 0.0, -0.075]
+    state_tag: propellant
+    depletion:
+      points:
+        - {time_s: 0.0, remaining_fraction: 1.0}
+        - {time_s: 1.2, remaining_fraction: 0.0}
+    position_profile:
+      points:
+        - {time_s: 0.0, position_m: [0.0, 0.0, -0.075]}
+        - {time_s: 1.2, position_m: [0.0, 0.0, -0.045]}
+  - id: co2_cartridge_shell
     material: steel
-    mass_kg: 0.18
+    mass_kg: 0.092
+    position_m: [0.0, 0.0, 0.07]
+    state_tag: fixed
+  - id: co2_fluid_placeholder
+    material: carbon_dioxide
+    mass_kg: 0.088
     position_m: [0.0, 0.0, 0.07]
     state_tag: CO2
+    depletion:
+      points:
+        - {time_s: 0.0, remaining_fraction: 1.0}
+        - {time_s: 15.0, remaining_fraction: 0.20}
   - id: leg_placeholder_1
     material: petg
     mass_kg: 0.03
-    position_m: [0.03, 0.0, -0.08]
+    position_m: [0.0, 0.0, -0.10]
     state_tag: deployable-leg
+    deployable_leg:
+      hinge_position_m: [0.0315, 0.0, -0.06]
+      axial_unit: [0.0, 0.0, -1.0]
+      radial_unit: [1.0, 0.0, 0.0]
+      length_m: 0.12
+      stowed_angle_deg: 5.0
+      deployed_angle_deg: 75.0
+      deploy_start_s: 2.0
+      deploy_duration_s: 0.5
+  - id: leg_placeholder_2
+    material: petg
+    mass_kg: 0.03
+    position_m: [0.0, 0.0, -0.10]
+    state_tag: deployable-leg
+    deployable_leg:
+      hinge_position_m: [-0.01575, 0.0272798002, -0.06]
+      axial_unit: [0.0, 0.0, -1.0]
+      radial_unit: [-0.5, 0.8660254038, 0.0]
+      length_m: 0.12
+      stowed_angle_deg: 5.0
+      deployed_angle_deg: 75.0
+      deploy_start_s: 2.0
+      deploy_duration_s: 0.5
+  - id: leg_placeholder_3
+    material: petg
+    mass_kg: 0.03
+    position_m: [0.0, 0.0, -0.10]
+    state_tag: deployable-leg
+    deployable_leg:
+      hinge_position_m: [-0.01575, -0.0272798002, -0.06]
+      axial_unit: [0.0, 0.0, -1.0]
+      radial_unit: [-0.5, -0.8660254038, 0.0]
+      length_m: 0.12
+      stowed_angle_deg: 5.0
+      deployed_angle_deg: 75.0
+      deploy_start_s: 2.0
+      deploy_duration_s: 0.5

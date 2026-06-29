@@ -13,3 +13,9 @@ materials:
     heat_deflection_temperature_deg_c: 180
   steel:
     heat_deflection_temperature_deg_c: 400
+  electronics:
+    heat_deflection_temperature_deg_c: 85
+  composite_propellant:
+    heat_deflection_temperature_deg_c: 120
+  carbon_dioxide:
+    heat_deflection_temperature_deg_c: -56
