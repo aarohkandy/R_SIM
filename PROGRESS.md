@@ -44,3 +44,8 @@
 - Added unit, property-based, regression/golden, and vehicle-integration tests for Phase 3.
 - Verification passed: `make lint`, `make typecheck`, and `make test` (`52 passed`).
 - Next: Phase 4 solid motor parsing and mass-flow coupling.
+
+## 2026-06-29 — Ambition note
+
+- Added durable module notes for future CFD validation/refinement and reiterated that
+  Renode HIL/emulator work remains a core deliverable, not optional polish.

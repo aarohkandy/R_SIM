@@ -10,6 +10,9 @@ treat it as the source of truth for scope, architecture, verification, and guard
   states, bang-bang fixed nozzles, event-triggered FEA only, swappable `ControllerBackend`,
   rigorous tests over speed, sacred determinism, physics outputs as data only, no silent
   stubs, and no gold-plating early phases.
+- Keep the project ambitious: Renode ESP32 + Teensy HIL, Backend A/B cross-checks, and
+  offline CFD validation/refinement are expected major capabilities as the phases mature.
+  Do not shrink the final simulation into a small toy because early phases are simpler.
 - Work phases in `SPEC.md` section 4, in order.
 - Before building each phase, read `SPEC.md` and the relevant `docs/modules/*.md`.
 - Do not start a later phase until the prior phase gate is green, or a specific blocker

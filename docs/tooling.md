@@ -12,6 +12,9 @@ brew install ffmpeg
 # Structural/mesh tooling for Phase 11
 brew install calculix gmsh
 
+# Optional high-fidelity CFD validation/refinement
+brew install openfoam
+
 # Renode HIL co-simulation for Phase 12
 brew install --cask renode
 ```

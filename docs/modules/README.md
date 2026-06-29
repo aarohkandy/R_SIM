@@ -24,3 +24,4 @@ invariants visible when working in a specific subsystem.
 | 15 | `sim.md`, `io.md` |
 | 16 | `control.md`, `renode.md`, `sim.md`, `io.md` |
 | 17 | `sim.md`, `control.md`, `io.md` |
+| high-fidelity aero expansion | `aero.md`, `cfd.md`, `io.md` |
