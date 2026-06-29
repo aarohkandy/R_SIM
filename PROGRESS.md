@@ -33,3 +33,14 @@
 - Added unit, property-based, regression/golden, and integration tests for Phase 2.
 - Verification passed: `make lint`, `make typecheck`, and `make test` (`39 passed`).
 - Next: Phase 3 aerodynamics.
+
+## 2026-06-29 — Phase 3 aerodynamics
+
+- Implemented live component build-up aero: CP, Cd, normal-force slope, static margin,
+  leg-angle dependence, Mach dependence, depletion-state drag term, and a swing-test
+  restoring metric.
+- Added OpenRocket CSV anchor ingestion and comparison reporting; anchors remain
+  validation inputs only, never the runtime aero source.
+- Added unit, property-based, regression/golden, and vehicle-integration tests for Phase 3.
+- Verification passed: `make lint`, `make typecheck`, and `make test` (`52 passed`).
+- Next: Phase 4 solid motor parsing and mass-flow coupling.

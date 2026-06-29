@@ -1,0 +1,23 @@
+{
+  "stowed_low_mach": {
+    "cp_axial_m": -0.02,
+    "cd": 0.37633154761904763,
+    "normal_force_slope_per_rad": 2.0,
+    "static_margin_calibers": 0.31746031746031744,
+    "reference_area_m2": 0.0031172453105244723
+  },
+  "mid_deploy": {
+    "cp_axial_m": -0.045328569005712485,
+    "cd": 2.0423690290930896,
+    "normal_force_slope_per_rad": 2.678400525299968,
+    "static_margin_calibers": 0.8782312540589283,
+    "reference_area_m2": 0.0031172453105244723
+  },
+  "deployed_depleted": {
+    "cp_axial_m": -0.05912721211763547,
+    "cd": 3.507937895159923,
+    "normal_force_slope_per_rad": 3.2855403367839187,
+    "static_margin_calibers": 1.5734478113910393,
+    "reference_area_m2": 0.0031172453105244723
+  }
+}

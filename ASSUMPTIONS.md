@@ -7,7 +7,7 @@ dependent model is treated as real engineering data.
 | --- | --- | --- | --- |
 | A-0001 | Inputs | Real motor `.eng`/`.rse` data is not present yet; `inputs/motor_D21_placeholder.eng` is a labeled placeholder. | Replace with measured or vendor motor data in `inputs/`, then update `config/motor.yaml`. |
 | A-0002 | Inputs | Real vehicle BOM/mass/material data is not present yet; placeholder YAML files exercise mass, depletion, and deployable-leg behavior only. | Replace with measured BOM and material properties. |
-| A-0003 | Inputs | OpenRocket frozen-configuration exports are not present yet. | Add exported CP/Cd anchors under `inputs/openrocket/` and update `config/aero.yaml`. |
+| A-0003 | Inputs | Real OpenRocket frozen-configuration exports are not present yet; `inputs/openrocket/frozen_placeholder.csv` is a labeled comparison placeholder. | Add exported CP/Cd anchors under `inputs/openrocket/` and update `config/aero.yaml`. |
 | A-0004 | Firmware | Real ESP32 and Teensy firmware ELFs are not present yet. | Add firmware sources/ELFs under `firmware/` before Phase 12. |
 | A-0005 | Tooling | Renode, CalculiX/Gmsh, and ffmpeg are not required for Phase 0 and may be absent locally. | Later phases should attempt documented installs or stub/log blockers per `SPEC.md`. |
 | A-0006 | Commands | `make e2e`, `make converge`, `make montecarlo`, `make sensitivity`, and `make soak` are exposed but intentionally fail until their phases implement them. | Replace command stubs during Phases 8, 13, 14, 15, and 17. |

@@ -6,7 +6,24 @@ units:
   length: m
   angle: deg
 data:
-  body_diameter_m: 0.063
-  leg_deploy_angle_deg: 75.0
-  openrocket_anchor_dir: inputs/openrocket
+  geometry:
+    body_diameter_m: 0.063
+    body_length_m: 0.2
+    body_cp_axial_m: -0.02
+    leg_count: 3
+    leg_reference_area_m2: 0.003
+    leg_cp_axial_m: -0.12
+  coefficients:
+    body_normal_force_slope_per_rad: 2.0
+    leg_normal_force_slope_per_rad_each: 0.45
+    skin_friction_coefficient: 0.006
+    pressure_drag_coefficient: 0.12
+    base_drag_coefficient: 0.18
+    leg_drag_coefficient: 1.15
+    mach_drag_rise_factor: 0.15
+    depletion_drag_gain: 0.02
+  comparison:
+    openrocket_anchor_dir: inputs/openrocket
+    cp_tolerance_m: 0.015
+    cd_tolerance: 0.08
   notes: OpenRocket files are comparison anchors only, not runtime sources.
