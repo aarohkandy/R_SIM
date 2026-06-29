@@ -134,3 +134,28 @@
 - Keystone note: the Phase-8 native-SIL end-to-end flight is now green and must stay green
   before every later commit.
 - Next: Phase 9 full telemetry bundle, plots, and 3D animation with nozzle-plume activity.
+
+## 2026-06-29 — Phase 9 data bundle and animation
+
+- Implemented the full Phase 9 data bundle writer. End-to-end SIL runs now emit
+  `telemetry.csv`, `telemetry.parquet`, `landing_summary.json`, `landing_summary.csv`,
+  `run_manifest.json`, six plot artifacts, `flight_animation.gif`, and
+  `flight_animation.html`.
+- Expanded telemetry to include acceleration, Euler attitude, AoA, mass properties,
+  static margin, dynamic pressure, CG/inertia, per-nozzle thrust and mass flow, CO2
+  liquid/vapor mass, tank pressure, cartridge temperature, valve states, controller
+  internals, and sensor truth-vs-measurement channels.
+- The animation uses the logged trajectory, attitude, and valve telemetry to show vehicle
+  motion and nozzle-plume activity. Artifact sanity checks confirmed nonblank plots and an
+  89-frame GIF.
+- Gate evidence: `make e2e` reached touchdown and wrote
+  `outputs/phase8_sil_seed20260629` (`telemetry_rows=9311`,
+  `touchdown_time_s=9.311000000000279`, `max_altitude_m=75.68170089676178`,
+  `touchdown_speed_m_s=18.33037340639612`, `co2_remaining_kg=0.08082796322160615`,
+  all reported as DATA).
+- Verification passed: `make lint`, `make typecheck`, `make test` (`107 passed`), and
+  `make e2e`.
+- MP4 export is deferred because `ffmpeg` is not installed locally; the run manifest and
+  `ASSUMPTIONS.md` record this explicitly. Thermal plots and FEA summaries remain deferred
+  to Phases 10 and 11.
+- Next: Phase 10 lumped-node thermal network on the logged flight.

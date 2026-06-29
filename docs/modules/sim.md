@@ -13,5 +13,6 @@
 - The launch rail is explicitly constrained until rail exit. After rail exit, the plant is
   unconstrained and the controller acts through the same cold-gas valve path future Renode
   HIL will drive.
-- The Phase 8 bundle is partial: `telemetry.csv`, `landing_summary.json`, and
-  `run_manifest.json`. Phase 9 expands this into plots and animation.
+- Phase 9 expands the bundle to include CSV and Parquet telemetry, JSON and CSV landing
+  summaries, plot artifacts, animated GIF plus interactive HTML animation, and a manifest
+  that records produced and deferred artifacts.

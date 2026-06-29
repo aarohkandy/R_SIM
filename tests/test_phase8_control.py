@@ -108,18 +108,28 @@ def test_native_sil_backend_respects_latency_before_valves_open() -> None:
     assert backend.telemetry()["collective_duty"] > 0.0
 
 
-def test_phase8_e2e_native_sil_writes_partial_bundle(tmp_path: Path) -> None:
+def test_phase8_e2e_native_sil_writes_full_phase9_bundle(tmp_path: Path) -> None:
     result = run_native_sil_e2e(repo_root=ROOT, output_root=tmp_path)
 
     assert result.summary["touchdown"] is True
     assert result.telemetry_csv.exists()
+    assert result.telemetry_parquet.exists()
     assert result.landing_summary_json.exists()
+    assert result.landing_summary_csv.exists()
     assert result.run_manifest_json.exists()
+    assert result.animation_gif.exists()
+    assert result.animation_html.exists()
+    assert len(result.plot_paths) >= 6
+    assert all(path.exists() and path.stat().st_size > 0 for path in result.plot_paths)
     assert result.summary["telemetry_rows"] > 1000
     manifest = json.loads(result.run_manifest_json.read_text(encoding="utf-8"))
     assert manifest["backend"] == "sil"
     assert manifest["telemetry_hash"] == result.telemetry_hash
     assert len(manifest["state_hash"]) == 64
+    assert manifest["artifacts"]["telemetry_parquet"] == "telemetry.parquet"
+    assert "animation_gif" in manifest["artifacts"]
+    assert "animation_html" in manifest["artifacts"]
+    assert "deferred_artifacts" in manifest
 
 
 def test_invalid_actuation_fault_index_rejected() -> None:
