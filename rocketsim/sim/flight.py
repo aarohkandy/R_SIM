@@ -63,17 +63,21 @@ class SILRunResult:
 def run_native_sil_e2e(
     repo_root: Path | str = Path("."),
     output_root: Path | str | None = None,
+    sim_config_override: SimConfig | None = None,
+    run_id_override: str | None = None,
 ) -> SILRunResult:
     """Run the Phase-8 native-SIL rail-to-touchdown simulation."""
 
     root = Path(repo_root).resolve()
-    sim_config = load_sim_config(root / "config" / "sim.yaml")
+    sim_config = sim_config_override or load_sim_config(root / "config" / "sim.yaml")
     output_base = (
         Path(output_root) if output_root is not None else root / sim_config.data.e2e.output_root
     )
     if not output_base.is_absolute():
         output_base = root / output_base
-    run_id = f"{sim_config.data.e2e.run_id_prefix}_seed{sim_config.data.master_seed}"
+    run_id = run_id_override or (
+        f"{sim_config.data.e2e.run_id_prefix}_seed{sim_config.data.master_seed}"
+    )
     output_dir = output_base / run_id
     output_dir.mkdir(parents=True, exist_ok=True)
 

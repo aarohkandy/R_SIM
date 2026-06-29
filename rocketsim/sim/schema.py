@@ -56,6 +56,34 @@ class E2ESettings(BaseModel):
         return value
 
 
+class Phase13Settings(BaseModel):
+    """Convergence and cross-validation study settings."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    output_dir: str = Field(min_length=1)
+    integrator_dt_values_s: tuple[float, ...] = Field(min_length=2)
+    renode_sync_quantum_values_s: tuple[float, ...] = Field(min_length=2)
+    landing_metric_relative_tolerance: float = Field(gt=0.0)
+    landing_metric_absolute_tolerance: float = Field(ge=0.0)
+    ballistic_validation_duration_s: float = Field(gt=0.0)
+    rocketpy_reference_required: bool
+
+    @field_validator("integrator_dt_values_s", "renode_sync_quantum_values_s")
+    @classmethod
+    def values_must_be_positive_and_strictly_decreasing(
+        cls,
+        value: tuple[float, ...],
+    ) -> tuple[float, ...]:
+        if any(item <= 0.0 for item in value):
+            msg = "phase 13 timestep values must be positive"
+            raise ValueError(msg)
+        if any(right >= left for left, right in zip(value, value[1:], strict=False)):
+            msg = "phase 13 timestep values must be strictly decreasing"
+            raise ValueError(msg)
+        return value
+
+
 class SimData(BaseModel):
     """Validated payload under config/sim.yaml:data."""
 
@@ -66,6 +94,7 @@ class SimData(BaseModel):
     renode_sync_quantum_s: float = Field(gt=0.0)
     end_condition: Literal["touchdown"]
     e2e: E2ESettings
+    phase13: Phase13Settings
     dynamics: DynamicsSettings
 
 

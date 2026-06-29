@@ -286,3 +286,29 @@
   `make test` (`132 passed`).
 - Next: commit/push, then proceed to Phase 13 convergence and cross-validation while
   keeping the Backend-B blocker report visible.
+
+## 2026-06-29 — Phase 13 convergence + cross-validation
+
+- Added strict Phase-13 settings to `config/sim.yaml`: integrator timestep ladder,
+  matching Renode sync quantum ladder, output directory, landing-metric tolerances,
+  ballistic validation duration, and RocketPy requirement flag.
+- Added `rocketsim.validation.phase13` and wired `make converge` / `rocketsim converge`.
+  The runner reuses the native-SIL plant with explicit timing overrides, writes a
+  convergence table, convergence plot, OpenRocket comparison CSV, cross-validation JSON,
+  and Phase-13 manifest under `outputs/phase13_convergence/`.
+- Gate evidence: `make converge` ran three full SIL flights at dt/quantum
+  `0.002`, `0.001`, and `0.0005` seconds. Against the finest run, the largest reported
+  touchdown-speed delta was `0.0037717697974422038 m/s`; the largest touchdown-time delta
+  was `0.0010000000003920206 s`. These are convergence DATA, not physics verdicts.
+- Cross-validation evidence: analytic no-thrust ballistic position error norm was
+  `7.835405111758318e-13 m`, velocity error norm was
+  `1.5845103007450234e-12 m/s`, and the configured OpenRocket frozen anchors were all
+  within tolerance.
+- RocketPy is not installed locally, so RocketPy passive-ascent comparison is documented
+  as `unavailable_documented` in `cross_validation.json` and `ASSUMPTIONS.md`; no
+  RocketPy match is claimed.
+- Added unit/integration tests for Phase-13 config, convergence delta reporting,
+  artifact writing, ballistic cross-validation, and CLI dispatch.
+- Verification passed: `make converge`, `make lint`, `make typecheck`, and `make test`
+  (`138 passed`).
+- Next: commit/push, then proceed to Phase 14 Monte Carlo at scale.

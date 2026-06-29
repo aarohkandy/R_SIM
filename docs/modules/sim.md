@@ -24,3 +24,9 @@
   uncoupled from FEA.
 - The localhost GUI command reads the finished bundle from disk; it does not alter the
   simulation or become a second source of truth.
+- Phase 13 uses the same native-SIL runner with explicit `SimConfig` timing overrides to
+  run a configured timestep/Renode-quantum refinement ladder. It writes convergence
+  tables, a convergence plot, analytic ballistic cross-validation, OpenRocket-anchor aero
+  cross-validation, and a manifest under `outputs/phase13_convergence/`.
+- RocketPy passive-ascent cross-validation is reported as unavailable when RocketPy is
+  not installed; the code must not fabricate a comparison.

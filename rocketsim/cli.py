@@ -9,6 +9,7 @@ from pathlib import Path
 from rocketsim.control import run_renode_hil_status
 from rocketsim.gui import serve_gui
 from rocketsim.sim.flight import run_native_sil_e2e
+from rocketsim.validation import run_phase13_convergence
 
 PHASE_COMMANDS = {
     "e2e": "Phase 8",
@@ -48,6 +49,15 @@ def main(argv: Sequence[str] | None = None) -> int:
         hil_result = run_renode_hil_status(repo_root=Path(args.repo_root))
         print(hil_result.status_json)
         print(f"status={hil_result.report.status} blockers={len(hil_result.report.blockers)}")
+        return 0
+    if args.command == "converge":
+        convergence_result = run_phase13_convergence(repo_root=Path(args.repo_root))
+        print(convergence_result.manifest_json)
+        print(
+            "phase13 "
+            f"rows={convergence_result.summary['convergence_rows']} "
+            f"rocketpy={convergence_result.summary['rocketpy_status']}"
+        )
         return 0
     phase = PHASE_COMMANDS[args.command]
     parser.exit(

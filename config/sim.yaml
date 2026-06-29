@@ -19,6 +19,14 @@ data:
     initial_attitude_quat: [1.0, 0.0, 0.0, 0.0]
     initial_angular_velocity_rad_s: [0.0, 0.0, 0.0]
     rail_exit_latch_margin_m: 0.001
+  phase13:
+    output_dir: outputs/phase13_convergence
+    integrator_dt_values_s: [0.002, 0.001, 0.0005]
+    renode_sync_quantum_values_s: [0.002, 0.001, 0.0005]
+    landing_metric_relative_tolerance: 0.05
+    landing_metric_absolute_tolerance: 0.05
+    ballistic_validation_duration_s: 1.0
+    rocketpy_reference_required: false
   dynamics:
     minimum_aero_speed_m_s: 0.05
     angular_damping_n_m_s: 0.0
