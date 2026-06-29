@@ -4,9 +4,36 @@ description: Placeholder IMU and barometer sensor configuration.
 placeholder: true
 units:
   frequency: Hz
+  acceleration: m/s^2
+  angular_rate: rad/s
+  pressure: Pa
 data:
-  imu_sample_rate_hz: 500
-  barometer_sample_rate_hz: 100
   noise_enabled: true
-  tof_rangefinder_enabled: false
-  pressure_transducer_enabled: false
+  imu:
+    sample_rate_hz: 500.0
+    accel_noise_density_m_s2_per_sqrt_hz: 0.004
+    gyro_noise_density_rad_s_per_sqrt_hz: 0.00015
+    accel_bias_initial_m_s2: [0.015, -0.010, 0.020]
+    gyro_bias_initial_rad_s: [0.0004, -0.0002, 0.0003]
+    accel_bias_random_walk_m_s2_per_sqrt_s: 0.0005
+    gyro_bias_random_walk_rad_s_per_sqrt_s: 0.00002
+    accel_scale_factor: [1.001, 0.999, 1.0005]
+    gyro_scale_factor: [1.0002, 0.9998, 1.0001]
+    misalignment_matrix:
+      - [1.0, 0.0008, -0.0004]
+      - [-0.0006, 1.0, 0.0005]
+      - [0.0003, -0.0007, 1.0]
+    accel_saturation_m_s2: 156.9064
+    gyro_saturation_rad_s: 34.906585
+  barometer:
+    sample_rate_hz: 100.0
+    pressure_noise_density_pa_per_sqrt_hz: 0.12
+    pressure_bias_initial_pa: 0.5
+    pressure_bias_random_walk_pa_per_sqrt_s: 0.02
+    lag_time_constant_s: 0.05
+    pressure_min_pa: 30000.0
+    pressure_max_pa: 110000.0
+  tof_rangefinder:
+    enabled: false
+  pressure_transducer:
+    enabled: false

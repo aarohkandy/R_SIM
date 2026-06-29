@@ -90,3 +90,22 @@
   damping, and application-point data before treating trajectory outputs as engineering
   evidence.
 - Next: Phase 7 sensor models with noise on from the start.
+
+## 2026-06-29 — Phase 7 sensors
+
+- Implemented deterministic IMU and barometer sensor models with strict `config/sensors.yaml`
+  validation, explicit sample clocks, seeded noise streams, truth-vs-measurement telemetry,
+  and disabled ToF/pressure-transducer stubs behind the packet interface.
+- IMU model now includes white noise density, fixed bias, bias random walk, per-axis scale
+  factors, 3x3 misalignment, saturation, and body-frame specific-force truth from dynamics.
+- Barometer model now includes white pressure noise density, pressure bias, bias random
+  walk, first-order lag, pressure clamping, and pressure-to-altitude conversion using the
+  configured ISA atmosphere.
+- Added unit, property-based, regression/golden, noise-statistics, determinism, scheduler,
+  and Phase-6 dynamics integration tests for Phase 7.
+- Verification passed: `make lint`, `make typecheck`, and `make test` (`98 passed`).
+- Sensor calibration/noise values remain placeholders; replace them with device datasheets,
+  Allan-variance logs, and bench calibration before treating controller-facing measurements
+  as engineering evidence.
+- Next: Phase 8 controller interface and native SIL backend, with the first rail-to-touchdown
+  end-to-end flight as the keystone.
