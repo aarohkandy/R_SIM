@@ -9,4 +9,10 @@ data:
   open_latency_s: 0.01
   close_latency_s: 0.01
   min_reliable_pulse_s: 0.02
-  fault_injection_enabled: false
+  allocation:
+    collective_gain: 1.0
+    torque_gain: 1.0
+  fault_injection:
+    enabled: false
+    stuck_open: []
+    stuck_closed: []

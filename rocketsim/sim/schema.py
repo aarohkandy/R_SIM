@@ -10,6 +10,7 @@ import yaml
 from pydantic import BaseModel, ConfigDict, Field, PositiveInt, field_validator
 
 Vector3 = tuple[float, float, float]
+Quaternion = tuple[float, float, float, float]
 
 
 class DynamicsSettings(BaseModel):
@@ -31,6 +32,30 @@ class DynamicsSettings(BaseModel):
         return value
 
 
+class E2ESettings(BaseModel):
+    """End-to-end SIL flight-run settings."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    output_root: str = Field(min_length=1)
+    run_id_prefix: str = Field(min_length=1)
+    max_time_s: float = Field(gt=0.0)
+    touchdown_altitude_m: float
+    initial_position_m: Vector3
+    initial_velocity_m_s: Vector3
+    initial_attitude_quat: Quaternion
+    initial_angular_velocity_rad_s: Vector3
+    rail_exit_latch_margin_m: float = Field(ge=0.0)
+
+    @field_validator("initial_attitude_quat")
+    @classmethod
+    def initial_attitude_must_be_nonzero(cls, value: Quaternion) -> Quaternion:
+        if np.linalg.norm(np.asarray(value, dtype=np.float64)) <= 0.0:
+            msg = "initial attitude quaternion must be non-zero"
+            raise ValueError(msg)
+        return value
+
+
 class SimData(BaseModel):
     """Validated payload under config/sim.yaml:data."""
 
@@ -40,6 +65,7 @@ class SimData(BaseModel):
     integrator_dt_s: float = Field(gt=0.0)
     renode_sync_quantum_s: float = Field(gt=0.0)
     end_condition: Literal["touchdown"]
+    e2e: E2ESettings
     dynamics: DynamicsSettings
 
 

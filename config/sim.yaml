@@ -9,6 +9,16 @@ data:
   integrator_dt_s: 0.001
   renode_sync_quantum_s: 0.001
   end_condition: touchdown
+  e2e:
+    output_root: outputs
+    run_id_prefix: phase8_sil
+    max_time_s: 20.0
+    touchdown_altitude_m: 0.0
+    initial_position_m: [0.0, 0.0, 0.0]
+    initial_velocity_m_s: [0.0, 0.0, 0.0]
+    initial_attitude_quat: [1.0, 0.0, 0.0, 0.0]
+    initial_angular_velocity_rad_s: [0.0, 0.0, 0.0]
+    rail_exit_latch_margin_m: 0.001
   dynamics:
     minimum_aero_speed_m_s: 0.05
     angular_damping_n_m_s: 0.0

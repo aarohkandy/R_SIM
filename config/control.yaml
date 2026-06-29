@@ -5,9 +5,22 @@ placeholder: true
 units:
   frequency: Hz
   time: s
+  speed: m/s
+  length: m
 data:
   backend: sil
-  loop_rate_hz: 100
+  loop_rate_hz: 100.0
   latency_s: 0.005
   jitter_s: 0.001
   control_law: pd
+  sil:
+    control_start_time_s: 1.3
+    landing_burn_altitude_m: 45.0
+    target_descent_rate_m_s: -2.0
+    descent_rate_kp: 0.08
+    altitude_kp: 0.01
+    attitude_accel_kp: 0.015
+    angular_rate_kd: 0.08
+    max_collective_duty: 1.0
+    max_torque_duty: 0.6
+    pwm_frequency_hz: 25.0

@@ -109,3 +109,28 @@
   as engineering evidence.
 - Next: Phase 8 controller interface and native SIL backend, with the first rail-to-touchdown
   end-to-end flight as the keystone.
+
+## 2026-06-29 — Phase 8 controller interface + native SIL
+
+- Implemented the stable `ControllerBackend` seam plus `NativeSILBackend` for Backend A.
+  The plant remains decoupled from controller internals.
+- Added strict control and actuation config schemas, bang-bang control allocation across
+  the three fixed nozzles, sigma-delta duty accumulation, solenoid open/close latency,
+  minimum reliable pulse enforcement, and explicit valve fault hooks.
+- Implemented `run_native_sil_e2e` and enabled `make e2e`: the runner loads the current
+  plant, sensors, controller, motor, cold-gas system, and environment; constrains the
+  launch rail until exit; runs fixed-step SIL to touchdown; and emits a partial bundle
+  with `telemetry.csv`, `landing_summary.json`, and `run_manifest.json`.
+- Gate evidence: `make e2e` reached touchdown and wrote
+  `outputs/phase8_sil_seed20260629` (`telemetry_rows=9311`,
+  `touchdown_time_s=9.311000000000279`, `max_altitude_m=75.68170089676178`,
+  `touchdown_speed_m_s=18.33037340639612`, all reported as DATA).
+- Added unit, integration, latency/pulse-floor, CLI dispatch, and end-to-end bundle tests.
+- Verification passed: `make lint`, `make typecheck`, `make test` (`105 passed`), and
+  `make e2e`.
+- SIL control gains, actuation timing, and placeholder vehicle data remain assumptions;
+  tune and re-baseline with measured hardware data before treating landing metrics as
+  engineering evidence.
+- Keystone note: the Phase-8 native-SIL end-to-end flight is now green and must stay green
+  before every later commit.
+- Next: Phase 9 full telemetry bundle, plots, and 3D animation with nozzle-plume activity.
