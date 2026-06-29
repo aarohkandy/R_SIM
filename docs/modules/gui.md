@@ -4,10 +4,10 @@
   `rocketsim gui`.
 - It reads the same output bundle artifacts as the CLI: summaries, manifests, plots,
   animation, telemetry previews, thermal outputs, and structural outputs.
-- Keep the layout dense and inspection-oriented: run tree, phase tree, central analysis
-  panes, right-side inspector, and bottom telemetry table.
+- Keep the layout dense and inspection-oriented: definition file tree, run tree, phase
+  tree, central editor/analysis panes, right-side inspector, and bottom telemetry table.
 - Do not make the GUI a landing page. The first screen should be the usable run
-  inspection workspace.
+  definition/editing workspace.
 - The emulator tab is reserved for Phase 12 Renode HIL status and should continue to use
   the same `ControllerBackend` terminology as the simulation code.
 
@@ -19,3 +19,13 @@
 - API routes include `/api/runs`, `/api/runs/<run_id>`, `/api/telemetry`, and
   `/artifacts/<run_id>/<relative_path>`.
 - Artifact serving is path-confined to the selected run directory to prevent traversal.
+- `rocketsim.gui.workbench` exposes only whitelisted repo files for editing. The browser
+  can edit the actual rocket definition files such as `inputs/bom_placeholder.yaml`,
+  `config/vehicle.yaml`, `config/coldgas.yaml`, `config/control.yaml`, and the placeholder
+  motor curve. Every save validates through the matching pydantic schema, CSV parser, or
+  motor parser before touching disk.
+- Definition routes include `/api/configs`, `/api/configs/<name>`,
+  `/api/configs/<name>/validate`, `/api/rocket-summary`, and `/api/run/e2e`.
+- The Design tab opens on the BOM/parts editor because that is where rocket masses,
+  part positions, propellant depletion, CO2 mass, and deployable leg kinematics are
+  currently defined. A definition-file picker remains visible when the sidebar collapses.

@@ -14,6 +14,15 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import parse_qs, unquote, urlparse
 
+from rocketsim.gui.workbench import (
+    list_workbench_files,
+    read_workbench_file,
+    rocket_summary,
+    save_workbench_text,
+    validate_workbench_text,
+)
+from rocketsim.sim.flight import run_native_sil_e2e
+
 STATIC_DIR = Path(__file__).resolve().parent / "static"
 DEFAULT_OUTPUT_ROOT = "outputs"
 
@@ -111,6 +120,9 @@ def create_server(
         def do_GET(self) -> None:  # noqa: N802
             _handle_get(self, root)
 
+        def do_POST(self) -> None:  # noqa: N802
+            _handle_post(self, root)
+
         def log_message(self, format: str, *args: object) -> None:
             return
 
@@ -174,6 +186,70 @@ def _handle_get(handler: BaseHTTPRequestHandler, repo_root: Path) -> None:
             return
         _send_json(handler, preview)
         return
+    if path == "/api/configs":
+        try:
+            _send_json(handler, {"configs": list_workbench_files(repo_root)})
+        except (FileNotFoundError, ValueError, TypeError) as exc:
+            _send_error(handler, HTTPStatus.BAD_REQUEST, str(exc))
+        return
+    if path.startswith("/api/configs/"):
+        name = path.removeprefix("/api/configs/").strip("/")
+        try:
+            _send_json(handler, read_workbench_file(repo_root, name))
+        except FileNotFoundError:
+            _send_error(handler, HTTPStatus.NOT_FOUND, "config file not found")
+        return
+    if path == "/api/rocket-summary":
+        try:
+            _send_json(handler, {"summary": rocket_summary(repo_root)})
+        except (FileNotFoundError, ValueError, TypeError) as exc:
+            _send_error(handler, HTTPStatus.BAD_REQUEST, str(exc))
+        return
+    _send_error(handler, HTTPStatus.NOT_FOUND, "route not found")
+
+
+def _handle_post(handler: BaseHTTPRequestHandler, repo_root: Path) -> None:
+    parsed = urlparse(handler.path)
+    path = unquote(parsed.path)
+    if path == "/api/run/e2e":
+        try:
+            result = run_native_sil_e2e(repo_root=repo_root)
+        except Exception as exc:  # pragma: no cover - converted into GUI payload
+            _send_json(handler, {"ok": False, "message": str(exc)})
+            return
+        _send_json(
+            handler,
+            {
+                "ok": True,
+                "run_id": result.output_dir.name,
+                "output_dir": str(result.output_dir),
+                "summary": result.summary,
+            },
+        )
+        return
+    if path.startswith("/api/configs/"):
+        pieces = path.removeprefix("/api/configs/").strip("/").split("/")
+        name = pieces[0] if pieces else ""
+        try:
+            body = _read_json_body(handler)
+            text = body.get("text")
+            if not isinstance(text, str):
+                _send_error(handler, HTTPStatus.BAD_REQUEST, "request body needs text")
+                return
+            if len(pieces) == 2 and pieces[1] == "validate":
+                _send_json(handler, validate_workbench_text(name, text))
+                return
+            if len(pieces) == 1:
+                payload = save_workbench_text(repo_root, name, text)
+                status = HTTPStatus.OK if payload.get("valid") else HTTPStatus.BAD_REQUEST
+                _send_json(handler, payload, status=status)
+                return
+        except FileNotFoundError:
+            _send_error(handler, HTTPStatus.NOT_FOUND, "config file not found")
+            return
+        except (ValueError, TypeError) as exc:
+            _send_error(handler, HTTPStatus.BAD_REQUEST, str(exc))
+            return
     _send_error(handler, HTTPStatus.NOT_FOUND, "route not found")
 
 
@@ -271,9 +347,13 @@ def _send_file(handler: BaseHTTPRequestHandler, path: Path) -> None:
     handler.wfile.write(data)
 
 
-def _send_json(handler: BaseHTTPRequestHandler, payload: dict[str, Any]) -> None:
+def _send_json(
+    handler: BaseHTTPRequestHandler,
+    payload: dict[str, Any],
+    status: HTTPStatus = HTTPStatus.OK,
+) -> None:
     data = json.dumps(_json_safe(payload), sort_keys=True, allow_nan=False).encode("utf-8")
-    handler.send_response(HTTPStatus.OK)
+    handler.send_response(status)
     handler.send_header("Content-Type", "application/json")
     handler.send_header("Content-Length", str(len(data)))
     handler.end_headers()
@@ -287,6 +367,15 @@ def _send_error(handler: BaseHTTPRequestHandler, status: HTTPStatus, message: st
     handler.send_header("Content-Length", str(len(payload)))
     handler.end_headers()
     handler.wfile.write(payload)
+
+
+def _read_json_body(handler: BaseHTTPRequestHandler) -> dict[str, Any]:
+    length = int(handler.headers.get("Content-Length", "0"))
+    if length <= 0:
+        return {}
+    raw = handler.rfile.read(length)
+    payload = json.loads(raw.decode("utf-8"))
+    return payload if isinstance(payload, dict) else {}
 
 
 def _optional_float(value: Any) -> float | None:

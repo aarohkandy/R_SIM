@@ -230,3 +230,26 @@
   as engineering evidence.
 - Next: Phase 12 Renode HIL emulator bring-up, with the GUI emulator tab becoming the
   status surface.
+
+## 2026-06-29 — Localhost GUI definition editor refinement
+
+- Reworked the localhost GUI so the first screen is now a usable Design workspace rather
+  than only a run-inspection report. The browser opens directly on the BOM/parts editor,
+  which is where the current rocket masses, positions, propellant depletion, CO2 part,
+  and deployable-leg kinematics are defined.
+- Added a safe workbench API for whitelisted repo files: config YAMLs, the BOM/materials
+  inputs, the placeholder motor curve, and the OpenRocket anchor CSV. Saves validate
+  through the same pydantic schemas/parsers the sim uses before writing to disk.
+- Added a definition-file picker above the editor so the user can switch between BOM,
+  vehicle geometry, cold gas, control, sensors, motor, aero, environment, thermal, and
+  structural inputs even when the sidebar collapses in the in-app browser.
+- Added GUI-triggered native SIL runs via `/api/run/e2e`, keeping the existing output
+  bundle as the source of truth for plots, animation, telemetry, thermal, and structural
+  data.
+- Browser verification on `http://127.0.0.1:8765/` passed: Design opened by default,
+  the BOM editor was visible in the current in-app-browser viewport, the definition
+  picker switched to `config/coldgas.yaml`, and no horizontal overflow was detected.
+- Verification passed: `make lint`, `make typecheck`, `make e2e`, and `make test`
+  (`126 passed`).
+- Next: resume Phase 12 Renode HIL emulator bring-up, with GUI emulator status becoming
+  backed by real bring-up reports.

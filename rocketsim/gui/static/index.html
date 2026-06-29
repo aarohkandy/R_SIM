@@ -12,19 +12,25 @@
       <span class="brand-mark">R</span>
       <div>
         <div class="brand-title">R-SIM Workbench</div>
-        <div class="brand-subtitle">self-landing rocket simulation</div>
+        <div class="brand-subtitle">definition, simulation, evidence</div>
       </div>
     </div>
     <div class="toolbar" role="toolbar" aria-label="Workbench controls">
-      <button id="refreshButton" class="icon-button" title="Refresh runs" aria-label="Refresh runs">↻</button>
-      <button id="runE2EButton" class="text-button" title="Run from terminal" disabled>Run data</button>
-      <button id="openBundleButton" class="text-button" title="Inspect selected bundle">Bundle</button>
+      <button id="refreshButton" class="text-button" title="Refresh">Reload</button>
+      <button id="validateButton" class="text-button" title="Validate selected definition">Validate</button>
+      <button id="saveButton" class="text-button primary" title="Save selected definition">Save</button>
+      <button id="runE2EButton" class="text-button run" title="Run native SIL">Run SIL</button>
+      <button id="openBundleButton" class="text-button" title="Open selected bundle JSON">Bundle</button>
     </div>
-    <div id="statusText" class="status-text">Loading runs...</div>
+    <div id="statusText" class="status-text">Loading workbench...</div>
   </header>
 
   <main class="workspace">
     <aside class="sidebar" aria-label="Project tree">
+      <section class="tree-section">
+        <div class="section-title">Definition Files</div>
+        <div id="configList" class="file-list"></div>
+      </section>
       <section class="tree-section">
         <div class="section-title">Runs</div>
         <div id="runList" class="run-list"></div>
@@ -36,7 +42,7 @@
           <li class="done">Data bundle</li>
           <li class="done">Thermal</li>
           <li id="structuralPhase">Structural</li>
-          <li>Renode HIL</li>
+          <li id="renodePhase">Renode HIL</li>
           <li>Convergence</li>
           <li>Monte Carlo</li>
         </ol>
@@ -44,8 +50,9 @@
     </aside>
 
     <section class="center-pane">
-      <nav class="tabs" aria-label="Run views">
-        <button class="tab active" data-view="overview">Overview</button>
+      <nav class="tabs" aria-label="Workbench views">
+        <button class="tab active" data-view="design">Design</button>
+        <button class="tab" data-view="overview">Overview</button>
         <button class="tab" data-view="flight">Flight</button>
         <button class="tab" data-view="plots">Plots</button>
         <button class="tab" data-view="thermal">Thermal</button>
@@ -53,7 +60,33 @@
         <button class="tab" data-view="emulators">Emulators</button>
       </nav>
 
-      <section id="overview" class="view active-view">
+      <section id="design" class="view active-view">
+        <div id="rocketSummary" class="summary-strip"></div>
+        <div class="design-grid">
+          <div class="editor-pane">
+            <div class="editor-head">
+              <div>
+                <div id="configTitle" class="pane-title">Rocket Definition</div>
+                <div id="configPath" class="path-label"></div>
+              </div>
+              <div class="editor-controls">
+                <select id="configSelect" class="config-select" aria-label="Definition file"></select>
+                <div id="validationBadge" class="state-badge waiting">Waiting</div>
+              </div>
+            </div>
+            <textarea id="configEditor" spellcheck="false"></textarea>
+          </div>
+          <div class="pane side-panel">
+            <div class="pane-title">Selected Definition</div>
+            <div id="configDescription" class="definition-copy"></div>
+            <div id="configSummary" class="kv-table"></div>
+            <div class="pane-title stacked">Current Rocket</div>
+            <div id="rocketSummaryTable" class="kv-table"></div>
+          </div>
+        </div>
+      </section>
+
+      <section id="overview" class="view">
         <div id="metricGrid" class="metric-grid"></div>
         <div class="split">
           <div class="pane">
@@ -102,18 +135,7 @@
       </section>
 
       <section id="emulators" class="view">
-        <div class="emulator-grid">
-          <div class="emulator-panel">
-            <div class="pane-title">Backend A</div>
-            <div class="large-state good">Native SIL online</div>
-            <p>Current bundles are produced by the native software-in-the-loop backend.</p>
-          </div>
-          <div class="emulator-panel">
-            <div class="pane-title">Backend B</div>
-            <div class="large-state waiting">Renode HIL pending</div>
-            <p>ESP32 and Teensy co-simulation slots are reserved for Phase 12 bring-up.</p>
-          </div>
-        </div>
+        <div id="emulatorGrid" class="emulator-grid"></div>
       </section>
 
       <section class="telemetry-pane">
