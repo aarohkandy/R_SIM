@@ -17,6 +17,7 @@ from rocketsim.validation.phase14 import (
     apply_scenario_to_repo,
     distribution_summary,
     generate_monte_carlo_scenarios,
+    read_phase14_status,
     run_phase14_monte_carlo,
 )
 
@@ -164,6 +165,9 @@ def test_phase14_runner_writes_samples_histograms_and_manifest(tmp_path: Path) -
     assert summary["new_rows_completed"] == 8
     assert summary["max_new_runs_per_invocation"] == 0
     assert summary["invocation_limited"] is False
+    assert summary["retained_bundles"] == 1
+    assert summary["next_retained_bundle_index"] == 25
+    assert summary["rows_until_next_retained_bundle"] == 18
     assert len(summary["phase14_signature"]) == 64
     assert summary["stability"]["status"] == "insufficient_batches"
     assert manifest["scenario_generation"]["seed_strategy"] == "numpy.random.SeedSequence.spawn"
@@ -199,6 +203,23 @@ def test_phase14_default_dispatch_retains_full_bundles_only_at_stride(tmp_path: 
         "metrics_only",
     ]
     assert samples["retained_bundle"].tolist() == [True, False, False]
+
+
+def test_phase14_status_reports_next_retained_bundle(tmp_path: Path) -> None:
+    repo = write_phase14_repo(tmp_path / "repo")
+    run_phase14_monte_carlo(
+        repo,
+        runner=fake_phase14_runner,
+        run_count_override=3,
+    )
+
+    status = read_phase14_status(repo)
+    summary = status["summary"]
+
+    assert summary["retained_bundle_stride"] == 25
+    assert summary["retained_bundles"] == 1
+    assert summary["next_retained_bundle_index"] == 25
+    assert summary["rows_until_next_retained_bundle"] == 23
 
 
 def test_phase14_resume_skips_completed_indices(tmp_path: Path) -> None:

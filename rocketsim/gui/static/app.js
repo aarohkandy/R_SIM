@@ -518,6 +518,8 @@ function renderMonteCarlo() {
     ["Gate", summary.gate_complete ? "complete" : "open"],
     ["Batch limited", summary.invocation_limited ? "yes" : "no"],
     ["Retained bundles", summary.retained_bundles ?? "n/a"],
+    ["Next full bundle", retainedBundleIndex(summary.next_retained_bundle_index)],
+    ["Rows to full", summary.rows_until_next_retained_bundle ?? "n/a"],
   ];
   els.monteCarloGrid.innerHTML = metrics.map(([label, value]) => `
     <div class="metric">
@@ -529,6 +531,7 @@ function renderMonteCarlo() {
     ["Output", configured.output_dir || "n/a"],
     ["Checkpoint interval", configured.checkpoint_interval_runs],
     ["Retained stride", configured.retained_bundle_stride],
+    ["Next retained index", retainedBundleIndex(summary.next_retained_bundle_index)],
     ["Signature", summary.phase14_signature ? summary.phase14_signature.slice(0, 16) : "n/a"],
     ["Landing speed p50", distributionPercentile(distributions.landing_speed_m_s, "p50", "m/s")],
     ["Tilt p95", distributionPercentile(distributions.touchdown_tilt_deg, "p95", "deg")],
@@ -801,6 +804,11 @@ function formatVector(value, unit) {
 function distributionPercentile(distribution, key, unit) {
   const value = distribution?.percentiles?.[key];
   return numeric(value, unit, 3);
+}
+
+function retainedBundleIndex(value) {
+  const number = Number(value);
+  return Number.isFinite(number) ? `#${Math.trunc(number)}` : "off";
 }
 
 function numeric(value, unit, digits) {

@@ -45,6 +45,9 @@
   physics loop. Retained scenarios use the normal full Phase-9/10/11 bundle; non-retained
   scenarios use metrics-only summary artifacts so a 1000-run study does not waste time
   rendering throwaway animations, plots, thermal outputs, and structural outputs.
+- Phase 14 summaries report retained-bundle progress (`retained_bundles`,
+  `next_retained_bundle_index`, and `rows_until_next_retained_bundle`) so the CLI and
+  localhost GUI can show when the next expensive full artifact bundle will be produced.
 - Phase 14 writes checkpoint artifacts every
   `config/sim.yaml:data.phase14.checkpoint_interval_runs` completed runs. The production
   config keeps this at `1`, so every newly completed scenario flushes resumable samples,

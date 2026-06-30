@@ -300,6 +300,10 @@ def _write_phase14_artifacts(
         and stability["stable"]
     )
     retained_bundles = int(frame["retained_bundle"].astype(bool).sum())
+    retained_progress = _retained_bundle_progress(
+        phase,
+        runs_completed=runs_completed,
+    )
     summary = {
         "runs_completed": runs_completed,
         "requested_runs": requested_runs,
@@ -318,6 +322,8 @@ def _write_phase14_artifacts(
         "distributions": distributions,
         "retained_bundle_stride": phase.retained_bundle_stride,
         "retained_bundles": retained_bundles,
+        "next_retained_bundle_index": retained_progress["next_index"],
+        "rows_until_next_retained_bundle": retained_progress["rows_until"],
         "notes": (
             "Physics outcomes are reported as distributions only. The Phase-14 gate is "
             "complete only when the configured large-N target and percentile stability "
@@ -676,6 +682,24 @@ def _resolve_max_new_runs(phase: Phase14Settings, override: int | None) -> int:
 
 def _retain_bundle(phase: Phase14Settings, run_index: int) -> bool:
     return phase.retained_bundle_stride > 0 and run_index % phase.retained_bundle_stride == 0
+
+
+def _retained_bundle_progress(
+    phase: Phase14Settings,
+    *,
+    runs_completed: int,
+) -> dict[str, int | None]:
+    stride = phase.retained_bundle_stride
+    if stride <= 0:
+        return {"next_index": None, "rows_until": None}
+    if runs_completed < 0:
+        msg = "runs_completed must be non-negative"
+        raise ValueError(msg)
+    next_index = ((runs_completed + stride - 1) // stride) * stride
+    return {
+        "next_index": next_index,
+        "rows_until": next_index - runs_completed + 1,
+    }
 
 
 def _result_metric_row(

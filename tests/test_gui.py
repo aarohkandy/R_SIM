@@ -83,6 +83,9 @@ def write_montecarlo_status(root: Path) -> Path:
         "resumed_rows": 3,
         "invocation_limited": True,
         "gate_complete": False,
+        "retained_bundles": 1,
+        "next_retained_bundle_index": 25,
+        "rows_until_next_retained_bundle": 22,
         "stability": {"status": "insufficient_batches"},
         "distributions": {
             "landing_speed_m_s": {"percentiles": {"p50": 16.2}},

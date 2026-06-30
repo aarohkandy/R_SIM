@@ -589,3 +589,37 @@
 - Next: keep adding small bounded batches with frequent GitHub saves; the next retained
   full bundle appears at run index 25, and the Phase-14 gate still requires the configured
   1000-run target plus percentile-stability criteria.
+
+## 2026-06-29 — Phase 14 retained-bundle milestone and status metadata
+
+- Added retained-bundle progress metadata to Phase-14 summaries/manifests:
+  `next_retained_bundle_index` and `rows_until_next_retained_bundle`, alongside the
+  existing `retained_bundles` and stride fields.
+- Updated the localhost Monte Carlo tab to show the next full retained bundle and rows
+  until that full-bundle artifact, so long operator runs expose when the next expensive
+  full bundle will be produced.
+- Added tests for Phase-14 status metadata and updated the GUI Monte Carlo fixture/docs.
+- Ran a real bounded Phase-14 native-SIL Monte Carlo accumulation:
+  `ROCKETSIM_MC_RUNS=26 ROCKETSIM_MC_MAX_NEW_RUNS=6 make montecarlo`.
+- The runner resumed the existing twenty rows, added six new scenarios, and retained a
+  new full Phase-9/10/11 bundle at run index `25`:
+  `phase14_mc0025_seed3576018127`.
+- Updated evidence from `outputs/phase14_montecarlo/montecarlo_summary.json`:
+  `runs_completed: 26`, `requested_runs: 26`, `resumed_rows: 20`,
+  `new_rows_completed: 6`, `retained_bundles: 2`, `gate_complete: false`,
+  `stability.status: insufficient_batches`, `next_retained_bundle_index: 50`, and
+  `rows_until_next_retained_bundle: 25`.
+- Sample rows now cover run indices `0..25`, with retained full bundles at indices `0`
+  and `25`, and twenty-four metrics-only rows. The Phase-14 gate remains open; this is
+  accumulation progress, not statistical completion.
+- Current twenty-six-row distributions, reported as data only: landing-speed mean
+  `16.83534882468199 m/s`, p50 `14.60459400833898 m/s`, p95
+  `24.87479964219329 m/s`; touchdown-tilt mean `122.29191170604979 deg`, p50
+  `133.37194765596308 deg`, p95 `168.80028931119534 deg`; lateral-error mean
+  `36.18417575511597 m`, p50 `22.30350360439987 m`, p95 `90.25415403648407 m`;
+  CO2-remaining mean `0.08386619526093891 kg`, p5 `0.08059663770486868 kg`, p50
+  `0.08458005942216165 kg`.
+- Verification passed: focused Phase-14/GUI tests (`17 passed`), `make lint`,
+  `make typecheck`, and `make test` (`151 passed`).
+- Next: continue bounded accumulation toward retained bundle index `50`, then toward the
+  configured 1000-run target and percentile-stability criteria.
