@@ -562,3 +562,30 @@
   changed in this batch beyond this progress log.
 - Next: continue smaller bounded batches with frequent GitHub saves toward the first
   full 100-run batch, then toward the configured 1000-run target and stability criteria.
+
+## 2026-06-29 — Phase 14 bounded batch accumulation to 20 rows
+
+- Ran another real bounded Phase-14 native-SIL Monte Carlo accumulation:
+  `ROCKETSIM_MC_RUNS=20 ROCKETSIM_MC_MAX_NEW_RUNS=5 make montecarlo`.
+- The runner resumed the existing fifteen rows, added five new metrics-only native-SIL
+  scenarios, and rewrote the Phase-14 samples, parquet, summary, stability table,
+  manifest, and histogram artifacts with per-row checkpointing still active.
+- Updated evidence from `outputs/phase14_montecarlo/montecarlo_summary.json`:
+  `runs_completed: 20`, `requested_runs: 20`, `resumed_rows: 15`,
+  `new_rows_completed: 5`, `invocation_limited: true`, `gate_complete: false`, and
+  `stability.status: insufficient_batches`.
+- Sample rows now cover run indices `0..19` with one retained full bundle and nineteen
+  metrics-only runs. The Phase-14 gate remains open; this is accumulation progress, not
+  statistical completion.
+- Current twenty-row distributions, reported as data only: landing-speed mean
+  `17.177205280216533 m/s`, p50 `15.01215658818257 m/s`, p95
+  `24.378698714817002 m/s`; touchdown-tilt mean `122.6649915590662 deg`, p50
+  `133.37194765596308 deg`, p95 `169.33893740305103 deg`; lateral-error mean
+  `38.37748361331272 m`, p50 `24.27852344951543 m`, p95 `92.8832572042261 m`;
+  CO2-remaining mean `0.08378231546585926 kg`, p5 `0.08048934316211638 kg`, p50
+  `0.08454346625175185 kg`.
+- Verification passed: `tests/test_phase14_validation.py` (`9 passed`). No source code
+  changed in this batch beyond this progress log.
+- Next: keep adding small bounded batches with frequent GitHub saves; the next retained
+  full bundle appears at run index 25, and the Phase-14 gate still requires the configured
+  1000-run target plus percentile-stability criteria.
