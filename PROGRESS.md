@@ -534,3 +534,31 @@
   `make typecheck`, and `make test` (`150 passed`).
 - Next: continue bounded batches toward the first full 100-run batch, then toward the
   configured 1000-run target and percentile-stability criteria.
+
+## 2026-06-29 — Phase 14 bounded batch accumulation to 15 rows
+
+- Ran another real bounded Phase-14 native-SIL Monte Carlo accumulation:
+  `ROCKETSIM_MC_RUNS=15 ROCKETSIM_MC_MAX_NEW_RUNS=6 make montecarlo`.
+- The runner resumed the existing nine rows, added six new metrics-only native-SIL
+  scenarios, and rewrote the Phase-14 samples, parquet, summary, stability table,
+  manifest, and histogram artifacts. Per-row checkpointing remained active throughout
+  with `checkpoint_interval_runs: 1`.
+- Updated evidence from `outputs/phase14_montecarlo/montecarlo_summary.json`:
+  `runs_completed: 15`, `requested_runs: 15`, `resumed_rows: 9`,
+  `new_rows_completed: 6`, `invocation_limited: true`, `gate_complete: false`, and
+  `stability.status: insufficient_batches`.
+- Sample rows now cover run indices
+  `[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14]` with one retained full bundle
+  and fourteen metrics-only runs. The Phase-14 gate remains open; this is accumulation
+  progress, not statistical completion.
+- Current fifteen-row distributions, reported as data only: landing-speed mean
+  `17.595179628101718 m/s`, p50 `15.011606715590931 m/s`, p95
+  `24.55587761745139 m/s`; touchdown-tilt mean `121.50542272263526 deg`, p50
+  `145.36404120952346 deg`, p95 `170.75457169559948 deg`; lateral-error mean
+  `41.500352864709285 m`, p50 `24.347057839815754 m`, p95
+  `93.55332424086605 m`; CO2-remaining mean `0.08347049361771289 kg`, p5
+  `0.08022567224681525 kg`, p50 `0.0844123227374394 kg`.
+- Verification passed: `tests/test_phase14_validation.py` (`9 passed`). No source code
+  changed in this batch beyond this progress log.
+- Next: continue smaller bounded batches with frequent GitHub saves toward the first
+  full 100-run batch, then toward the configured 1000-run target and stability criteria.
