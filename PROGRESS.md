@@ -1031,3 +1031,31 @@
   in this batch beyond this progress log.
 - Next: continue bounded accumulation through retained bundle index `125`, then toward
   the configured 1000-run target and percentile-stability criteria.
+
+## 2026-06-30 — Phase 14 retained bundle at index 125
+
+- Ran a real bounded Phase-14 native-SIL Monte Carlo accumulation through the next retained
+  full bundle:
+  `ROCKETSIM_MC_RUNS=126 ROCKETSIM_MC_MAX_NEW_RUNS=9 make montecarlo`.
+- The runner resumed the existing one-hundred-seventeen rows, added nine new scenarios,
+  and retained a new full Phase-9/10/11 bundle at run index `125`:
+  `phase14_mc0125_seed655263669`.
+- Updated evidence from `outputs/phase14_montecarlo/montecarlo_summary.json`:
+  `runs_completed: 126`, `requested_runs: 126`, `resumed_rows: 117`,
+  `new_rows_completed: 9`, `retained_bundles: 6`, `gate_complete: false`,
+  `stability.status: insufficient_batches`, `next_retained_bundle_index: 150`, and
+  `rows_until_next_retained_bundle: 25`.
+- Sample rows now cover run indices `0..125`, with retained full bundles at indices `0`,
+  `25`, `50`, `75`, `100`, and `125`, and one hundred twenty metrics-only rows. The
+  Phase-14 gate remains open; this is accumulation progress, not statistical completion.
+- Current one-hundred-twenty-six-row distributions, reported as data only: landing-speed
+  mean `17.0289662858962 m/s`, p50 `14.896563143441316 m/s`, p95
+  `25.363985777567148 m/s`; touchdown-tilt mean `129.95159207731146 deg`, p50
+  `143.30783314518033 deg`, p95 `169.0205439719981 deg`; lateral-error mean
+  `37.092476128528986 m`, p50 `23.382257775826897 m`, p95
+  `85.25142605715516 m`; CO2-remaining mean `0.0838755430925412 kg`, p5
+  `0.08040239428433342 kg`, p50 `0.08465526988383185 kg`.
+- Verification passed: focused Phase-14/GUI tests (`17 passed`). No source code changed
+  in this batch beyond this progress log.
+- Next: continue bounded accumulation toward retained bundle index `150`, then toward the
+  configured 1000-run target and percentile-stability criteria.
