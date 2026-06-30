@@ -1116,3 +1116,32 @@
   in this batch beyond this progress log.
 - Next: continue bounded accumulation through retained bundle index `150`, then toward
   the configured 1000-run target and percentile-stability criteria.
+
+## 2026-06-30 — Phase 14 retained bundle at index 150
+
+- Ran a real bounded Phase-14 native-SIL Monte Carlo accumulation through the next retained
+  full bundle:
+  `ROCKETSIM_MC_RUNS=151 ROCKETSIM_MC_MAX_NEW_RUNS=9 make montecarlo`.
+- The runner resumed the existing one-hundred-forty-two rows, added nine new scenarios,
+  and retained a new full Phase-9/10/11 bundle at run index `150`:
+  `phase14_mc0150_seed2244918155`.
+- Updated evidence from `outputs/phase14_montecarlo/montecarlo_summary.json`:
+  `runs_completed: 151`, `requested_runs: 151`, `resumed_rows: 142`,
+  `new_rows_completed: 9`, `retained_bundles: 7`, `gate_complete: false`,
+  `stability.status: insufficient_batches`, `next_retained_bundle_index: 175`, and
+  `rows_until_next_retained_bundle: 25`.
+- Sample rows now cover run indices `0..150`, with retained full bundles at indices `0`,
+  `25`, `50`, `75`, `100`, `125`, and `150`, and one hundred forty-four metrics-only
+  rows. The Phase-14 gate remains open; this is accumulation progress, not statistical
+  completion.
+- Current one-hundred-fifty-one-row distributions, reported as data only: landing-speed
+  mean `17.238471492345038 m/s`, p50 `15.011606715590933 m/s`, p95
+  `25.47457368764661 m/s`; touchdown-tilt mean `131.9989007284983 deg`, p50
+  `145.36404120952346 deg`, p95 `171.54150228247005 deg`; lateral-error mean
+  `37.041319503864734 m`, p50 `23.665116707597225 m`, p95
+  `85.06266692075417 m`; CO2-remaining mean `0.08382931217659399 kg`, p5
+  `0.08043831171626895 kg`, p50 `0.0846522194702303 kg`.
+- Verification passed: focused Phase-14/GUI tests (`17 passed`). No source code changed
+  in this batch beyond this progress log.
+- Next: continue bounded accumulation toward retained bundle index `175`, then toward the
+  configured 1000-run target and percentile-stability criteria.
