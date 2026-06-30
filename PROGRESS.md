@@ -650,3 +650,30 @@
   in this batch beyond this progress log.
 - Next: continue bounded accumulation toward retained bundle index `50`, then toward the
   configured 1000-run target and percentile-stability criteria.
+
+## 2026-06-29 — Phase 14 bounded batch accumulation to 35 rows
+
+- Ran another real bounded Phase-14 native-SIL Monte Carlo accumulation:
+  `ROCKETSIM_MC_RUNS=35 ROCKETSIM_MC_MAX_NEW_RUNS=4 make montecarlo`.
+- The runner resumed the existing thirty-one rows, added four new metrics-only native-SIL
+  scenarios, and rewrote the Phase-14 samples, parquet, summary, stability table,
+  manifest, and histogram artifacts with per-row checkpointing still active.
+- Updated evidence from `outputs/phase14_montecarlo/montecarlo_summary.json`:
+  `runs_completed: 35`, `requested_runs: 35`, `resumed_rows: 31`,
+  `new_rows_completed: 4`, `retained_bundles: 2`, `gate_complete: false`,
+  `stability.status: insufficient_batches`, `next_retained_bundle_index: 50`, and
+  `rows_until_next_retained_bundle: 16`.
+- Sample rows now cover run indices `0..34`, with retained full bundles at indices `0`
+  and `25`, and thirty-three metrics-only rows. The Phase-14 gate remains open; this is
+  accumulation progress, not statistical completion.
+- Current thirty-five-row distributions, reported as data only: landing-speed mean
+  `17.31061061412421 m/s`, p50 `15.011606715590933 m/s`, p95
+  `24.55587761745139 m/s`; touchdown-tilt mean `125.49857673704061 deg`, p50
+  `145.36404120952346 deg`, p95 `168.34035109117252 deg`; lateral-error mean
+  `40.32799907165525 m`, p50 `24.209989059215108 m`, p95 `90.8005647432873 m`;
+  CO2-remaining mean `0.08365715063601971 kg`, p5 `0.08036009459749174 kg`, p50
+  `0.084570911343241 kg`.
+- Verification passed: focused Phase-14/GUI tests (`17 passed`). No source code changed
+  in this batch beyond this progress log.
+- Next: continue bounded accumulation toward retained bundle index `50`, then toward the
+  configured 1000-run target and percentile-stability criteria.
