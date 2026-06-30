@@ -459,3 +459,26 @@
   baseline for this progress-only checkpoint.
 - Next: continue bounded batches toward the first full 100-run batch, then toward the
   configured 1000-run target and percentile-stability criteria.
+
+## 2026-06-29 — Phase 14 bounded batch accumulation to 8 rows
+
+- Ran another real bounded Phase-14 native-SIL Monte Carlo accumulation:
+  `ROCKETSIM_MC_RUNS=8 ROCKETSIM_MC_MAX_NEW_RUNS=2 make montecarlo`.
+- The runner resumed the existing six rows, added two new metrics-only native-SIL
+  scenarios, and rewrote the Phase-14 samples, parquet, summary, stability table,
+  manifest, and histogram artifacts.
+- Updated evidence from `outputs/phase14_montecarlo/montecarlo_summary.json`:
+  `runs_completed: 8`, `requested_runs: 8`, `resumed_rows: 6`,
+  `new_rows_completed: 2`, `invocation_limited: true`, and
+  `stability.status: insufficient_batches`.
+- Sample rows now cover run indices `[0, 1, 2, 3, 4, 5, 6, 7]` with one retained full
+  bundle and seven metrics-only runs. The Phase-14 gate remains open; this is accumulation
+  progress, not statistical completion.
+- Current eight-row distributions, reported as data only: landing-speed mean
+  `17.846358797613256 m/s` with p95 `24.21107436731584 m/s`; touchdown-tilt mean
+  `121.96721084393185 deg` with p95 `170.10789458727413 deg`; lateral-error mean
+  `46.08744820281885 m` with p95 `94.49141809216196 m`; CO2-remaining mean
+  `0.08298488862109477 kg` with p5 `0.07985653296539368 kg`.
+- No code changed in this batch; this is a progress-only compute checkpoint.
+- Next: continue bounded batches toward the first full 100-run batch, then toward the
+  configured 1000-run target and percentile-stability criteria.
