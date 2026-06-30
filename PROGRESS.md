@@ -977,3 +977,30 @@
   in this batch beyond this progress log.
 - Next: continue bounded accumulation toward retained bundle index `125`, then toward the
   configured 1000-run target and percentile-stability criteria.
+
+## 2026-06-30 — Phase 14 bounded batch accumulation to 109 rows
+
+- Ran another real bounded Phase-14 native-SIL Monte Carlo accumulation:
+  `ROCKETSIM_MC_RUNS=109 ROCKETSIM_MC_MAX_NEW_RUNS=8 make montecarlo`.
+- The runner resumed the existing one-hundred-one rows, added eight new metrics-only
+  native-SIL scenarios, and rewrote the Phase-14 samples, parquet, summary, stability
+  table, manifest, and histogram artifacts with per-row checkpointing still active.
+- Updated evidence from `outputs/phase14_montecarlo/montecarlo_summary.json`:
+  `runs_completed: 109`, `requested_runs: 109`, `resumed_rows: 101`,
+  `new_rows_completed: 8`, `retained_bundles: 5`, `gate_complete: false`,
+  `stability.status: insufficient_batches`, `next_retained_bundle_index: 125`, and
+  `rows_until_next_retained_bundle: 17`.
+- Sample rows now cover run indices `0..108`, with retained full bundles at indices `0`,
+  `25`, `50`, `75`, and `100`, and one hundred four metrics-only rows. The Phase-14 gate
+  remains open; this is accumulation progress, not statistical completion.
+- Current one-hundred-nine-row distributions, reported as data only: landing-speed mean
+  `16.982722186420386 m/s`, p50 `14.868065817192084 m/s`, p95
+  `25.346045575607576 m/s`; touchdown-tilt mean `129.7207034199554 deg`, p50
+  `143.07412153800706 deg`, p95 `169.10355813700403 deg`; lateral-error mean
+  `36.768413722505244 m`, p50 `23.204715296481243 m`, p95
+  `86.04952836570409 m`; CO2-remaining mean `0.08387243662188947 kg`, p5
+  `0.08034132527463637 kg`, p50 `0.0846562871175999 kg`.
+- Verification passed: focused Phase-14/GUI tests (`17 passed`). No source code changed
+  in this batch beyond this progress log.
+- Next: continue bounded accumulation toward retained bundle index `125`, then toward the
+  configured 1000-run target and percentile-stability criteria.
