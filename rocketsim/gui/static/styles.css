@@ -264,6 +264,11 @@ button:disabled {
   font-weight: 700;
 }
 
+.phase-list .active-phase {
+  color: var(--blue-dark);
+  font-weight: 700;
+}
+
 .center-pane {
   display: grid;
   grid-template-rows: 42px minmax(0, 1fr) 238px;
@@ -582,6 +587,42 @@ th {
   gap: 12px;
 }
 
+.mc-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(300px, 430px);
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.mc-controls {
+  display: grid;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.mc-controls label {
+  display: grid;
+  gap: 4px;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.mc-controls input[type="number"] {
+  width: 100%;
+  height: 32px;
+  border: 1px solid var(--line);
+  padding: 0 8px;
+  color: var(--text);
+  background: var(--panel);
+  font: inherit;
+}
+
+.mc-controls .mc-checkbox {
+  grid-template-columns: 18px minmax(0, 1fr);
+  align-items: center;
+}
+
 .large-state {
   margin-bottom: 8px;
   font-size: 24px;
@@ -694,7 +735,8 @@ th {
   .split,
   .plot-row,
   .plot-grid,
-  .emulator-grid {
+  .emulator-grid,
+  .mc-layout {
     grid-template-columns: 1fr;
   }
 

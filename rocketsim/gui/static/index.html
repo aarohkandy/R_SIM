@@ -20,6 +20,7 @@
       <button id="validateButton" class="text-button" title="Validate selected definition">Validate</button>
       <button id="saveButton" class="text-button primary" title="Save selected definition">Save</button>
       <button id="runE2EButton" class="text-button run" title="Run native SIL">Run SIL</button>
+      <button id="runMonteCarloButton" class="text-button run" title="Run next Monte Carlo batch">Run MC</button>
       <button id="openBundleButton" class="text-button" title="Open selected bundle JSON">Bundle</button>
     </div>
     <div id="statusText" class="status-text">Loading workbench...</div>
@@ -44,7 +45,7 @@
           <li id="structuralPhase">Structural</li>
           <li id="renodePhase">Renode HIL</li>
           <li>Convergence</li>
-          <li>Monte Carlo</li>
+          <li id="monteCarloPhase">Monte Carlo</li>
         </ol>
       </section>
     </aside>
@@ -58,6 +59,7 @@
         <button class="tab" data-view="thermal">Thermal</button>
         <button class="tab" data-view="structural">Structural</button>
         <button class="tab" data-view="emulators">Emulators</button>
+        <button class="tab" data-view="montecarlo">Monte Carlo</button>
       </nav>
 
       <section id="design" class="view active-view">
@@ -136,6 +138,35 @@
 
       <section id="emulators" class="view">
         <div id="emulatorGrid" class="emulator-grid"></div>
+      </section>
+
+      <section id="montecarlo" class="view">
+        <div class="mc-layout">
+          <div class="pane">
+            <div class="pane-title">Monte Carlo Status</div>
+            <div id="monteCarloGrid" class="metric-grid"></div>
+            <div id="monteCarloSummary" class="kv-table"></div>
+          </div>
+          <div class="pane">
+            <div class="pane-title">Bounded Batch</div>
+            <div class="mc-controls">
+              <label>
+                <span>Requested rows</span>
+                <input id="mcRequestedRuns" type="number" min="1" step="1">
+              </label>
+              <label>
+                <span>New rows now</span>
+                <input id="mcMaxNewRuns" type="number" min="0" step="1">
+              </label>
+              <label class="mc-checkbox">
+                <input id="mcResumeInput" type="checkbox" checked>
+                <span>Resume existing rows</span>
+              </label>
+            </div>
+            <div class="empty-state small">Monte Carlo results are data distributions, not a pass/fail verdict.</div>
+          </div>
+        </div>
+        <div id="monteCarloPlots" class="plot-grid"></div>
       </section>
 
       <section class="telemetry-pane">

@@ -91,6 +91,41 @@ class Phase14Result:
     summary: dict[str, Any]
 
 
+def read_phase14_status(repo_root: Path | str = Path(".")) -> dict[str, Any]:
+    """Read the latest Phase-14 Monte Carlo status for CLI/GUI surfaces."""
+
+    root = Path(repo_root).resolve()
+    sim_config = load_sim_config(root / "config" / "sim.yaml")
+    phase = sim_config.data.phase14
+    output_dir = (root / phase.output_dir).resolve()
+    summary_path = output_dir / "montecarlo_summary.json"
+    manifest_path = output_dir / "phase14_manifest.json"
+    samples_path = output_dir / "montecarlo_samples.csv"
+    summary = _read_json(summary_path)
+    manifest = _read_json(manifest_path)
+    histogram_paths = [
+        path
+        for path in sorted(output_dir.glob("hist_*.png"))
+        if path.is_file() and output_dir in path.resolve().parents
+    ]
+    return {
+        "configured": {
+            "target_runs": phase.target_runs,
+            "batch_size": phase.batch_size,
+            "checkpoint_interval_runs": phase.checkpoint_interval_runs,
+            "retained_bundle_stride": phase.retained_bundle_stride,
+            "max_new_runs_per_invocation": phase.max_new_runs_per_invocation,
+            "resume_enabled": phase.resume_enabled,
+            "output_dir": phase.output_dir,
+        },
+        "available": summary_path.exists(),
+        "summary": summary,
+        "manifest": manifest,
+        "samples_csv_exists": samples_path.exists(),
+        "histograms": [path.name for path in histogram_paths],
+    }
+
+
 def run_phase14_monte_carlo(
     repo_root: Path | str = Path("."),
     *,
@@ -98,6 +133,8 @@ def run_phase14_monte_carlo(
     full_runner: SilRunner = run_native_sil_e2e,
     metrics_runner: SilRunner = run_native_sil_metrics,
     run_count_override: int | None = None,
+    max_new_runs_override: int | None = None,
+    resume_enabled_override: bool | None = None,
 ) -> Phase14Result:
     """Run the configured native-SIL Monte Carlo study."""
 
@@ -121,7 +158,7 @@ def run_phase14_monte_carlo(
     summary_json = output_dir / "montecarlo_summary.json"
     stability_csv = output_dir / "stability_table.csv"
     manifest_json = output_dir / "phase14_manifest.json"
-    resume_enabled = _resolve_resume_enabled(phase)
+    resume_enabled = _resolve_resume_enabled(phase, resume_enabled_override)
     signature = phase14_resume_signature(
         sim_config=sim_config,
         phase=phase,
@@ -133,7 +170,7 @@ def run_phase14_monte_carlo(
         else {}
     )
     resumed_rows = len(rows_by_index)
-    max_new_runs = _resolve_max_new_runs(phase)
+    max_new_runs = _resolve_max_new_runs(phase, max_new_runs_override)
     new_rows_completed = 0
     for scenario in scenarios:
         if scenario.index in rows_by_index:
@@ -602,7 +639,9 @@ def _resolve_run_count(phase: Phase14Settings, override: int | None) -> int:
     return run_count
 
 
-def _resolve_resume_enabled(phase: Phase14Settings) -> bool:
+def _resolve_resume_enabled(phase: Phase14Settings, override: bool | None) -> bool:
+    if override is not None:
+        return override
     env_value = os.environ.get("ROCKETSIM_MC_RESUME")
     if env_value is None:
         return phase.resume_enabled
@@ -615,7 +654,12 @@ def _resolve_resume_enabled(phase: Phase14Settings) -> bool:
     raise ValueError(msg)
 
 
-def _resolve_max_new_runs(phase: Phase14Settings) -> int:
+def _resolve_max_new_runs(phase: Phase14Settings, override: int | None) -> int:
+    if override is not None:
+        if override < 0:
+            msg = "max_new_runs_override must be non-negative"
+            raise ValueError(msg)
+        return override
     env_value = os.environ.get("ROCKETSIM_MC_MAX_NEW_RUNS")
     if env_value is None:
         return phase.max_new_runs_per_invocation
@@ -750,6 +794,13 @@ def _load_yaml_mapping(path: Path) -> dict[str, Any]:
         msg = f"{path} must contain a YAML mapping"
         raise TypeError(msg)
     return cast(dict[str, Any], raw)
+
+
+def _read_json(path: Path) -> dict[str, Any]:
+    if not path.exists():
+        return {}
+    raw = json.loads(path.read_text(encoding="utf-8"))
+    return raw if isinstance(raw, dict) else {}
 
 
 def _write_yaml_mapping(path: Path, payload: dict[str, Any]) -> None:

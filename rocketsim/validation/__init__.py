@@ -9,6 +9,7 @@ from rocketsim.validation.phase14 import (
     MonteCarloScenario,
     Phase14Result,
     generate_monte_carlo_scenarios,
+    read_phase14_status,
     run_phase14_monte_carlo,
 )
 
@@ -18,6 +19,7 @@ __all__ = [
     "Phase14Result",
     "convergence_rows_with_deltas",
     "generate_monte_carlo_scenarios",
+    "read_phase14_status",
     "run_phase13_convergence",
     "run_phase14_monte_carlo",
 ]

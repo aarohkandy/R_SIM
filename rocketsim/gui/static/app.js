@@ -7,6 +7,7 @@ const state = {
   configDetail: null,
   rocketSummary: null,
   hilStatus: null,
+  monteCarlo: null,
   activeView: "design",
   dirty: false,
 };
@@ -28,10 +29,12 @@ const els = {
   inspectorContent: document.getElementById("inspectorContent"),
   structuralPhase: document.getElementById("structuralPhase"),
   renodePhase: document.getElementById("renodePhase"),
+  monteCarloPhase: document.getElementById("monteCarloPhase"),
   refreshButton: document.getElementById("refreshButton"),
   validateButton: document.getElementById("validateButton"),
   saveButton: document.getElementById("saveButton"),
   runE2EButton: document.getElementById("runE2EButton"),
+  runMonteCarloButton: document.getElementById("runMonteCarloButton"),
   openBundleButton: document.getElementById("openBundleButton"),
   configTitle: document.getElementById("configTitle"),
   configPath: document.getElementById("configPath"),
@@ -43,23 +46,32 @@ const els = {
   rocketSummary: document.getElementById("rocketSummary"),
   rocketSummaryTable: document.getElementById("rocketSummaryTable"),
   emulatorGrid: document.getElementById("emulatorGrid"),
+  monteCarloGrid: document.getElementById("monteCarloGrid"),
+  monteCarloSummary: document.getElementById("monteCarloSummary"),
+  monteCarloPlots: document.getElementById("monteCarloPlots"),
+  mcRequestedRuns: document.getElementById("mcRequestedRuns"),
+  mcMaxNewRuns: document.getElementById("mcMaxNewRuns"),
+  mcResumeInput: document.getElementById("mcResumeInput"),
 };
 
 async function loadWorkbench() {
   setStatus("Loading workbench...");
-  const [runsPayload, configsPayload, summaryPayload, hilPayload] = await Promise.all([
+  const [runsPayload, configsPayload, summaryPayload, hilPayload, monteCarloPayload] = await Promise.all([
     fetchJson("/api/runs"),
     fetchJson("/api/configs"),
     fetchJson("/api/rocket-summary"),
     fetchJson("/api/hil-status"),
+    fetchJson("/api/montecarlo-status"),
   ]);
   state.runs = runsPayload.runs || [];
   state.configs = configsPayload.configs || [];
   state.rocketSummary = summaryPayload.summary || null;
   state.hilStatus = hilPayload.hil || null;
+  state.monteCarlo = monteCarloPayload.montecarlo || null;
   renderRunList();
   renderConfigList();
   renderRocketSummary();
+  renderMonteCarlo();
   if (state.runs.length > 0) {
     const current = state.selectedRun || state.runs[0].run_id;
     await selectRun(current);
@@ -141,6 +153,34 @@ async function runSilFromGui() {
   }
 }
 
+async function runMonteCarloFromGui() {
+  const requestedRuns = Number(els.mcRequestedRuns.value);
+  const maxNewRuns = Number(els.mcMaxNewRuns.value);
+  setBusy(true);
+  setStatus("Running Monte Carlo batch...");
+  try {
+    const payload = await postJson("/api/run/montecarlo", {
+      requested_runs: Number.isFinite(requestedRuns) && requestedRuns > 0
+        ? Math.trunc(requestedRuns)
+        : undefined,
+      max_new_runs: Number.isFinite(maxNewRuns) && maxNewRuns >= 0
+        ? Math.trunc(maxNewRuns)
+        : undefined,
+      resume: els.mcResumeInput.checked,
+    });
+    if (!payload.ok) {
+      setStatus(`Monte Carlo failed: ${payload.message}`);
+      return;
+    }
+    state.monteCarlo = payload.montecarlo;
+    renderMonteCarlo();
+    switchView("montecarlo");
+    setStatus(`Monte Carlo now has ${payload.summary.runs_completed} rows`);
+  } finally {
+    setBusy(false);
+  }
+}
+
 async function refreshRuns() {
   const payload = await fetchJson("/api/runs");
   state.runs = payload.runs || [];
@@ -148,16 +188,19 @@ async function refreshRuns() {
 }
 
 async function refreshConfigsAndSummary() {
-  const [configsPayload, summaryPayload, hilPayload] = await Promise.all([
+  const [configsPayload, summaryPayload, hilPayload, monteCarloPayload] = await Promise.all([
     fetchJson("/api/configs"),
     fetchJson("/api/rocket-summary"),
     fetchJson("/api/hil-status"),
+    fetchJson("/api/montecarlo-status"),
   ]);
   state.configs = configsPayload.configs || [];
   state.rocketSummary = summaryPayload.summary || null;
   state.hilStatus = hilPayload.hil || null;
+  state.monteCarlo = monteCarloPayload.montecarlo || null;
   renderConfigList();
   renderRocketSummary();
+  renderMonteCarlo();
 }
 
 function renderRunData() {
@@ -167,6 +210,7 @@ function renderRunData() {
   renderThermal();
   renderStructural();
   renderEmulators();
+  renderMonteCarlo();
   renderTelemetry();
   renderManifest();
   renderInspector();
@@ -400,6 +444,56 @@ function renderEmulators() {
   `;
 }
 
+function renderMonteCarlo() {
+  if (!els.monteCarloGrid) return;
+  const status = state.monteCarlo || {};
+  const configured = status.configured || {};
+  const summary = status.summary || {};
+  const stability = summary.stability || {};
+  const distributions = summary.distributions || {};
+  const available = status.available === true;
+  if (els.monteCarloPhase) {
+    els.monteCarloPhase.className = summary.gate_complete ? "done" : available ? "active-phase" : "";
+  }
+  els.mcRequestedRuns.value = summary.requested_runs || configured.target_runs || 1000;
+  els.mcMaxNewRuns.value = configured.max_new_runs_per_invocation || 1;
+  els.mcResumeInput.checked = configured.resume_enabled !== false;
+  const progress = configured.target_runs
+    ? `${summary.runs_completed || 0} / ${configured.target_runs}`
+    : String(summary.runs_completed || 0);
+  const metrics = [
+    ["Rows", progress],
+    ["Requested", summary.requested_runs ?? "n/a"],
+    ["Added last run", summary.new_rows_completed ?? "n/a"],
+    ["Resumed rows", summary.resumed_rows ?? "n/a"],
+    ["Stability", stability.status || "not started"],
+    ["Gate", summary.gate_complete ? "complete" : "open"],
+    ["Batch limited", summary.invocation_limited ? "yes" : "no"],
+    ["Retained bundles", summary.retained_bundles ?? "n/a"],
+  ];
+  els.monteCarloGrid.innerHTML = metrics.map(([label, value]) => `
+    <div class="metric">
+      <div class="metric-label">${escapeHtml(label)}</div>
+      <div class="metric-value">${escapeHtml(String(value))}</div>
+    </div>
+  `).join("");
+  els.monteCarloSummary.innerHTML = keyValueTable([
+    ["Output", configured.output_dir || "n/a"],
+    ["Checkpoint interval", configured.checkpoint_interval_runs],
+    ["Retained stride", configured.retained_bundle_stride],
+    ["Signature", summary.phase14_signature ? summary.phase14_signature.slice(0, 16) : "n/a"],
+    ["Landing speed p50", distributionPercentile(distributions.landing_speed_m_s, "p50", "m/s")],
+    ["Tilt p95", distributionPercentile(distributions.touchdown_tilt_deg, "p95", "deg")],
+    ["Lateral error p95", distributionPercentile(distributions.touchdown_lateral_error_m, "p95", "m")],
+    ["CO2 remaining p5", distributionPercentile(distributions.co2_margin_kg, "p5", "kg")],
+  ]);
+  const urls = status.histogram_urls || [];
+  els.monteCarloPlots.innerHTML = urls.map((url) => {
+    const name = url.split("/").at(-1);
+    return plotFrame({ name, url });
+  }).join("") || `<div class="empty-state">Run a Monte Carlo batch to populate distribution plots.</div>`;
+}
+
 function blockerList(blockers) {
   if (!blockers.length) return `<div class="empty-state small">No HIL blockers reported.</div>`;
   return `<div class="status-list">${blockers.map((blocker) => `
@@ -510,6 +604,7 @@ function switchView(viewName) {
 
 function setBusy(isBusy) {
   els.runE2EButton.disabled = isBusy;
+  els.runMonteCarloButton.disabled = isBusy;
   els.saveButton.disabled = isBusy;
   els.validateButton.disabled = isBusy;
 }
@@ -615,6 +710,11 @@ function formatVector(value, unit) {
   return `[${value.map((item) => Number(item).toFixed(3)).join(", ")}] ${unit}`;
 }
 
+function distributionPercentile(distribution, key, unit) {
+  const value = distribution?.percentiles?.[key];
+  return numeric(value, unit, 3);
+}
+
 function numeric(value, unit, digits) {
   const number = Number(value);
   return Number.isFinite(number) ? `${number.toFixed(digits)} ${unit}` : "n/a";
@@ -642,6 +742,7 @@ els.refreshButton.addEventListener("click", loadWorkbench);
 els.validateButton.addEventListener("click", validateSelectedConfig);
 els.saveButton.addEventListener("click", saveSelectedConfig);
 els.runE2EButton.addEventListener("click", runSilFromGui);
+els.runMonteCarloButton.addEventListener("click", runMonteCarloFromGui);
 els.openBundleButton.addEventListener("click", () => {
   if (!state.selectedRun) return;
   window.open(`/api/runs/${encodeURIComponent(state.selectedRun)}`, "_blank");

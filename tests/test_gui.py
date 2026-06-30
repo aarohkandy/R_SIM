@@ -5,10 +5,12 @@ import shutil
 import threading
 import urllib.request
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
 from rocketsim.gui import discover_runs, read_run_detail
+from rocketsim.gui import server as gui_server
 from rocketsim.gui.server import create_server
 from rocketsim.gui.workbench import (
     list_workbench_files,
@@ -69,6 +71,34 @@ def write_workbench_repo(root: Path) -> Path:
     shutil.copytree(ROOT / "inputs", root / "inputs")
     (root / "outputs").mkdir()
     return root
+
+
+def write_montecarlo_status(root: Path) -> Path:
+    output_dir = root / "outputs" / "phase14_montecarlo"
+    output_dir.mkdir(parents=True, exist_ok=True)
+    summary = {
+        "runs_completed": 4,
+        "requested_runs": 5,
+        "new_rows_completed": 1,
+        "resumed_rows": 3,
+        "invocation_limited": True,
+        "gate_complete": False,
+        "stability": {"status": "insufficient_batches"},
+        "distributions": {
+            "landing_speed_m_s": {"percentiles": {"p50": 16.2}},
+            "touchdown_tilt_deg": {"percentiles": {"p95": 12.0}},
+            "touchdown_lateral_error_m": {"percentiles": {"p95": 3.2}},
+            "co2_margin_kg": {"percentiles": {"p5": 0.08}},
+        },
+    }
+    (output_dir / "montecarlo_summary.json").write_text(json.dumps(summary), encoding="utf-8")
+    (output_dir / "phase14_manifest.json").write_text(
+        json.dumps({"phase": 14, "summary": summary}),
+        encoding="utf-8",
+    )
+    (output_dir / "montecarlo_samples.csv").write_text("run_index\n0\n", encoding="utf-8")
+    (output_dir / "hist_landing_speed_m_s.png").write_bytes(b"png")
+    return output_dir
 
 
 def test_gui_discovers_runs_and_reads_details(tmp_path: Path) -> None:
@@ -186,3 +216,81 @@ def test_gui_http_config_api_validates_and_saves(tmp_path: Path) -> None:
     assert bom["valid"] is True
     assert invalid["valid"] is False
     assert saved["valid"] is True
+
+
+def test_gui_http_montecarlo_status_and_artifact_routes(tmp_path: Path) -> None:
+    repo = write_workbench_repo(tmp_path)
+    write_montecarlo_status(repo)
+    server = create_server(repo, port=0)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    base = f"http://{str(server.server_address[0])}:{server.server_address[1]}"
+    try:
+        status = json.loads(
+            urllib.request.urlopen(f"{base}/api/montecarlo-status", timeout=5).read()
+        )
+        artifact = urllib.request.urlopen(
+            f"{base}/montecarlo-artifacts/hist_landing_speed_m_s.png",
+            timeout=5,
+        ).read()
+    finally:
+        server.shutdown()
+        server.server_close()
+        thread.join(timeout=5)
+
+    assert status["montecarlo"]["available"] is True
+    assert status["montecarlo"]["summary"]["runs_completed"] == 4
+    assert status["montecarlo"]["histogram_urls"] == [
+        "/montecarlo-artifacts/hist_landing_speed_m_s.png"
+    ]
+    assert artifact == b"png"
+
+
+def test_gui_http_montecarlo_run_post_uses_bounded_overrides(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    repo = write_workbench_repo(tmp_path)
+    calls: dict[str, object] = {}
+
+    def fake_run_phase14_monte_carlo(
+        *,
+        repo_root: Path,
+        run_count_override: int | None,
+        max_new_runs_override: int | None,
+        resume_enabled_override: bool | None,
+    ) -> object:
+        calls["repo_root"] = repo_root
+        calls["run_count_override"] = run_count_override
+        calls["max_new_runs_override"] = max_new_runs_override
+        calls["resume_enabled_override"] = resume_enabled_override
+        output_dir = write_montecarlo_status(repo_root)
+        summary = json.loads((output_dir / "montecarlo_summary.json").read_text(encoding="utf-8"))
+        return SimpleNamespace(summary=summary, manifest_json=output_dir / "phase14_manifest.json")
+
+    monkeypatch.setattr(gui_server, "run_phase14_monte_carlo", fake_run_phase14_monte_carlo)
+    server = create_server(repo, port=0)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    base = f"http://{str(server.server_address[0])}:{server.server_address[1]}"
+    try:
+        request = urllib.request.Request(
+            f"{base}/api/run/montecarlo",
+            data=json.dumps(
+                {"requested_runs": 12, "max_new_runs": 2, "resume": True}
+            ).encode("utf-8"),
+            headers={"Content-Type": "application/json"},
+            method="POST",
+        )
+        payload = json.loads(urllib.request.urlopen(request, timeout=5).read())
+    finally:
+        server.shutdown()
+        server.server_close()
+        thread.join(timeout=5)
+
+    assert calls["repo_root"] == repo
+    assert calls["run_count_override"] == 12
+    assert calls["max_new_runs_override"] == 2
+    assert calls["resume_enabled_override"] is True
+    assert payload["ok"] is True
+    assert payload["montecarlo"]["summary"]["runs_completed"] == 4

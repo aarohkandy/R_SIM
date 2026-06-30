@@ -23,6 +23,7 @@ from rocketsim.gui.workbench import (
     validate_workbench_text,
 )
 from rocketsim.sim.flight import run_native_sil_e2e
+from rocketsim.validation import read_phase14_status, run_phase14_monte_carlo
 
 STATIC_DIR = Path(__file__).resolve().parent / "static"
 DEFAULT_OUTPUT_ROOT = "outputs"
@@ -212,6 +213,21 @@ def _handle_get(handler: BaseHTTPRequestHandler, repo_root: Path) -> None:
         except (FileNotFoundError, ValueError, TypeError) as exc:
             _send_error(handler, HTTPStatus.BAD_REQUEST, str(exc))
         return
+    if path == "/api/montecarlo-status":
+        try:
+            _send_json(handler, {"montecarlo": _montecarlo_status_payload(repo_root)})
+        except (FileNotFoundError, ValueError, TypeError) as exc:
+            _send_error(handler, HTTPStatus.BAD_REQUEST, str(exc))
+        return
+    if path.startswith("/montecarlo-artifacts/"):
+        relative = path.removeprefix("/montecarlo-artifacts/").strip("/")
+        try:
+            artifact_path = _safe_montecarlo_artifact_path(repo_root, relative)
+        except FileNotFoundError:
+            _send_error(handler, HTTPStatus.NOT_FOUND, "Monte Carlo artifact not found")
+            return
+        _send_file(handler, artifact_path)
+        return
     _send_error(handler, HTTPStatus.NOT_FOUND, "route not found")
 
 
@@ -231,6 +247,28 @@ def _handle_post(handler: BaseHTTPRequestHandler, repo_root: Path) -> None:
                 "run_id": result.output_dir.name,
                 "output_dir": str(result.output_dir),
                 "summary": result.summary,
+            },
+        )
+        return
+    if path == "/api/run/montecarlo":
+        try:
+            body = _read_json_body(handler)
+            monte_carlo_result = run_phase14_monte_carlo(
+                repo_root=repo_root,
+                run_count_override=_optional_positive_int(body.get("requested_runs")),
+                max_new_runs_override=_optional_nonnegative_int(body.get("max_new_runs")),
+                resume_enabled_override=_optional_bool_or_none(body.get("resume")),
+            )
+        except Exception as exc:  # pragma: no cover - converted into GUI payload
+            _send_json(handler, {"ok": False, "message": str(exc)})
+            return
+        _send_json(
+            handler,
+            {
+                "ok": True,
+                "summary": monte_carlo_result.summary,
+                "manifest_json": str(monte_carlo_result.manifest_json),
+                "montecarlo": _montecarlo_status_payload(repo_root),
             },
         )
         return
@@ -296,6 +334,31 @@ def _artifact_group_urls(run_id: str, group: Any) -> dict[str, Any]:
 
 def _artifact_url(run_id: str, relative: Any) -> str | None:
     return f"/artifacts/{run_id}/{relative}" if isinstance(relative, str) else None
+
+
+def _montecarlo_status_payload(repo_root: Path) -> dict[str, Any]:
+    status = read_phase14_status(repo_root)
+    status["histogram_urls"] = [
+        f"/montecarlo-artifacts/{name}" for name in status.get("histograms", [])
+    ]
+    return status
+
+
+def _safe_montecarlo_artifact_path(repo_root: Path, relative: str) -> Path:
+    if "/" in relative or "\\" in relative or relative in ("", ".", ".."):
+        raise FileNotFoundError(relative)
+    status = read_phase14_status(repo_root)
+    configured = status["configured"]
+    if not isinstance(configured, dict):
+        raise FileNotFoundError(relative)
+    output_dir_value = configured.get("output_dir")
+    if not isinstance(output_dir_value, str):
+        raise FileNotFoundError(relative)
+    output_dir = (repo_root / output_dir_value).resolve()
+    artifact_path = (output_dir / relative).resolve()
+    if not artifact_path.exists() or output_dir not in artifact_path.parents:
+        raise FileNotFoundError(relative)
+    return artifact_path
 
 
 def _safe_run_dir(repo_root: Path, output_root: str, run_id: str) -> Path:
@@ -401,6 +464,32 @@ def _optional_int(value: Any) -> int | None:
 
 def _optional_bool(value: Any) -> bool | None:
     return value if isinstance(value, bool) else None
+
+
+def _optional_bool_or_none(value: Any) -> bool | None:
+    if value is None:
+        return None
+    if isinstance(value, bool):
+        return value
+    raise TypeError("expected a boolean value")
+
+
+def _optional_positive_int(value: Any) -> int | None:
+    if value is None:
+        return None
+    number = int(value)
+    if number <= 0:
+        raise ValueError("expected a positive integer")
+    return number
+
+
+def _optional_nonnegative_int(value: Any) -> int | None:
+    if value is None:
+        return None
+    number = int(value)
+    if number < 0:
+        raise ValueError("expected a non-negative integer")
+    return number
 
 
 def _json_safe(value: Any) -> Any:

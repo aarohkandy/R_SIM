@@ -54,3 +54,6 @@
   while `ROCKETSIM_MC_RUNS=<N>` remains the requested total row count. This lets the
   1000-run study accumulate in small green checkpoints without changing the deterministic
   run-index mapping.
+- The localhost GUI exposes the same Phase-14 status and bounded-batch controls through
+  `/api/montecarlo-status` and `/api/run/montecarlo`; it must report distributions as data,
+  not as flight pass/fail verdicts.

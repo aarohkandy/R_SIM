@@ -414,3 +414,24 @@
   `make test` (`148 passed`).
 - Next: run bounded batches toward the full Phase-14 large-N target, then only mark the
   gate complete once target count and percentile stability criteria are both satisfied.
+
+## 2026-06-29 — Localhost Monte Carlo workbench controls
+
+- Added `/api/montecarlo-status`, `/api/run/montecarlo`, and safe
+  `/montecarlo-artifacts/<histogram>` routes to the localhost GUI server.
+- The new GUI Monte Carlo tab shows accumulated rows vs target, requested rows, rows added
+  in the last invocation, resumed rows, stability status, gate status, retained bundles,
+  signature, key percentiles, and histogram plots.
+- Added bounded-batch controls in the GUI: requested total rows, max new rows for this
+  click, and resume toggle. The POST route passes explicit overrides into the Phase-14
+  runner, avoiding global environment mutation.
+- Browser verification on `http://127.0.0.1:8765/` passed after restarting the local GUI:
+  the Monte Carlo tab rendered, showed `4 / 1000` rows, `requested: 5`, `added last run:
+  1`, `resumed rows: 3`, four histogram images, and no horizontal page overflow.
+- Added GUI API tests for Monte Carlo status/artifact routes and bounded-run POST
+  overrides.
+- Verification passed: focused GUI/Phase-14 tests, `make lint`, `make typecheck`, and
+  `make test` (`150 passed`).
+- Next: use the GUI/CLI bounded batch path to accumulate more real Phase-14 runs toward
+  the 1000-run target, then only claim the gate when target count and stability criteria
+  both hold.
