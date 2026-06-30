@@ -505,3 +505,32 @@
   and `make test` (`150 passed`).
 - Next: keep using the GUI as the operator-facing surface while Phase-14 accumulation
   continues and while later Renode/emulator status grows into real firmware bring-up.
+
+## 2026-06-29 — Phase 14 per-row checkpointing and 9-row accumulation
+
+- Changed `config/sim.yaml:data.phase14.checkpoint_interval_runs` from `25` to `1`, so
+  every newly completed Monte Carlo scenario writes resumable samples, parquet, summary,
+  stability, manifest, and histogram artifacts before the next scenario starts.
+- Updated the Phase-14 config contract test and `docs/modules/sim.md` to make per-row
+  checkpointing the documented production behavior for the long 1000-run study.
+- Ran a real bounded Phase-14 native-SIL Monte Carlo accumulation:
+  `ROCKETSIM_MC_RUNS=9 ROCKETSIM_MC_MAX_NEW_RUNS=1 make montecarlo`.
+- The runner resumed the existing eight rows, added one new metrics-only native-SIL
+  scenario, and rewrote the Phase-14 samples, parquet, summary, stability table,
+  manifest, and histogram artifacts.
+- Updated evidence from `outputs/phase14_montecarlo/montecarlo_summary.json`:
+  `runs_completed: 9`, `requested_runs: 9`, `resumed_rows: 8`,
+  `new_rows_completed: 1`, `invocation_limited: true`,
+  `checkpoint_interval_runs: 1`, and `stability.status: insufficient_batches`.
+- Sample rows now cover run indices `[0, 1, 2, 3, 4, 5, 6, 7, 8]` with one retained full
+  bundle and eight metrics-only runs. The Phase-14 gate remains open; this is
+  accumulation progress, not statistical completion.
+- Current nine-row distributions, reported as data only: landing-speed mean
+  `17.693453498367074 m/s` with p95 `24.192190286319516 m/s`; touchdown-tilt mean
+  `125.59823134397831 deg` with p95 `169.4492584262083 deg`; lateral-error mean
+  `44.0379305701193 m` with p95 `94.35740468483398 m`; CO2-remaining mean
+  `0.08311738852140595 kg` with p5 `0.07990926714845391 kg`.
+- Verification passed: `tests/test_phase14_validation.py` (`9 passed`), `make lint`,
+  `make typecheck`, and `make test` (`150 passed`).
+- Next: continue bounded batches toward the first full 100-run batch, then toward the
+  configured 1000-run target and percentile-stability criteria.

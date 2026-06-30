@@ -34,7 +34,7 @@ data:
     stability_window_batches: 3
     percentile_stability_tolerance: 0.02
     resume_enabled: true
-    checkpoint_interval_runs: 25
+    checkpoint_interval_runs: 1
     max_new_runs_per_invocation: 0
     retained_bundle_stride: 25
     histogram_bins: 40

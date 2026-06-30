@@ -46,8 +46,10 @@
   scenarios use metrics-only summary artifacts so a 1000-run study does not waste time
   rendering throwaway animations, plots, thermal outputs, and structural outputs.
 - Phase 14 writes checkpoint artifacts every
-  `config/sim.yaml:data.phase14.checkpoint_interval_runs` completed runs and can resume
-  existing `montecarlo_samples.csv` rows when their resume signature matches the master
+  `config/sim.yaml:data.phase14.checkpoint_interval_runs` completed runs. The production
+  config keeps this at `1`, so every newly completed scenario flushes resumable samples,
+  summary, manifest, stability, and histogram artifacts before the next scenario starts.
+  Existing `montecarlo_samples.csv` rows resume when their signature matches the master
   seed, nozzle count, retained-bundle stride, and dispersion settings. Set
   `ROCKETSIM_MC_RESUME=0` for a clean rerun without editing the production config.
 - `ROCKETSIM_MC_MAX_NEW_RUNS=<N>` limits how many missing scenarios one invocation adds,

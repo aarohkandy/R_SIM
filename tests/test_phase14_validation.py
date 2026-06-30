@@ -72,7 +72,7 @@ def test_phase14_config_loads_large_n_contract() -> None:
     assert sim.data.phase14.target_runs == 1000
     assert sim.data.phase14.batch_size == 100
     assert sim.data.phase14.resume_enabled is True
-    assert sim.data.phase14.checkpoint_interval_runs == 25
+    assert sim.data.phase14.checkpoint_interval_runs == 1
     assert sim.data.phase14.max_new_runs_per_invocation == 0
     assert sim.data.phase14.dispersions.wind_xy_std_m_s == pytest.approx(2.0)
 
