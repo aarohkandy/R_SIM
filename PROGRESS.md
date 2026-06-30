@@ -1004,3 +1004,30 @@
   in this batch beyond this progress log.
 - Next: continue bounded accumulation toward retained bundle index `125`, then toward the
   configured 1000-run target and percentile-stability criteria.
+
+## 2026-06-30 — Phase 14 bounded batch accumulation to 117 rows
+
+- Ran another real bounded Phase-14 native-SIL Monte Carlo accumulation:
+  `ROCKETSIM_MC_RUNS=117 ROCKETSIM_MC_MAX_NEW_RUNS=8 make montecarlo`.
+- The runner resumed the existing one-hundred-nine rows, added eight new metrics-only
+  native-SIL scenarios, and rewrote the Phase-14 samples, parquet, summary, stability
+  table, manifest, and histogram artifacts with per-row checkpointing still active.
+- Updated evidence from `outputs/phase14_montecarlo/montecarlo_summary.json`:
+  `runs_completed: 117`, `requested_runs: 117`, `resumed_rows: 109`,
+  `new_rows_completed: 8`, `retained_bundles: 5`, `gate_complete: false`,
+  `stability.status: insufficient_batches`, `next_retained_bundle_index: 125`, and
+  `rows_until_next_retained_bundle: 9`.
+- Sample rows now cover run indices `0..116`, with retained full bundles at indices `0`,
+  `25`, `50`, `75`, and `100`, and one hundred twelve metrics-only rows. The Phase-14
+  gate remains open; this is accumulation progress, not statistical completion.
+- Current one-hundred-seventeen-row distributions, reported as data only: landing-speed
+  mean `16.88403523221673 m/s`, p50 `14.851148771389065 m/s`, p95
+  `25.29820503704871 m/s`; touchdown-tilt mean `129.0522542145352 deg`, p50
+  `143.07412153800706 deg`, p95 `169.07172640869558 deg`; lateral-error mean
+  `36.26811914366661 m`, p50 `23.13865493162175 m`, p95
+  `85.64329958427211 m`; CO2-remaining mean `0.08392543636054892 kg`, p5
+  `0.08035809299314406 kg`, p50 `0.0846644146287376 kg`.
+- Verification passed: focused Phase-14/GUI tests (`17 passed`). No source code changed
+  in this batch beyond this progress log.
+- Next: continue bounded accumulation through retained bundle index `125`, then toward
+  the configured 1000-run target and percentile-stability criteria.
