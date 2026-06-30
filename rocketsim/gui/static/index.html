@@ -16,6 +16,7 @@
       </div>
     </div>
     <div class="toolbar" role="toolbar" aria-label="Workbench controls">
+      <button id="defineRocketButton" class="text-button primary" title="Open rocket definition">Define Rocket</button>
       <button id="refreshButton" class="text-button" title="Refresh">Reload</button>
       <button id="validateButton" class="text-button" title="Validate selected definition">Validate</button>
       <button id="saveButton" class="text-button primary" title="Save selected definition">Save</button>
@@ -63,7 +64,20 @@
       </nav>
 
       <section id="design" class="view active-view">
+        <div class="design-titlebar">
+          <div>
+            <h1>Rocket Definition</h1>
+            <div id="definitionPathLine" class="path-label"></div>
+          </div>
+          <div class="definition-actions">
+            <button id="pasteFocusButton" class="text-button" title="Select the editor for paste">Paste Into Editor</button>
+            <button id="importFileButton" class="text-button" title="Load text from a local file">Import File</button>
+            <button id="copyPathButton" class="text-button" title="Copy selected repo path">Copy Path</button>
+            <input id="importDefinitionInput" type="file" hidden accept=".yaml,.yml,.csv,.eng,.rse,.txt">
+          </div>
+        </div>
         <div id="rocketSummary" class="summary-strip"></div>
+        <div id="definitionSwitcher" class="definition-switcher" aria-label="Rocket definition sources"></div>
         <div class="design-grid">
           <div class="editor-pane">
             <div class="editor-head">
@@ -76,9 +90,25 @@
                 <div id="validationBadge" class="state-badge waiting">Waiting</div>
               </div>
             </div>
-            <textarea id="configEditor" spellcheck="false"></textarea>
+            <textarea id="configEditor" spellcheck="false" placeholder="Paste YAML, CSV, .eng, or .rse text here."></textarea>
           </div>
           <div class="pane side-panel">
+            <div class="rocket-visual" aria-hidden="true">
+              <div class="rocket-body">
+                <span class="cg-marker"></span>
+                <span class="tank-marker"></span>
+              </div>
+              <div class="rocket-legs">
+                <span></span>
+                <span></span>
+                <span></span>
+              </div>
+              <div class="nozzle-row">
+                <span></span>
+                <span></span>
+                <span></span>
+              </div>
+            </div>
             <div class="pane-title">Selected Definition</div>
             <div id="configDescription" class="definition-copy"></div>
             <div id="configSummary" class="kv-table"></div>

@@ -12,7 +12,19 @@ const state = {
   dirty: false,
 };
 
+const definitionGuides = [
+  { name: "bom", title: "Parts / BOM", detail: "part masses, positions, CG, legs" },
+  { name: "vehicle", title: "Body Geometry", detail: "diameter, length, source paths" },
+  { name: "coldgas", title: "CO2 / Nozzles", detail: "tank, regulator, nozzle layout" },
+  { name: "motor_curve", title: "Motor Curve", detail: ".eng / .rse thrust data" },
+  { name: "aero", title: "Aerodynamics", detail: "live CP/Cd model inputs" },
+  { name: "control", title: "Controller", detail: "SIL/Renode backend, loop, gains" },
+  { name: "sensors", title: "Sensors", detail: "IMU, baro, noise, drift" },
+  { name: "sim", title: "Runtime", detail: "seed, fixed timestep, run limits" },
+];
+
 const els = {
+  centerPane: document.querySelector(".center-pane"),
   runList: document.getElementById("runList"),
   configList: document.getElementById("configList"),
   statusText: document.getElementById("statusText"),
@@ -31,6 +43,7 @@ const els = {
   renodePhase: document.getElementById("renodePhase"),
   monteCarloPhase: document.getElementById("monteCarloPhase"),
   refreshButton: document.getElementById("refreshButton"),
+  defineRocketButton: document.getElementById("defineRocketButton"),
   validateButton: document.getElementById("validateButton"),
   saveButton: document.getElementById("saveButton"),
   runE2EButton: document.getElementById("runE2EButton"),
@@ -38,11 +51,17 @@ const els = {
   openBundleButton: document.getElementById("openBundleButton"),
   configTitle: document.getElementById("configTitle"),
   configPath: document.getElementById("configPath"),
+  definitionPathLine: document.getElementById("definitionPathLine"),
+  definitionSwitcher: document.getElementById("definitionSwitcher"),
   configSelect: document.getElementById("configSelect"),
   configEditor: document.getElementById("configEditor"),
   configDescription: document.getElementById("configDescription"),
   configSummary: document.getElementById("configSummary"),
   validationBadge: document.getElementById("validationBadge"),
+  pasteFocusButton: document.getElementById("pasteFocusButton"),
+  importFileButton: document.getElementById("importFileButton"),
+  importDefinitionInput: document.getElementById("importDefinitionInput"),
+  copyPathButton: document.getElementById("copyPathButton"),
   rocketSummary: document.getElementById("rocketSummary"),
   rocketSummaryTable: document.getElementById("rocketSummaryTable"),
   emulatorGrid: document.getElementById("emulatorGrid"),
@@ -72,6 +91,7 @@ async function loadWorkbench() {
   renderConfigList();
   renderRocketSummary();
   renderMonteCarlo();
+  switchView(state.activeView);
   if (state.runs.length > 0) {
     const current = state.selectedRun || state.runs[0].run_id;
     await selectRun(current);
@@ -240,6 +260,7 @@ function renderConfigList() {
     }
   }
   renderConfigSelect();
+  renderDefinitionSwitcher();
 }
 
 function renderConfigSelect() {
@@ -247,6 +268,29 @@ function renderConfigSelect() {
     <option value="${escapeHtml(item.name)}">${escapeHtml(`${item.group} - ${item.label}`)}</option>
   `).join("");
   els.configSelect.value = state.selectedConfig;
+}
+
+function renderDefinitionSwitcher() {
+  const itemsByName = Object.fromEntries(state.configs.map((item) => [item.name, item]));
+  els.definitionSwitcher.innerHTML = definitionGuides.map((guide) => {
+    const item = itemsByName[guide.name];
+    if (!item) return "";
+    const validClass = item.valid ? "good" : "bad";
+    const active = item.name === state.selectedConfig ? "active" : "";
+    return `
+      <button class="definition-card ${active}" data-config-target="${escapeHtml(item.name)}" title="${escapeHtml(item.path)}">
+        <span class="definition-card-head">
+          <strong>${escapeHtml(guide.title)}</strong>
+          <span class="dot ${validClass}"></span>
+        </span>
+        <span>${escapeHtml(guide.detail)}</span>
+        <code>${escapeHtml(item.path)}</code>
+      </button>
+    `;
+  }).join("");
+  for (const button of els.definitionSwitcher.querySelectorAll("[data-config-target]")) {
+    button.addEventListener("click", () => selectConfig(button.dataset.configTarget));
+  }
 }
 
 function renderRunList() {
@@ -270,9 +314,13 @@ function renderRunList() {
 function renderConfigDetail(payload) {
   els.configTitle.textContent = payload.label || "Rocket Definition";
   els.configPath.textContent = payload.path || "";
+  els.definitionPathLine.textContent = payload.path
+    ? `Editing ${payload.path}`
+    : "Choose a definition source";
   els.configDescription.textContent = payload.description || "";
   renderValidation(payload);
   els.configSummary.innerHTML = keyValueTable(summaryRows(payload.summary || {}));
+  renderDefinitionSwitcher();
 }
 
 function renderValidation(payload) {
@@ -594,12 +642,52 @@ function renderEmptyRun() {
 
 function switchView(viewName) {
   state.activeView = viewName;
+  els.centerPane.classList.toggle("design-mode", viewName === "design");
   document.querySelectorAll(".tab").forEach((item) => {
     item.classList.toggle("active", item.dataset.view === viewName);
   });
   document.querySelectorAll(".view").forEach((item) => {
     item.classList.toggle("active-view", item.id === viewName);
   });
+}
+
+async function openRocketDefinition() {
+  switchView("design");
+  if (state.selectedConfig !== "bom") {
+    await selectConfig("bom");
+  }
+  els.configEditor.focus();
+}
+
+function focusPasteTarget() {
+  els.configEditor.scrollIntoView({ block: "center", inline: "nearest" });
+  els.configEditor.focus();
+  els.configEditor.select();
+  setStatus("Editor selected. Paste replacement text, then validate and save.");
+}
+
+async function importDefinitionFile() {
+  const file = els.importDefinitionInput.files?.[0];
+  if (!file) return;
+  const text = await file.text();
+  els.configEditor.value = text;
+  els.configEditor.scrollIntoView({ block: "center", inline: "nearest" });
+  state.dirty = true;
+  renderValidation({ ...state.configDetail, valid: state.configDetail?.valid !== false });
+  renderInspector();
+  setStatus(`Loaded ${file.name} into the editor; validate before saving.`);
+  els.importDefinitionInput.value = "";
+}
+
+async function copySelectedPath() {
+  const path = state.configDetail?.path;
+  if (!path) return;
+  try {
+    await navigator.clipboard.writeText(path);
+    setStatus(`Copied ${path}`);
+  } catch {
+    setStatus(`Selected path: ${path}`);
+  }
 }
 
 function setBusy(isBusy) {
@@ -739,6 +827,9 @@ for (const tab of document.querySelectorAll(".tab")) {
 }
 
 els.refreshButton.addEventListener("click", loadWorkbench);
+els.defineRocketButton.addEventListener("click", () => {
+  openRocketDefinition().catch((error) => setStatus(error.message));
+});
 els.validateButton.addEventListener("click", validateSelectedConfig);
 els.saveButton.addEventListener("click", saveSelectedConfig);
 els.runE2EButton.addEventListener("click", runSilFromGui);
@@ -746,6 +837,14 @@ els.runMonteCarloButton.addEventListener("click", runMonteCarloFromGui);
 els.openBundleButton.addEventListener("click", () => {
   if (!state.selectedRun) return;
   window.open(`/api/runs/${encodeURIComponent(state.selectedRun)}`, "_blank");
+});
+els.pasteFocusButton.addEventListener("click", focusPasteTarget);
+els.importFileButton.addEventListener("click", () => els.importDefinitionInput.click());
+els.importDefinitionInput.addEventListener("change", () => {
+  importDefinitionFile().catch((error) => setStatus(error.message));
+});
+els.copyPathButton.addEventListener("click", () => {
+  copySelectedPath().catch((error) => setStatus(error.message));
 });
 els.configEditor.addEventListener("input", () => {
   state.dirty = true;

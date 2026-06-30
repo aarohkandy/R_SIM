@@ -135,6 +135,8 @@ def test_gui_http_api_serves_index_and_runs(tmp_path: Path) -> None:
 
     assert "R-SIM Workbench" in index
     assert "Rocket Definition" in index
+    assert "Define Rocket" in index
+    assert "Paste Into Editor" in index
     assert runs["runs"][0]["run_id"] == "unit_run"
     assert detail["telemetry_preview"]["columns"] == [
         "time_s",

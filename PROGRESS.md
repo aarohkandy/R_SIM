@@ -482,3 +482,26 @@
 - No code changed in this batch; this is a progress-only compute checkpoint.
 - Next: continue bounded batches toward the first full 100-run batch, then toward the
   configured 1000-run target and percentile-stability criteria.
+
+## 2026-06-29 — Localhost rocket definition UX repair
+
+- Reworked the localhost Design view so the first screen is explicitly centered on
+  `Rocket Definition`, with a top-level `Define Rocket` action and visible source cards
+  for BOM/parts, body geometry, CO2/nozzles, motor curve, aero, controller, sensors, and
+  runtime settings.
+- Added direct editing affordances for the real whitelisted source files: `Paste Into
+  Editor` scrolls to and selects the current YAML/CSV/ENG text area, `Import File` loads a
+  local text file into the editor, and `Copy Path` exposes the repo path for the selected
+  definition file.
+- Cleaned up the OpenRocket-style workbench layout: Design hides the telemetry pane while
+  editing, the page uses a real header/workspace grid instead of fixed height guesses, the
+  source cards stay compact at laptop width, and the editor now uses a light engineering
+  surface instead of a code-demo dark block.
+- Browser verification on `http://127.0.0.1:8765/` passed at an 817 px-wide viewport:
+  Design opened by default, no horizontal overflow was detected, telemetry was hidden in
+  Design, `Paste Into Editor` focused and selected the BOM editor, and `Define Rocket`
+  returned from Monte Carlo to the BOM editor.
+- Verification passed: `tests/test_gui.py` (`7 passed`), `make lint`, `make typecheck`,
+  and `make test` (`150 passed`).
+- Next: keep using the GUI as the operator-facing surface while Phase-14 accumulation
+  continues and while later Renode/emulator status grows into real firmware bring-up.
