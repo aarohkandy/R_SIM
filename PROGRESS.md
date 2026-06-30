@@ -922,3 +922,30 @@
   in this batch beyond this progress log.
 - Next: continue bounded accumulation toward retained bundle index `100`, then toward the
   configured 1000-run target and percentile-stability criteria.
+
+## 2026-06-30 — Phase 14 bounded batch accumulation to 92 rows
+
+- Ran another real bounded Phase-14 native-SIL Monte Carlo accumulation:
+  `ROCKETSIM_MC_RUNS=92 ROCKETSIM_MC_MAX_NEW_RUNS=8 make montecarlo`.
+- The runner resumed the existing eighty-four rows, added eight new metrics-only
+  native-SIL scenarios, and rewrote the Phase-14 samples, parquet, summary, stability
+  table, manifest, and histogram artifacts with per-row checkpointing still active.
+- Updated evidence from `outputs/phase14_montecarlo/montecarlo_summary.json`:
+  `runs_completed: 92`, `requested_runs: 92`, `resumed_rows: 84`,
+  `new_rows_completed: 8`, `retained_bundles: 4`, `gate_complete: false`,
+  `stability.status: insufficient_batches`, `next_retained_bundle_index: 100`, and
+  `rows_until_next_retained_bundle: 9`.
+- Sample rows now cover run indices `0..91`, with retained full bundles at indices `0`,
+  `25`, `50`, and `75`, and eighty-eight metrics-only rows. The Phase-14 gate remains
+  open; this is accumulation progress, not statistical completion.
+- Current ninety-two-row distributions, reported as data only: landing-speed mean
+  `17.075338725873138 m/s`, p50 `15.01215658818257 m/s`, p95
+  `25.328105373648 m/s`; touchdown-tilt mean `130.0956082994382 deg`, p50
+  `142.86993089140773 deg`, p95 `169.09162123888837 deg`; lateral-error mean
+  `37.53819657168929 m`, p50 `23.612783997524144 m`, p95
+  `86.58446150033006 m`; CO2-remaining mean `0.08388489889161828 kg`, p5
+  `0.08034761316907676 kg`, p50 `0.0846578087864143 kg`.
+- Verification passed: focused Phase-14/GUI tests (`17 passed`). No source code changed
+  in this batch beyond this progress log.
+- Next: continue bounded accumulation through retained bundle index `100`, then toward
+  the configured 1000-run target and percentile-stability criteria.
