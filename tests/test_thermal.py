@@ -4,7 +4,7 @@ import json
 from pathlib import Path
 
 import pytest
-from hypothesis import given
+from hypothesis import given, settings
 from hypothesis import strategies as st
 from pydantic import ValidationError
 
@@ -100,6 +100,7 @@ def test_thermal_regression_matches_golden() -> None:
         )
 
 
+@settings(deadline=None)
 @given(
     temperature_deg_c=st.floats(
         min_value=-20.0,

@@ -117,6 +117,7 @@ class Phase14Settings(BaseModel):
     percentile_stability_tolerance: float = Field(gt=0.0)
     resume_enabled: bool
     checkpoint_interval_runs: int = Field(gt=0)
+    max_new_runs_per_invocation: int = Field(ge=0)
     retained_bundle_stride: int = Field(ge=0)
     histogram_bins: int = Field(gt=0)
     percentiles: tuple[float, ...] = Field(min_length=1)

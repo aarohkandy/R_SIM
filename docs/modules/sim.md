@@ -50,3 +50,7 @@
   existing `montecarlo_samples.csv` rows when their resume signature matches the master
   seed, nozzle count, retained-bundle stride, and dispersion settings. Set
   `ROCKETSIM_MC_RESUME=0` for a clean rerun without editing the production config.
+- `ROCKETSIM_MC_MAX_NEW_RUNS=<N>` limits how many missing scenarios one invocation adds,
+  while `ROCKETSIM_MC_RUNS=<N>` remains the requested total row count. This lets the
+  1000-run study accumulate in small green checkpoints without changing the deterministic
+  run-index mapping.

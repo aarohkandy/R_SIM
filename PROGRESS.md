@@ -392,3 +392,25 @@
   `make test` (`147 passed`).
 - Next: use the checkpointed runner for a larger pilot batch, then allow the un-overridden
   1000-run study to accumulate to stability.
+
+## 2026-06-29 — Phase 14 bounded batch accumulation
+
+- Added `max_new_runs_per_invocation` to the strict Phase-14 config, defaulting to `0`
+  for unlimited production runs.
+- Added `ROCKETSIM_MC_MAX_NEW_RUNS=<N>` so the requested total study size can remain large
+  while a single invocation adds only the next N missing deterministic scenarios, writes
+  checkpoint artifacts, and exits cleanly.
+- The Phase-14 summary now records `new_rows_completed`, `max_new_runs_per_invocation`,
+  and `invocation_limited`, making partial accumulation explicit in the manifest and
+  summary JSON.
+- Real command smoke evidence: with an existing 3-row resumed study,
+  `ROCKETSIM_MC_RUNS=5 ROCKETSIM_MC_MAX_NEW_RUNS=1 make montecarlo` added one new native-SIL
+  metrics-only scenario and stopped at `runs_completed: 4`, `requested_runs: 5`,
+  `resumed_rows: 3`, `new_rows_completed: 1`, and `invocation_limited: true`.
+- Added tests for the config field and for bounded invocation behavior with a fake runner.
+- Stabilized the thermal property test by disabling Hypothesis' wall-clock deadline for
+  the no-source ambient-invariance property; the physical assertion remains unchanged.
+- Verification passed: focused Phase-14/thermal tests, `make lint`, `make typecheck`, and
+  `make test` (`148 passed`).
+- Next: run bounded batches toward the full Phase-14 large-N target, then only mark the
+  gate complete once target count and percentile stability criteria are both satisfied.

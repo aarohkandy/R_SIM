@@ -133,9 +133,13 @@ def run_phase14_monte_carlo(
         else {}
     )
     resumed_rows = len(rows_by_index)
+    max_new_runs = _resolve_max_new_runs(phase)
+    new_rows_completed = 0
     for scenario in scenarios:
         if scenario.index in rows_by_index:
             continue
+        if max_new_runs > 0 and new_rows_completed >= max_new_runs:
+            break
         run_id = f"phase14_mc{scenario.index:04d}_seed{scenario.sensor_seed}"
         retain_bundle = _retain_bundle(phase, scenario.index)
         temp_prefix = f"rocketsim_phase14_case_{scenario.index:04d}_"
@@ -153,6 +157,7 @@ def run_phase14_monte_carlo(
         row.update(_result_metric_row(result, run_id=run_id, retained_bundle=retain_bundle))
         row["phase14_signature"] = signature
         rows_by_index[scenario.index] = row
+        new_rows_completed += 1
         if len(rows_by_index) % phase.checkpoint_interval_runs == 0:
             _write_phase14_artifacts(
                 output_dir=output_dir,
@@ -166,6 +171,8 @@ def run_phase14_monte_carlo(
                 sim_config=sim_config,
                 requested_runs=run_count,
                 resumed_rows=resumed_rows,
+                new_rows_completed=new_rows_completed,
+                max_new_runs=max_new_runs,
                 resume_enabled=resume_enabled,
                 signature=signature,
                 checkpoint=True,
@@ -183,6 +190,8 @@ def run_phase14_monte_carlo(
         sim_config=sim_config,
         requested_runs=run_count,
         resumed_rows=resumed_rows,
+        new_rows_completed=new_rows_completed,
+        max_new_runs=max_new_runs,
         resume_enabled=resume_enabled,
         signature=signature,
         checkpoint=False,
@@ -230,6 +239,8 @@ def _write_phase14_artifacts(
     sim_config: SimConfig,
     requested_runs: int,
     resumed_rows: int,
+    new_rows_completed: int,
+    max_new_runs: int,
     resume_enabled: bool,
     signature: str,
     checkpoint: bool,
@@ -261,6 +272,9 @@ def _write_phase14_artifacts(
         "checkpoint": checkpoint,
         "resume_enabled": resume_enabled,
         "resumed_rows": resumed_rows,
+        "new_rows_completed": new_rows_completed,
+        "max_new_runs_per_invocation": max_new_runs,
+        "invocation_limited": max_new_runs > 0 and new_rows_completed >= max_new_runs,
         "phase14_signature": signature,
         "checkpoint_interval_runs": phase.checkpoint_interval_runs,
         "stability": stability,
@@ -599,6 +613,21 @@ def _resolve_resume_enabled(phase: Phase14Settings) -> bool:
         return False
     msg = "ROCKETSIM_MC_RESUME must be one of 1/0, true/false, yes/no, or on/off"
     raise ValueError(msg)
+
+
+def _resolve_max_new_runs(phase: Phase14Settings) -> int:
+    env_value = os.environ.get("ROCKETSIM_MC_MAX_NEW_RUNS")
+    if env_value is None:
+        return phase.max_new_runs_per_invocation
+    try:
+        max_new_runs = int(env_value)
+    except ValueError as exc:
+        msg = "ROCKETSIM_MC_MAX_NEW_RUNS must be a non-negative integer"
+        raise ValueError(msg) from exc
+    if max_new_runs < 0:
+        msg = "ROCKETSIM_MC_MAX_NEW_RUNS must be non-negative"
+        raise ValueError(msg)
+    return max_new_runs
 
 
 def _retain_bundle(phase: Phase14Settings, run_index: int) -> bool:
