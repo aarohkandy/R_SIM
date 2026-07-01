@@ -1568,3 +1568,32 @@
 - Next: continue the active bounded Phase-14 accumulation toward 267 rows, then retained
   bundle index `275`, while continuing to improve the GUI into a richer full rocket
   workbench.
+
+## 2026-06-30 — Phase 14 partial accumulation to 262 rows
+
+- Started a bounded Phase-14 native-SIL Monte Carlo accumulation with
+  `ROCKETSIM_MC_RUNS=267 ROCKETSIM_MC_MAX_NEW_RUNS=8 make montecarlo`.
+- The runner resumed the existing two-hundred-fifty-nine rows and checkpointed three new
+  metrics-only native-SIL scenarios before the next scenario stopped making useful row
+  progress. Per the run rule to recoup when progress stalls, the batch was interrupted
+  and the valid row-level checkpoint was kept instead of waiting indefinitely.
+- Updated evidence from `outputs/phase14_montecarlo/montecarlo_summary.json`:
+  `runs_completed: 262`, `requested_runs: 267`, `resumed_rows: 259`,
+  `new_rows_completed: 3`, `retained_bundles: 11`, `gate_complete: false`,
+  `stability.status: insufficient_batches`, `next_retained_bundle_index: 275`, and
+  `rows_until_next_retained_bundle: 14`.
+- Sample rows now cover run indices `0..261`, with retained full bundles at indices `0`,
+  `25`, `50`, `75`, `100`, `125`, `150`, `175`, `200`, `225`, and `250`, and two
+  hundred fifty-one metrics-only rows. The Phase-14 gate remains open; this is
+  accumulation progress, not statistical completion.
+- Current two-hundred-sixty-two-row distributions, reported as data only:
+  landing-speed mean `17.524607169163996 m/s`, p50 `15.324185813605013 m/s`, p95
+  `25.47913750638129 m/s`; touchdown-tilt mean `131.66832006427148 deg`, p50
+  `146.4496837196026 deg`, p95 `172.80285474266918 deg`; lateral-error mean
+  `37.81476310481597 m`, p50 `24.074062897622444 m`, p95
+  `84.9953895775244 m`; CO2-remaining mean `0.08373658802200998 kg`, p5
+  `0.07999939789634691 kg`, p50 `0.0846273182550756 kg`.
+- Verification passed after the interrupted run: full coverage suite (`make test`,
+  `154 passed`, total coverage `87%`).
+- Next: use smaller bounded Phase-14 chunks or inspect the slow scenario path before
+  pushing again toward retained bundle index `275`.
