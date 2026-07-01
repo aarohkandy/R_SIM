@@ -15,7 +15,9 @@ from rocketsim.gui.server import create_server
 from rocketsim.gui.workbench import (
     list_workbench_files,
     read_workbench_file,
+    rocket_builder_state,
     rocket_summary,
+    save_rocket_builder,
     save_workbench_text,
     validate_workbench_text,
 )
@@ -137,9 +139,11 @@ def test_gui_http_api_serves_index_and_runs(tmp_path: Path) -> None:
         thread.join(timeout=5)
 
     assert "R-SIM Workbench" in index
-    assert "Rocket Definition" in index
     assert "Define Rocket" in index
-    assert "Paste Into Editor" in index
+    assert "Define Rocket" in index
+    assert "Rocket Builder" in index
+    assert "Save Rocket Values" in index
+    assert "Paste Config" in index
     assert runs["runs"][0]["run_id"] == "unit_run"
     assert detail["telemetry_preview"]["columns"] == [
         "time_s",
@@ -185,6 +189,51 @@ def test_workbench_lists_reads_validates_and_saves_definition_files(tmp_path: Pa
     assert summary["wet_mass_kg"] > 0.0
 
 
+def test_rocket_builder_state_and_save_updates_validated_sources(tmp_path: Path) -> None:
+    repo = write_workbench_repo(tmp_path)
+
+    before = rocket_builder_state(repo)
+    payload = dict(before["values"])
+    payload.update(
+        {
+            "body_diameter_mm": 70.0,
+            "body_length_mm": 230.0,
+            "target_wet_mass_kg": 0.95,
+            "co2_mass_g": 90.0,
+            "regulator_setpoint_psi": 125.0,
+            "nozzle_throat_area_mm2": 0.62,
+            "control_loop_rate_hz": 120.0,
+            "landing_burn_altitude_m": 42.0,
+            "master_seed": 12345,
+            "integrator_dt_ms": 0.8,
+            "motor_curve_path": "inputs/motor_D21_placeholder.eng",
+        }
+    )
+
+    saved = save_rocket_builder(repo, payload)
+    vehicle = read_workbench_file(repo, "vehicle")
+    aero = read_workbench_file(repo, "aero")
+    coldgas = read_workbench_file(repo, "coldgas")
+    bom = read_workbench_file(repo, "bom")
+    control = read_workbench_file(repo, "control")
+    sim = read_workbench_file(repo, "sim")
+
+    assert saved["values"]["body_diameter_mm"] == 70.0
+    assert saved["values"]["co2_mass_g"] == 90.0
+    assert vehicle["document"]["data"]["body"]["diameter_m"] == pytest.approx(0.07)
+    assert aero["document"]["data"]["geometry"]["body_diameter_m"] == pytest.approx(0.07)
+    assert coldgas["document"]["data"]["tank"]["initial_co2_mass_kg"] == pytest.approx(0.09)
+    assert coldgas["document"]["data"]["nozzles"]["items"][0]["throat_area_m2"] == pytest.approx(
+        0.62e-6
+    )
+    co2_parts = [part for part in bom["document"]["parts"] if part["state_tag"] == "CO2"]
+    assert co2_parts[0]["mass_kg"] == pytest.approx(0.09)
+    assert control["document"]["data"]["loop_rate_hz"] == 120.0
+    assert sim["document"]["data"]["integrator_dt_s"] == pytest.approx(0.0008)
+    assert "config/vehicle.yaml" in saved["updated_files"]
+    assert "inputs/bom_placeholder.yaml" in saved["updated_files"]
+
+
 def test_gui_http_config_api_validates_and_saves(tmp_path: Path) -> None:
     repo = write_workbench_repo(tmp_path)
     server = create_server(repo, port=0)
@@ -193,8 +242,21 @@ def test_gui_http_config_api_validates_and_saves(tmp_path: Path) -> None:
     base = f"http://{str(server.server_address[0])}:{server.server_address[1]}"
     try:
         configs = json.loads(urllib.request.urlopen(f"{base}/api/configs", timeout=5).read())
+        builder = json.loads(
+            urllib.request.urlopen(f"{base}/api/rocket-builder", timeout=5).read()
+        )
         hil = json.loads(urllib.request.urlopen(f"{base}/api/hil-status", timeout=5).read())
         bom = json.loads(urllib.request.urlopen(f"{base}/api/configs/bom", timeout=5).read())
+        builder_values = dict(builder["builder"]["values"])
+        builder_values["body_length_mm"] = 240.0
+        builder_values["co2_mass_g"] = 91.0
+        builder_request = urllib.request.Request(
+            f"{base}/api/rocket-builder",
+            data=json.dumps(builder_values).encode("utf-8"),
+            headers={"Content-Type": "application/json"},
+            method="POST",
+        )
+        builder_saved = json.loads(urllib.request.urlopen(builder_request, timeout=5).read())
         bad_request = urllib.request.Request(
             f"{base}/api/configs/bom/validate",
             data=json.dumps({"text": "schema_version: 1\nparts: []\n"}).encode("utf-8"),
@@ -216,6 +278,9 @@ def test_gui_http_config_api_validates_and_saves(tmp_path: Path) -> None:
         thread.join(timeout=5)
 
     assert any(item["name"] == "bom" for item in configs["configs"])
+    assert builder["builder"]["values"]["body_length_mm"] == 200.0
+    assert builder_saved["builder"]["values"]["body_length_mm"] == 240.0
+    assert builder_saved["builder"]["values"]["co2_mass_g"] == 91.0
     assert hil["hil"]["status"] == "blocked"
     assert hil["hil"]["blockers"]
     assert bom["valid"] is True

@@ -5,6 +5,7 @@ const state = {
   selectedConfig: "bom",
   detail: null,
   configDetail: null,
+  builder: null,
   rocketSummary: null,
   hilStatus: null,
   monteCarlo: null,
@@ -21,6 +22,50 @@ const definitionGuides = [
   { name: "control", title: "Controller", detail: "SIL/Renode backend, loop, gains" },
   { name: "sensors", title: "Sensors", detail: "IMU, baro, noise, drift" },
   { name: "sim", title: "Runtime", detail: "seed, fixed timestep, run limits" },
+];
+
+const builderGroups = [
+  {
+    title: "Body",
+    source: "body",
+    fields: [
+      { key: "body_diameter_mm", label: "Diameter", unit: "mm", step: "0.1", min: "1" },
+      { key: "body_length_mm", label: "Length", unit: "mm", step: "0.1", min: "1" },
+      { key: "target_wet_mass_kg", label: "Target wet mass", unit: "kg", step: "0.001", min: "0.001" },
+    ],
+  },
+  {
+    title: "Landing Gas",
+    source: "propulsion",
+    fields: [
+      { key: "co2_mass_g", label: "CO2 mass", unit: "g", step: "0.1", min: "0.1" },
+      { key: "regulator_setpoint_psi", label: "Regulator", unit: "psi", step: "0.1", min: "0.1" },
+      { key: "nozzle_throat_area_mm2", label: "Nozzle throat", unit: "mm2", step: "0.001", min: "0.001" },
+    ],
+  },
+  {
+    title: "Control",
+    source: "control",
+    fields: [
+      { key: "control_loop_rate_hz", label: "Loop rate", unit: "Hz", step: "1", min: "1" },
+      { key: "landing_burn_altitude_m", label: "Burn altitude", unit: "m", step: "0.1", min: "0.1" },
+    ],
+  },
+  {
+    title: "Runtime",
+    source: "runtime",
+    fields: [
+      { key: "master_seed", label: "Master seed", unit: "", step: "1", min: "0" },
+      { key: "integrator_dt_ms", label: "Fixed dt", unit: "ms", step: "0.01", min: "0.001" },
+    ],
+  },
+  {
+    title: "Motor",
+    source: "propulsion",
+    fields: [
+      { key: "motor_curve_path", label: "Curve path", unit: "", kind: "text" },
+    ],
+  },
 ];
 
 const els = {
@@ -64,6 +109,10 @@ const els = {
   copyPathButton: document.getElementById("copyPathButton"),
   rocketSummary: document.getElementById("rocketSummary"),
   rocketSummaryTable: document.getElementById("rocketSummaryTable"),
+  builderForm: document.getElementById("builderForm"),
+  builderSourceLine: document.getElementById("builderSourceLine"),
+  saveBuilderButton: document.getElementById("saveBuilderButton"),
+  resetBuilderButton: document.getElementById("resetBuilderButton"),
   emulatorGrid: document.getElementById("emulatorGrid"),
   monteCarloGrid: document.getElementById("monteCarloGrid"),
   monteCarloSummary: document.getElementById("monteCarloSummary"),
@@ -75,21 +124,24 @@ const els = {
 
 async function loadWorkbench() {
   setStatus("Loading workbench...");
-  const [runsPayload, configsPayload, summaryPayload, hilPayload, monteCarloPayload] = await Promise.all([
+  const [runsPayload, configsPayload, summaryPayload, builderPayload, hilPayload, monteCarloPayload] = await Promise.all([
     fetchJson("/api/runs"),
     fetchJson("/api/configs"),
     fetchJson("/api/rocket-summary"),
+    fetchJson("/api/rocket-builder"),
     fetchJson("/api/hil-status"),
     fetchJson("/api/montecarlo-status"),
   ]);
   state.runs = runsPayload.runs || [];
   state.configs = configsPayload.configs || [];
   state.rocketSummary = summaryPayload.summary || null;
+  state.builder = builderPayload.builder || null;
   state.hilStatus = hilPayload.hil || null;
   state.monteCarlo = monteCarloPayload.montecarlo || null;
   renderRunList();
   renderConfigList();
   renderRocketSummary();
+  renderBuilder();
   renderMonteCarlo();
   switchView(state.activeView);
   if (state.runs.length > 0) {
@@ -208,18 +260,21 @@ async function refreshRuns() {
 }
 
 async function refreshConfigsAndSummary() {
-  const [configsPayload, summaryPayload, hilPayload, monteCarloPayload] = await Promise.all([
+  const [configsPayload, summaryPayload, builderPayload, hilPayload, monteCarloPayload] = await Promise.all([
     fetchJson("/api/configs"),
     fetchJson("/api/rocket-summary"),
+    fetchJson("/api/rocket-builder"),
     fetchJson("/api/hil-status"),
     fetchJson("/api/montecarlo-status"),
   ]);
   state.configs = configsPayload.configs || [];
   state.rocketSummary = summaryPayload.summary || null;
+  state.builder = builderPayload.builder || null;
   state.hilStatus = hilPayload.hil || null;
   state.monteCarlo = monteCarloPayload.montecarlo || null;
   renderConfigList();
   renderRocketSummary();
+  renderBuilder();
   renderMonteCarlo();
 }
 
@@ -361,6 +416,113 @@ function renderRocketSummary() {
     ["Fixed dt", formatSeconds(summary.integrator_dt_s)],
     ["Seed", summary.master_seed],
   ]);
+}
+
+function renderBuilder() {
+  const values = state.builder?.values || {};
+  const sources = state.builder?.sources || {};
+  const computed = state.builder?.computed || {};
+  els.builderSourceLine.textContent = sources.body
+    ? `Primary sources: ${sources.body.join(" + ")}`
+    : "Primary sources: config/vehicle.yaml + inputs/bom_placeholder.yaml";
+  els.builderForm.innerHTML = builderGroups.map((group) => {
+    const sourcePaths = sources[group.source] || [];
+    return `
+      <section class="builder-group">
+        <div class="builder-group-head">
+          <strong>${escapeHtml(group.title)}</strong>
+          <button class="source-chip" data-source-target="${escapeHtml(sourceTargetFor(group.source))}" title="${escapeHtml(sourcePaths.join(", "))}">Source</button>
+        </div>
+        <div class="builder-fields">
+          ${group.fields.map((field) => builderField(field, values[field.key])).join("")}
+        </div>
+      </section>
+    `;
+  }).join("");
+  els.builderForm.insertAdjacentHTML("beforeend", `
+    <section class="builder-group compact">
+      <div class="builder-group-head"><strong>Counts</strong></div>
+      ${keyValueTable([
+        ["Parts", computed.part_count],
+        ["CO2 parts", computed.co2_parts],
+        ["Nozzles", computed.nozzle_count],
+      ])}
+    </section>
+  `);
+  for (const button of els.builderForm.querySelectorAll("[data-source-target]")) {
+    button.addEventListener("click", () => selectConfig(button.dataset.sourceTarget));
+  }
+}
+
+function builderField(field, value) {
+  const inputType = field.kind === "text" ? "text" : "number";
+  return `
+    <label class="builder-field">
+      <span>${escapeHtml(field.label)}</span>
+      <div class="input-with-unit">
+        <input
+          data-builder-field="${escapeHtml(field.key)}"
+          type="${inputType}"
+          value="${escapeHtml(formatBuilderValue(field, value))}"
+          ${field.min ? `min="${escapeHtml(field.min)}"` : ""}
+          ${field.step ? `step="${escapeHtml(field.step)}"` : ""}
+        >
+        ${field.unit ? `<small>${escapeHtml(field.unit)}</small>` : ""}
+      </div>
+    </label>
+  `;
+}
+
+function formatBuilderValue(field, value) {
+  if (value === undefined || value === null) return "";
+  if (field.kind === "text") return String(value);
+  const number = Number(value);
+  if (!Number.isFinite(number)) return String(value);
+  const decimals = {
+    body_diameter_mm: 3,
+    body_length_mm: 3,
+    target_wet_mass_kg: 4,
+    co2_mass_g: 3,
+    regulator_setpoint_psi: 3,
+    nozzle_throat_area_mm2: 6,
+    control_loop_rate_hz: 3,
+    landing_burn_altitude_m: 3,
+    master_seed: 0,
+    integrator_dt_ms: 6,
+  }[field.key] ?? 3;
+  return trimNumberText(number.toFixed(decimals));
+}
+
+function trimNumberText(text) {
+  return text.replace(/(\.\d*?[1-9])0+$/, "$1").replace(/\.0+$/, "");
+}
+
+async function saveBuilderFromGui() {
+  if (state.dirty && !window.confirm("Discard unsaved editor changes and save form values?")) return;
+  const payload = {};
+  for (const input of els.builderForm.querySelectorAll("[data-builder-field]")) {
+    payload[input.dataset.builderField] = input.value;
+  }
+  setBusy(true);
+  setStatus("Saving rocket values...");
+  try {
+    const response = await postJson("/api/rocket-builder", payload);
+    state.builder = response.builder;
+    state.dirty = false;
+    await refreshConfigsAndSummary();
+    await selectConfig(state.selectedConfig);
+    renderBuilder();
+    setStatus("Rocket values saved to validated config files");
+  } finally {
+    setBusy(false);
+  }
+}
+
+async function resetBuilderFromDisk() {
+  const payload = await fetchJson("/api/rocket-builder");
+  state.builder = payload.builder || null;
+  renderBuilder();
+  setStatus("Rocket values reloaded");
 }
 
 function renderMetrics() {
@@ -666,7 +828,7 @@ function focusPasteTarget() {
   els.configEditor.scrollIntoView({ block: "center", inline: "nearest" });
   els.configEditor.focus();
   els.configEditor.select();
-  setStatus("Editor selected. Paste replacement text, then validate and save.");
+  setStatus("Editor selected. Paste config text, then validate and save.");
 }
 
 async function importDefinitionFile() {
@@ -698,6 +860,8 @@ function setBusy(isBusy) {
   els.runMonteCarloButton.disabled = isBusy;
   els.saveButton.disabled = isBusy;
   els.validateButton.disabled = isBusy;
+  els.saveBuilderButton.disabled = isBusy;
+  els.resetBuilderButton.disabled = isBusy;
 }
 
 function keyValueTable(rows) {
@@ -811,6 +975,16 @@ function retainedBundleIndex(value) {
   return Number.isFinite(number) ? `#${Math.trunc(number)}` : "off";
 }
 
+function sourceTargetFor(source) {
+  return {
+    body: "vehicle",
+    mass: "bom",
+    propulsion: "coldgas",
+    control: "control",
+    runtime: "sim",
+  }[source] || "bom";
+}
+
 function numeric(value, unit, digits) {
   const number = Number(value);
   return Number.isFinite(number) ? `${number.toFixed(digits)} ${unit}` : "n/a";
@@ -847,6 +1021,12 @@ els.openBundleButton.addEventListener("click", () => {
   window.open(`/api/runs/${encodeURIComponent(state.selectedRun)}`, "_blank");
 });
 els.pasteFocusButton.addEventListener("click", focusPasteTarget);
+els.saveBuilderButton.addEventListener("click", () => {
+  saveBuilderFromGui().catch((error) => setStatus(error.message));
+});
+els.resetBuilderButton.addEventListener("click", () => {
+  resetBuilderFromDisk().catch((error) => setStatus(error.message));
+});
 els.importFileButton.addEventListener("click", () => els.importDefinitionInput.click());
 els.importDefinitionInput.addEventListener("change", () => {
   importDefinitionFile().catch((error) => setStatus(error.message));

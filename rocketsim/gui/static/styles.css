@@ -1,20 +1,21 @@
 :root {
-  --bg: #edf1f3;
+  --bg: #e8ecef;
   --panel: #ffffff;
-  --panel-soft: #f7f9fa;
-  --panel-tint: #eaf4f0;
-  --line: #c6d0d9;
-  --line-strong: #8998a6;
-  --text: #1d252d;
+  --panel-soft: #f4f6f8;
+  --panel-tint: #edf7f3;
+  --line: #c3ccd5;
+  --line-strong: #7d8b98;
+  --text: #19232d;
   --muted: #62707d;
-  --blue: #2368b0;
-  --blue-dark: #184f84;
-  --green: #146c43;
-  --orange: #a85b00;
+  --blue: #245f9f;
+  --blue-dark: #173f6c;
+  --green: #0f6b57;
+  --orange: #915000;
   --red: #b42318;
   --amber-soft: #fff4df;
   --teal-soft: #e8f5f0;
-  --shadow: 0 1px 2px rgba(16, 24, 40, 0.12);
+  --shadow: 0 1px 2px rgba(16, 24, 40, 0.13);
+  --inset: inset 0 1px 0 rgba(255, 255, 255, 0.72);
 }
 
 * {
@@ -46,12 +47,12 @@ button:disabled {
 }
 
 .topbar {
-  min-height: 62px;
+  min-height: 58px;
   display: grid;
-  grid-template-columns: 280px minmax(420px, 1fr) minmax(220px, 360px);
+  grid-template-columns: 260px minmax(440px, 1fr) minmax(220px, 340px);
   align-items: center;
   border-bottom: 1px solid var(--line-strong);
-  background: #fcfcfb;
+  background: #f9fafb;
   box-shadow: var(--shadow);
 }
 
@@ -64,13 +65,13 @@ button:disabled {
 }
 
 .brand-mark {
-  width: 34px;
-  height: 34px;
+  width: 32px;
+  height: 32px;
   display: grid;
   place-items: center;
-  border: 1px solid #7ca9a0;
-  background: var(--teal-soft);
-  color: #165c50;
+  border: 1px solid #9aa8b5;
+  background: linear-gradient(#ffffff, #e6ebf0);
+  color: #1d354c;
   font-weight: 800;
 }
 
@@ -92,7 +93,7 @@ button:disabled {
 .toolbar {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
   flex-wrap: wrap;
 }
 
@@ -150,7 +151,7 @@ button:disabled {
 .workspace {
   min-height: 0;
   display: grid;
-  grid-template-columns: 310px minmax(760px, 1fr) 350px;
+  grid-template-columns: 300px minmax(760px, 1fr) 330px;
   overflow: hidden;
 }
 
@@ -292,14 +293,14 @@ button:disabled {
 .tabs {
   display: flex;
   align-items: end;
-  gap: 4px;
+  gap: 2px;
   padding: 8px 10px 0;
   border-bottom: 1px solid var(--line);
-  background: #f3f6f9;
+  background: #eef2f5;
 }
 
 .tab {
-  min-width: 92px;
+  min-width: 86px;
   padding: 0 12px;
   border-bottom: 0;
   border-radius: 4px 4px 0 0;
@@ -327,10 +328,11 @@ button:disabled {
   align-items: center;
   justify-content: space-between;
   gap: 14px;
-  margin-bottom: 12px;
+  margin-bottom: 10px;
   padding: 10px 12px;
   border: 1px solid var(--line);
-  background: linear-gradient(90deg, #fbfcfe, #f6faf8);
+  background: #f8fafb;
+  box-shadow: var(--inset);
 }
 
 .design-titlebar h1 {
@@ -351,17 +353,17 @@ button:disabled {
 .summary-strip {
   display: grid;
   grid-template-columns: repeat(8, minmax(88px, 1fr));
-  gap: 8px;
-  margin-bottom: 12px;
+  gap: 6px;
+  margin-bottom: 10px;
 }
 
 .summary-cell,
 .metric {
   border: 1px solid var(--line);
   background: var(--panel-soft);
-  padding: 8px;
+  padding: 7px 8px;
   min-width: 0;
-  border-radius: 4px;
+  border-radius: 3px;
 }
 
 .summary-cell {
@@ -378,35 +380,148 @@ button:disabled {
 
 .summary-cell strong,
 .metric-value {
-  font-size: 18px;
+  font-size: 16px;
   overflow-wrap: anywhere;
+}
+
+.builder-panel {
+  margin-bottom: 10px;
+  border: 1px solid var(--line-strong);
+  background: #fbfcfd;
+  box-shadow: var(--shadow);
+}
+
+.builder-head {
+  min-height: 48px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px;
+  border-bottom: 1px solid var(--line);
+  background: #eef3f7;
+}
+
+.builder-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.builder-form {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(150px, 1fr));
+  gap: 8px;
+  padding: 10px;
+}
+
+.builder-group {
+  min-width: 0;
+  border: 1px solid var(--line);
+  border-left: 3px solid var(--blue);
+  background: var(--panel);
+  padding: 8px;
+}
+
+.builder-group.compact {
+  border-left-color: var(--green);
+}
+
+.builder-group-head {
+  min-height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+
+.source-chip {
+  height: 24px;
+  border: 1px solid var(--line);
+  background: #f8fafc;
+  color: var(--blue-dark);
+  padding: 0 8px;
+  font-size: 11px;
+  font-weight: 800;
+  cursor: pointer;
+  border-radius: 3px;
+}
+
+.source-chip:hover {
+  border-color: var(--blue);
+  background: #edf5ff;
+}
+
+.builder-fields {
+  display: grid;
+  gap: 7px;
+}
+
+.builder-field {
+  display: grid;
+  gap: 3px;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.input-with-unit {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  border: 1px solid var(--line);
+  background: #ffffff;
+}
+
+.input-with-unit input {
+  min-width: 0;
+  height: 30px;
+  border: 0;
+  outline: 0;
+  padding: 0 8px;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+}
+
+.input-with-unit small {
+  min-width: 34px;
+  height: 30px;
+  display: grid;
+  place-items: center;
+  border-left: 1px solid var(--line);
+  background: #eef2f5;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 800;
 }
 
 .definition-switcher {
   display: grid;
-  grid-template-columns: repeat(4, minmax(150px, 1fr));
-  gap: 8px;
-  margin-bottom: 12px;
+  grid-template-columns: repeat(4, minmax(145px, 1fr));
+  gap: 6px;
+  margin-bottom: 10px;
 }
 
 .definition-card {
-  min-height: 76px;
+  min-height: 68px;
   display: grid;
   align-content: start;
-  gap: 5px;
+  gap: 4px;
   border: 1px solid var(--line);
-  background: #fffefa;
+  background: #ffffff;
   color: var(--text);
-  padding: 9px;
+  padding: 8px;
   text-align: left;
   cursor: pointer;
-  border-radius: 4px;
+  border-radius: 3px;
 }
 
 .definition-card:hover,
 .definition-card.active {
   border-color: var(--blue);
-  background: #eef6ff;
+  background: #edf5ff;
 }
 
 .definition-card-head {
@@ -430,10 +545,10 @@ button:disabled {
 }
 
 .design-grid {
-  min-height: 560px;
+  min-height: 520px;
   display: grid;
   grid-template-columns: minmax(520px, 1fr) minmax(290px, 380px);
-  gap: 12px;
+  gap: 10px;
 }
 
 .editor-pane,
@@ -443,7 +558,7 @@ button:disabled {
   border: 1px solid var(--line);
   background: var(--panel);
   min-width: 0;
-  border-radius: 4px;
+  border-radius: 3px;
 }
 
 .editor-pane {
@@ -508,7 +623,7 @@ button:disabled {
 #configEditor {
   width: 100%;
   height: 100%;
-  min-height: 430px;
+  min-height: 410px;
   resize: none;
   border: 0;
   outline: 0;
@@ -525,16 +640,16 @@ button:disabled {
 }
 
 .rocket-visual {
-  height: 170px;
+  height: 150px;
   display: grid;
   place-items: center;
   margin-bottom: 12px;
   border: 1px solid var(--line);
   background:
-    linear-gradient(90deg, rgba(35, 104, 176, 0.07) 1px, transparent 1px),
-    linear-gradient(0deg, rgba(20, 108, 67, 0.06) 1px, transparent 1px),
-    #fbfcfe;
-  background-size: 28px 28px;
+    linear-gradient(90deg, rgba(36, 95, 159, 0.08) 1px, transparent 1px),
+    linear-gradient(0deg, rgba(15, 107, 87, 0.07) 1px, transparent 1px),
+    #f9fbfd;
+  background-size: 24px 24px;
   overflow: hidden;
 }
 
@@ -912,6 +1027,10 @@ th {
     grid-template-columns: repeat(2, minmax(180px, 1fr));
   }
 
+  .builder-form {
+    grid-template-columns: repeat(3, minmax(170px, 1fr));
+  }
+
   .metric-grid {
     grid-template-columns: repeat(4, minmax(120px, 1fr));
   }
@@ -951,6 +1070,10 @@ th {
     grid-template-columns: 1fr;
   }
 
+  .builder-form {
+    grid-template-columns: repeat(2, minmax(220px, 1fr));
+  }
+
   .metric-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
@@ -971,6 +1094,20 @@ th {
   .definition-actions {
     display: grid;
     grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .builder-head {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .builder-actions {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .builder-actions .text-button {
+    width: 100%;
   }
 
   .definition-actions .text-button {
@@ -1003,6 +1140,10 @@ th {
 }
 
 @media (max-width: 620px) {
+  .builder-form {
+    grid-template-columns: 1fr;
+  }
+
   .summary-strip {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }

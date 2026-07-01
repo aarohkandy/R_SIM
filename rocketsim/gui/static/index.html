@@ -16,7 +16,7 @@
       </div>
     </div>
     <div class="toolbar" role="toolbar" aria-label="Workbench controls">
-      <button id="defineRocketButton" class="text-button primary" title="Open rocket definition">Define Rocket</button>
+      <button id="defineRocketButton" class="text-button primary" title="Open rocket definition">Rocket</button>
       <button id="refreshButton" class="text-button" title="Refresh">Reload</button>
       <button id="validateButton" class="text-button" title="Validate selected definition">Validate</button>
       <button id="saveButton" class="text-button primary" title="Save selected definition">Save</button>
@@ -66,17 +66,30 @@
       <section id="design" class="view active-view">
         <div class="design-titlebar">
           <div>
-            <h1>Rocket Definition</h1>
+            <h1>Define Rocket</h1>
             <div id="definitionPathLine" class="path-label"></div>
           </div>
           <div class="definition-actions">
-            <button id="pasteFocusButton" class="text-button" title="Select the editor for paste">Paste Into Editor</button>
+            <button id="pasteFocusButton" class="text-button" title="Select the editor for paste">Paste Config</button>
             <button id="importFileButton" class="text-button" title="Load text from a local file">Import File</button>
             <button id="copyPathButton" class="text-button" title="Copy selected repo path">Copy Path</button>
             <input id="importDefinitionInput" type="file" hidden accept=".yaml,.yml,.csv,.eng,.rse,.txt">
           </div>
         </div>
         <div id="rocketSummary" class="summary-strip"></div>
+        <section class="builder-panel" aria-label="Rocket builder">
+          <div class="builder-head">
+            <div>
+              <div class="pane-title">Rocket Builder</div>
+              <div id="builderSourceLine" class="path-label"></div>
+            </div>
+            <div class="builder-actions">
+              <button id="resetBuilderButton" class="text-button" title="Reload builder values">Reset</button>
+              <button id="saveBuilderButton" class="text-button primary" title="Save rocket builder values">Save Rocket Values</button>
+            </div>
+          </div>
+          <div id="builderForm" class="builder-form"></div>
+        </section>
         <div id="definitionSwitcher" class="definition-switcher" aria-label="Rocket definition sources"></div>
         <div class="design-grid">
           <div class="editor-pane">

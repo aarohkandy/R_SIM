@@ -24,8 +24,14 @@
   `config/vehicle.yaml`, `config/coldgas.yaml`, `config/control.yaml`, and the placeholder
   motor curve. Every save validates through the matching pydantic schema, CSV parser, or
   motor parser before touching disk.
+- The Design tab includes a Rocket Builder form for the most common vehicle values:
+  body diameter/length, target wet mass, CO2 mass, regulator pressure, nozzle throat
+  area, controller loop rate, landing-burn altitude, master seed, fixed timestep, and
+  motor curve path. Saving the form updates the same validated YAML/BOM files used by
+  the raw editor and the simulator.
 - Definition routes include `/api/configs`, `/api/configs/<name>`,
-  `/api/configs/<name>/validate`, `/api/rocket-summary`, and `/api/run/e2e`.
+  `/api/configs/<name>/validate`, `/api/rocket-summary`, `/api/rocket-builder`, and
+  `/api/run/e2e`.
 - HIL status is exposed through `/api/hil-status`, which reads the latest Phase-12
   Renode report or builds a live preflight report when no status artifact exists.
 - The Design tab opens on the BOM/parts editor because that is where rocket masses,

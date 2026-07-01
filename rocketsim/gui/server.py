@@ -18,7 +18,9 @@ from rocketsim.control import read_latest_hil_status
 from rocketsim.gui.workbench import (
     list_workbench_files,
     read_workbench_file,
+    rocket_builder_state,
     rocket_summary,
+    save_rocket_builder,
     save_workbench_text,
     validate_workbench_text,
 )
@@ -207,6 +209,12 @@ def _handle_get(handler: BaseHTTPRequestHandler, repo_root: Path) -> None:
         except (FileNotFoundError, ValueError, TypeError) as exc:
             _send_error(handler, HTTPStatus.BAD_REQUEST, str(exc))
         return
+    if path == "/api/rocket-builder":
+        try:
+            _send_json(handler, {"builder": rocket_builder_state(repo_root)})
+        except (FileNotFoundError, ValueError, TypeError) as exc:
+            _send_error(handler, HTTPStatus.BAD_REQUEST, str(exc))
+        return
     if path == "/api/hil-status":
         try:
             _send_json(handler, {"hil": read_latest_hil_status(repo_root)})
@@ -271,6 +279,13 @@ def _handle_post(handler: BaseHTTPRequestHandler, repo_root: Path) -> None:
                 "montecarlo": _montecarlo_status_payload(repo_root),
             },
         )
+        return
+    if path == "/api/rocket-builder":
+        try:
+            body = _read_json_body(handler)
+            _send_json(handler, {"builder": save_rocket_builder(repo_root, body)})
+        except (FileNotFoundError, ValueError, TypeError) as exc:
+            _send_error(handler, HTTPStatus.BAD_REQUEST, str(exc))
         return
     if path.startswith("/api/configs/"):
         pieces = path.removeprefix("/api/configs/").strip("/").split("/")

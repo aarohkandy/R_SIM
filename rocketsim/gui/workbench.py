@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import csv
+import math
 import tempfile
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -25,6 +26,8 @@ from rocketsim.structural.schema import StructuralConfig
 from rocketsim.thermal.schema import ThermalConfig
 from rocketsim.vehicle import VehicleModel, properties_as_dict
 from rocketsim.vehicle.schema import VehicleDefinition
+
+PSI_TO_PA = 6894.757293168
 
 
 @dataclass(frozen=True)
@@ -286,6 +289,131 @@ def rocket_summary(repo_root: Path) -> dict[str, Any]:
     }
 
 
+def rocket_builder_state(repo_root: Path) -> dict[str, Any]:
+    """Return user-facing rocket-builder values backed by validated config files."""
+
+    docs = _load_builder_documents(repo_root)
+    vehicle = docs["vehicle"]
+    bom = docs["bom"]
+    motor = docs["motor"]
+    coldgas = docs["coldgas"]
+    aero = docs["aero"]
+    control = docs["control"]
+    sim = docs["sim"]
+    nozzles = coldgas["data"]["nozzles"]["items"]
+    first_nozzle = nozzles[0] if nozzles else {}
+    return {
+        "valid": all(
+            read_workbench_file(repo_root, name, include_text=False)["valid"]
+            for name in ("vehicle", "bom", "motor", "coldgas", "aero", "control", "sim")
+        ),
+        "values": {
+            "body_diameter_mm": vehicle["data"]["body"]["diameter_m"] * 1000.0,
+            "body_length_mm": vehicle["data"]["body"]["length_m"] * 1000.0,
+            "target_wet_mass_kg": vehicle["data"]["target_wet_mass_kg"],
+            "co2_mass_g": coldgas["data"]["tank"]["initial_co2_mass_kg"] * 1000.0,
+            "regulator_setpoint_psi": coldgas["data"]["regulator"]["setpoint_pa"] / PSI_TO_PA,
+            "nozzle_throat_area_mm2": first_nozzle.get("throat_area_m2", 0.0) * 1_000_000.0,
+            "control_loop_rate_hz": control["data"]["loop_rate_hz"],
+            "landing_burn_altitude_m": control["data"]["sil"]["landing_burn_altitude_m"],
+            "master_seed": sim["data"]["master_seed"],
+            "integrator_dt_ms": sim["data"]["integrator_dt_s"] * 1000.0,
+            "motor_curve_path": motor["data"]["thrust_curve_path"],
+        },
+        "computed": {
+            "part_count": len(bom["parts"]),
+            "co2_parts": sum(1 for part in bom["parts"] if part.get("state_tag") == "CO2"),
+            "nozzle_count": len(nozzles),
+            "aero_body_diameter_mm": aero["data"]["geometry"]["body_diameter_m"] * 1000.0,
+            "aero_body_length_mm": aero["data"]["geometry"]["body_length_m"] * 1000.0,
+        },
+        "sources": {
+            "body": ["config/vehicle.yaml", "config/aero.yaml"],
+            "mass": ["config/vehicle.yaml", "inputs/bom_placeholder.yaml"],
+            "propulsion": ["config/coldgas.yaml", "config/motor.yaml"],
+            "control": ["config/control.yaml"],
+            "runtime": ["config/sim.yaml"],
+        },
+    }
+
+
+def save_rocket_builder(repo_root: Path, payload: dict[str, Any]) -> dict[str, Any]:
+    """Apply rocket-builder values to the underlying editable config files."""
+
+    docs = _load_builder_documents(repo_root)
+    body_diameter_m = _positive_payload_float(payload, "body_diameter_mm") / 1000.0
+    body_length_m = _positive_payload_float(payload, "body_length_mm") / 1000.0
+    target_wet_mass_kg = _positive_payload_float(payload, "target_wet_mass_kg")
+    co2_mass_kg = _positive_payload_float(payload, "co2_mass_g") / 1000.0
+    regulator_setpoint_pa = _positive_payload_float(payload, "regulator_setpoint_psi") * PSI_TO_PA
+    nozzle_throat_area_m2 = (
+        _positive_payload_float(payload, "nozzle_throat_area_mm2") / 1_000_000.0
+    )
+    control_loop_rate_hz = _positive_payload_float(payload, "control_loop_rate_hz")
+    landing_burn_altitude_m = _positive_payload_float(payload, "landing_burn_altitude_m")
+    master_seed = _nonnegative_payload_int(payload, "master_seed")
+    integrator_dt_s = _positive_payload_float(payload, "integrator_dt_ms") / 1000.0
+    motor_curve_path = _payload_text(payload, "motor_curve_path")
+
+    vehicle = docs["vehicle"]
+    vehicle["data"]["body"]["diameter_m"] = body_diameter_m
+    vehicle["data"]["body"]["length_m"] = body_length_m
+    vehicle["data"]["target_wet_mass_kg"] = target_wet_mass_kg
+
+    aero = docs["aero"]
+    aero["data"]["geometry"]["body_diameter_m"] = body_diameter_m
+    aero["data"]["geometry"]["body_length_m"] = body_length_m
+
+    bom = docs["bom"]
+    co2_parts = [part for part in bom["parts"] if part.get("state_tag") == "CO2"]
+    if not co2_parts:
+        msg = "BOM must contain at least one CO2 part to update CO2 mass"
+        raise ValueError(msg)
+    co2_parts[0]["mass_kg"] = co2_mass_kg
+
+    coldgas = docs["coldgas"]
+    coldgas["data"]["tank"]["initial_co2_mass_kg"] = co2_mass_kg
+    coldgas["data"]["regulator"]["setpoint_pa"] = regulator_setpoint_pa
+    for nozzle in coldgas["data"]["nozzles"]["items"]:
+        nozzle["throat_area_m2"] = nozzle_throat_area_m2
+
+    motor = docs["motor"]
+    motor["data"]["thrust_curve_path"] = motor_curve_path
+
+    control = docs["control"]
+    control["data"]["loop_rate_hz"] = control_loop_rate_hz
+    control["data"]["sil"]["landing_burn_altitude_m"] = landing_burn_altitude_m
+
+    sim = docs["sim"]
+    sim["data"]["master_seed"] = master_seed
+    sim["data"]["integrator_dt_s"] = integrator_dt_s
+
+    changed = {
+        "vehicle": vehicle,
+        "bom": bom,
+        "motor": motor,
+        "coldgas": coldgas,
+        "aero": aero,
+        "control": control,
+        "sim": sim,
+    }
+    dumped = {name: _dump_yaml(document) for name, document in changed.items()}
+    validation = {name: validate_workbench_text(name, text) for name, text in dumped.items()}
+    invalid = {name: result for name, result in validation.items() if not result["valid"]}
+    if invalid:
+        name, result = next(iter(invalid.items()))
+        msg = f"{name}: {result['message']}"
+        raise ValueError(msg)
+    for name, text in dumped.items():
+        item = _editable_or_raise(name)
+        _resolve_editable_path(repo_root, item).write_text(text, encoding="utf-8")
+    state = rocket_builder_state(repo_root)
+    state["updated_files"] = sorted(
+        _editable_or_raise(name).relative_path for name in changed
+    )
+    return state
+
+
 def _file_metadata(item: EditableFile, path: Path) -> dict[str, Any]:
     return {
         "name": item.name,
@@ -400,6 +528,65 @@ def _yaml_mapping(text: str) -> dict[str, Any]:
         msg = "YAML text must contain a mapping"
         raise TypeError(msg)
     return raw
+
+
+def _load_builder_documents(repo_root: Path) -> dict[str, dict[str, Any]]:
+    return {
+        name: _yaml_mapping(
+            _resolve_editable_path(repo_root, _editable_or_raise(name)).read_text(
+                encoding="utf-8"
+            )
+        )
+        for name in ("vehicle", "bom", "motor", "coldgas", "aero", "control", "sim")
+    }
+
+
+def _dump_yaml(document: dict[str, Any]) -> str:
+    return yaml.safe_dump(
+        document,
+        allow_unicode=False,
+        default_flow_style=False,
+        sort_keys=False,
+    )
+
+
+def _positive_payload_float(payload: dict[str, Any], key: str) -> float:
+    value = _required_payload_value(payload, key)
+    if isinstance(value, bool):
+        msg = f"{key} must be a number"
+        raise TypeError(msg)
+    number = float(value)
+    if not math.isfinite(number) or number <= 0.0:
+        msg = f"{key} must be a positive number"
+        raise ValueError(msg)
+    return number
+
+
+def _nonnegative_payload_int(payload: dict[str, Any], key: str) -> int:
+    value = _required_payload_value(payload, key)
+    if isinstance(value, bool):
+        msg = f"{key} must be an integer"
+        raise TypeError(msg)
+    number = int(value)
+    if number < 0:
+        msg = f"{key} must be non-negative"
+        raise ValueError(msg)
+    return number
+
+
+def _payload_text(payload: dict[str, Any], key: str) -> str:
+    value = _required_payload_value(payload, key)
+    if not isinstance(value, str) or not value.strip():
+        msg = f"{key} must be non-empty text"
+        raise ValueError(msg)
+    return value.strip()
+
+
+def _required_payload_value(payload: dict[str, Any], key: str) -> Any:
+    if key not in payload or payload[key] in (None, ""):
+        msg = f"{key} is required"
+        raise ValueError(msg)
+    return payload[key]
 
 
 def _load_motor_curve_from_text(suffix: str, text: str) -> Any:

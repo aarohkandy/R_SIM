@@ -1288,3 +1288,19 @@
   in this batch beyond this progress log.
 - Next: continue bounded accumulation through retained bundle index `200`, then toward
   the configured 1000-run target and percentile-stability criteria.
+
+## 2026-06-30 — Localhost rocket-definition usability repair
+
+- Added a first-screen Rocket Builder form to the localhost GUI so the rocket can be
+  defined from the browser without hunting through repo files first.
+- The builder writes body diameter/length, target wet mass, CO2 mass, regulator
+  pressure, nozzle throat area, SIL loop rate, landing-burn altitude, master seed,
+  fixed timestep, and motor curve path back into the same validated YAML/BOM files used
+  by the simulator and raw editor.
+- Kept the advanced paste/import editor in the Design tab, with source-file buttons and
+  a cleaner two-column layout at the current in-app browser size.
+- Verification passed: `make lint`, `make typecheck`, and `make test`
+  (`152 passed`, coverage `87%`).
+- Next: continue Phase-14 accumulation toward retained bundle index `200`; later GUI
+  work should add richer OpenRocket-like component editing and visualization as the
+  remaining phases mature.
