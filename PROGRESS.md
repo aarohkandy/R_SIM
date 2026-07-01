@@ -1304,3 +1304,31 @@
 - Next: continue Phase-14 accumulation toward retained bundle index `200`; later GUI
   work should add richer OpenRocket-like component editing and visualization as the
   remaining phases mature.
+
+## 2026-06-30 — Phase 14 retained bundle at index 200
+
+- Ran another real bounded Phase-14 native-SIL Monte Carlo accumulation:
+  `ROCKETSIM_MC_RUNS=201 ROCKETSIM_MC_MAX_NEW_RUNS=9 make montecarlo`.
+- The runner resumed the existing one-hundred-ninety-two rows, added nine new native-SIL
+  scenarios, and retained a new full Phase-9/10/11 bundle at run index `200`:
+  `outputs/phase14_montecarlo/retained_runs/phase14_mc0200_seed1286948377`.
+- Updated evidence from `outputs/phase14_montecarlo/montecarlo_summary.json`:
+  `runs_completed: 201`, `requested_runs: 201`, `resumed_rows: 192`,
+  `new_rows_completed: 9`, `retained_bundles: 9`, `gate_complete: false`,
+  `stability.status: insufficient_batches`, `next_retained_bundle_index: 225`, and
+  `rows_until_next_retained_bundle: 25`.
+- Sample rows now cover run indices `0..200`, with retained full bundles at indices `0`,
+  `25`, `50`, `75`, `100`, `125`, `150`, `175`, and `200`, and one hundred
+  ninety-two metrics-only rows. The Phase-14 gate remains open; this is accumulation
+  progress, not statistical completion.
+- Current two-hundred-one-row distributions, reported as data only: landing-speed mean
+  `17.334825691824406 m/s`, p50 `15.01270646077421 m/s`, p95
+  `25.46950277794142 m/s`; touchdown-tilt mean `130.36809941938986 deg`, p50
+  `144.94976515015392 deg`, p95 `171.82033509946018 deg`; lateral-error mean
+  `37.293384655083976 m`, p50 `23.665116707597225 m`, p95
+  `84.6851486479522 m`; CO2-remaining mean `0.08379952428380634 kg`, p5
+  `0.0802751894323295 kg`, p50 `0.0846542526500638 kg`.
+- Verification passed: focused Phase-14/GUI tests (`18 passed`). No source code changed
+  in this batch beyond this progress log.
+- Next: continue bounded accumulation toward retained bundle index `225`, then toward
+  the configured 1000-run target and percentile-stability criteria.
