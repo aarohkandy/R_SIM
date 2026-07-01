@@ -1259,3 +1259,32 @@
   in this batch beyond this progress log.
 - Next: continue bounded accumulation toward retained bundle index `200`, then toward the
   configured 1000-run target and percentile-stability criteria.
+
+## 2026-06-30 — Phase 14 bounded batch accumulation to 192 rows
+
+- Ran another real bounded Phase-14 native-SIL Monte Carlo accumulation:
+  `ROCKETSIM_MC_RUNS=192 ROCKETSIM_MC_MAX_NEW_RUNS=8 make montecarlo`.
+- The runner resumed the existing one-hundred-eighty-four rows, added eight new
+  metrics-only native-SIL scenarios, and rewrote the Phase-14 samples, parquet, summary,
+  stability table, manifest, and histogram artifacts with per-row checkpointing still
+  active.
+- Updated evidence from `outputs/phase14_montecarlo/montecarlo_summary.json`:
+  `runs_completed: 192`, `requested_runs: 192`, `resumed_rows: 184`,
+  `new_rows_completed: 8`, `retained_bundles: 8`, `gate_complete: false`,
+  `stability.status: insufficient_batches`, `next_retained_bundle_index: 200`, and
+  `rows_until_next_retained_bundle: 9`.
+- Sample rows now cover run indices `0..191`, with retained full bundles at indices `0`,
+  `25`, `50`, `75`, `100`, `125`, `150`, and `175`, and one hundred eighty-four
+  metrics-only rows. The Phase-14 gate remains open; this is accumulation progress, not
+  statistical completion.
+- Current one-hundred-ninety-two-row distributions, reported as data only: landing-speed
+  mean `17.308261474047026 m/s`, p50 `15.01215658818257 m/s`, p95
+  `25.44674006974323 m/s`; touchdown-tilt mean `130.97091959641463 deg`, p50
+  `144.57056414222603 deg`, p95 `172.4783440482521 deg`; lateral-error mean
+  `37.26675213747592 m`, p50 `23.612783997524144 m`, p95
+  `84.83210487774956 m`; CO2-remaining mean `0.08379496034821225 kg`, p5
+  `0.08024105945064898 kg`, p50 `0.08465323942280795 kg`.
+- Verification passed: focused Phase-14/GUI tests (`17 passed`). No source code changed
+  in this batch beyond this progress log.
+- Next: continue bounded accumulation through retained bundle index `200`, then toward
+  the configured 1000-run target and percentile-stability criteria.
