@@ -1388,3 +1388,33 @@
   in this batch beyond this progress log.
 - Next: continue bounded accumulation through retained bundle index `225`, then toward
   the configured 1000-run target and percentile-stability criteria.
+
+## 2026-06-30 — Phase 14 retained bundle at index 225
+
+- Ran another real bounded Phase-14 native-SIL Monte Carlo accumulation:
+  `ROCKETSIM_MC_RUNS=226 ROCKETSIM_MC_MAX_NEW_RUNS=9 make montecarlo`.
+- The runner resumed the existing two-hundred-seventeen rows, added nine new native-SIL
+  scenarios, and retained a new full Phase-9/10/11 bundle at run index `225`:
+  `outputs/phase14_montecarlo/retained_runs/phase14_mc0225_seed2287169411`.
+- Updated evidence from `outputs/phase14_montecarlo/montecarlo_summary.json`:
+  `runs_completed: 226`, `requested_runs: 226`, `resumed_rows: 217`,
+  `new_rows_completed: 9`, `retained_bundles: 10`, `gate_complete: false`,
+  `stability.status: insufficient_batches`, `next_retained_bundle_index: 250`, and
+  `rows_until_next_retained_bundle: 25`.
+- Sample rows now cover run indices `0..225`, with retained full bundles at indices `0`,
+  `25`, `50`, `75`, `100`, `125`, `150`, `175`, `200`, and `225`, and two hundred
+  sixteen metrics-only rows. The Phase-14 gate remains open; this is accumulation
+  progress, not statistical completion.
+- The retained bundle includes full telemetry, landing summary, thermal timeseries and
+  summary, structural load cases and FEA summaries, plots, and flight animation artifacts.
+- Current two-hundred-twenty-six-row distributions, reported as data only:
+  landing-speed mean `17.43363349494046 m/s`, p50 `15.173826087891518 m/s`, p95
+  `25.45915609239679 m/s`; touchdown-tilt mean `131.29134493576203 deg`, p50
+  `145.31113198136617 deg`, p95 `173.16675259213326 deg`; lateral-error mean
+  `37.30279103220612 m`, p50 `23.88914207702314 m`, p95
+  `84.68372313842448 m`; CO2-remaining mean `0.08376469744939864 kg`, p5
+  `0.08021830612952863 kg`, p50 `0.0846440887647717 kg`.
+- Verification passed: focused Phase-14/GUI tests (`18 passed`). No source code changed
+  in this batch beyond this progress log.
+- Next: continue bounded accumulation toward retained bundle index `250`, then toward
+  the configured 1000-run target and percentile-stability criteria.
