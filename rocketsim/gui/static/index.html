@@ -64,49 +64,14 @@
       </nav>
 
       <section id="design" class="view active-view">
-        <div class="design-titlebar">
-          <div>
-            <h1>Define Rocket</h1>
-            <div id="definitionPathLine" class="path-label"></div>
-          </div>
-          <div class="definition-actions">
-            <button id="pasteFocusButton" class="text-button" title="Select the editor for paste">Paste Config</button>
-            <button id="importFileButton" class="text-button" title="Load text from a local file">Import File</button>
-            <button id="copyPathButton" class="text-button" title="Copy selected repo path">Copy Path</button>
-            <input id="importDefinitionInput" type="file" hidden accept=".yaml,.yml,.csv,.eng,.rse,.txt">
-          </div>
-        </div>
-        <div id="rocketSummary" class="summary-strip"></div>
-        <section class="builder-panel" aria-label="Rocket builder">
-          <div class="builder-head">
-            <div>
-              <div class="pane-title">Rocket Builder</div>
-              <div id="builderSourceLine" class="path-label"></div>
+        <div class="design-board">
+          <section class="rocket-overview-band" aria-label="Current rocket definition">
+            <div class="overview-copy">
+              <div class="pane-title">Rocket Definition</div>
+              <h1>Self-Landing Bottle Rocket</h1>
+              <div id="definitionPathLine" class="path-label"></div>
             </div>
-            <div class="builder-actions">
-              <button id="resetBuilderButton" class="text-button" title="Reload builder values">Reset</button>
-              <button id="saveBuilderButton" class="text-button primary" title="Save rocket builder values">Save Rocket Values</button>
-            </div>
-          </div>
-          <div id="builderForm" class="builder-form"></div>
-        </section>
-        <div id="definitionSwitcher" class="definition-switcher" aria-label="Rocket definition sources"></div>
-        <div class="design-grid">
-          <div class="editor-pane">
-            <div class="editor-head">
-              <div>
-                <div id="configTitle" class="pane-title">Rocket Definition</div>
-                <div id="configPath" class="path-label"></div>
-              </div>
-              <div class="editor-controls">
-                <select id="configSelect" class="config-select" aria-label="Definition file"></select>
-                <div id="validationBadge" class="state-badge waiting">Waiting</div>
-              </div>
-            </div>
-            <textarea id="configEditor" spellcheck="false" placeholder="Paste YAML, CSV, .eng, or .rse text here."></textarea>
-          </div>
-          <div class="pane side-panel">
-            <div class="rocket-visual" aria-hidden="true">
+            <div class="rocket-visual compact" aria-hidden="true">
               <div class="rocket-body">
                 <span class="cg-marker"></span>
                 <span class="tank-marker"></span>
@@ -122,12 +87,66 @@
                 <span></span>
               </div>
             </div>
-            <div class="pane-title">Selected Definition</div>
-            <div id="configDescription" class="definition-copy"></div>
-            <div id="configSummary" class="kv-table"></div>
-            <div class="pane-title stacked">Current Rocket</div>
-            <div id="rocketSummaryTable" class="kv-table"></div>
+            <div id="rocketSummary" class="summary-strip"></div>
+          </section>
+
+          <div class="definition-workbench">
+            <section class="builder-panel" aria-label="Rocket builder">
+              <div class="builder-head">
+                <div>
+                  <div class="pane-title">Rocket Builder</div>
+                  <div class="mode-line">Quick Edit</div>
+                  <div id="builderSourceLine" class="path-label"></div>
+                </div>
+                <div class="builder-actions">
+                  <button id="resetBuilderButton" class="text-button" title="Reload builder values">Reset</button>
+                  <button id="saveBuilderButton" class="text-button primary" title="Save rocket builder values">Save Rocket</button>
+                </div>
+              </div>
+              <div id="builderForm" class="builder-form"></div>
+            </section>
+
+            <section class="editor-pane source-editor" aria-label="Exact source editor">
+              <div class="editor-head">
+                <div>
+                  <div id="configTitle" class="pane-title">Exact Source</div>
+                  <div id="configPath" class="path-label"></div>
+                </div>
+                <div class="editor-controls">
+                  <select id="configSelect" class="config-select" aria-label="Definition file"></select>
+                  <div id="validationBadge" class="state-badge waiting">Waiting</div>
+                </div>
+              </div>
+              <div class="editor-actionbar">
+                <button id="pasteFocusButton" class="text-button" title="Select the editor for paste">Paste Here</button>
+                <button id="pasteClipboardButton" class="text-button" title="Load text from clipboard">From Clipboard</button>
+                <button id="importFileButton" class="text-button" title="Load text from a local file">Import File</button>
+                <button id="copyPathButton" class="text-button" title="Copy selected repo path">Copy Path</button>
+                <input id="importDefinitionInput" type="file" hidden accept=".yaml,.yml,.csv,.eng,.rse,.txt">
+              </div>
+              <textarea id="configEditor" spellcheck="false" placeholder="Paste YAML, CSV, .eng, or .rse text here."></textarea>
+            </section>
           </div>
+
+          <section class="definition-bottom">
+            <div class="source-map-panel">
+              <div>
+                <div class="pane-title">Source Map</div>
+                <div id="configDescription" class="definition-copy"></div>
+              </div>
+              <div id="definitionSwitcher" class="definition-switcher" aria-label="Rocket definition sources"></div>
+            </div>
+            <div class="definition-summary-panel">
+              <div>
+                <div class="pane-title">Selected Source</div>
+                <div id="configSummary" class="kv-table"></div>
+              </div>
+              <div>
+                <div class="pane-title">Current Rocket</div>
+                <div id="rocketSummaryTable" class="kv-table"></div>
+              </div>
+            </div>
+          </section>
         </div>
       </section>
 

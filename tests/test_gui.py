@@ -139,11 +139,13 @@ def test_gui_http_api_serves_index_and_runs(tmp_path: Path) -> None:
         thread.join(timeout=5)
 
     assert "R-SIM Workbench" in index
-    assert "Define Rocket" in index
-    assert "Define Rocket" in index
+    assert "Rocket Definition" in index
     assert "Rocket Builder" in index
-    assert "Save Rocket Values" in index
-    assert "Paste Config" in index
+    assert "Quick Edit" in index
+    assert "Exact Source" in index
+    assert "Save Rocket" in index
+    assert "Paste Here" in index
+    assert "From Clipboard" in index
     assert runs["runs"][0]["run_id"] == "unit_run"
     assert detail["telemetry_preview"]["columns"] == [
         "time_s",

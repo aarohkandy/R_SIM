@@ -104,6 +104,7 @@ const els = {
   configSummary: document.getElementById("configSummary"),
   validationBadge: document.getElementById("validationBadge"),
   pasteFocusButton: document.getElementById("pasteFocusButton"),
+  pasteClipboardButton: document.getElementById("pasteClipboardButton"),
   importFileButton: document.getElementById("importFileButton"),
   importDefinitionInput: document.getElementById("importDefinitionInput"),
   copyPathButton: document.getElementById("copyPathButton"),
@@ -828,7 +829,26 @@ function focusPasteTarget() {
   els.configEditor.scrollIntoView({ block: "center", inline: "nearest" });
   els.configEditor.focus();
   els.configEditor.select();
-  setStatus("Editor selected. Paste config text, then validate and save.");
+  setStatus("Editor selected for paste");
+}
+
+async function pasteClipboardIntoEditor() {
+  if (!navigator.clipboard?.readText) {
+    focusPasteTarget();
+    setStatus("Clipboard read is unavailable; editor selected for paste");
+    return;
+  }
+  const text = await navigator.clipboard.readText();
+  if (!text.trim()) {
+    focusPasteTarget();
+    setStatus("Clipboard is empty; editor selected for paste");
+    return;
+  }
+  els.configEditor.value = text;
+  state.dirty = true;
+  renderValidation({ ...state.configDetail, valid: state.configDetail?.valid !== false });
+  renderInspector();
+  setStatus("Clipboard loaded into editor; validate before saving");
 }
 
 async function importDefinitionFile() {
@@ -1021,6 +1041,9 @@ els.openBundleButton.addEventListener("click", () => {
   window.open(`/api/runs/${encodeURIComponent(state.selectedRun)}`, "_blank");
 });
 els.pasteFocusButton.addEventListener("click", focusPasteTarget);
+els.pasteClipboardButton.addEventListener("click", () => {
+  pasteClipboardIntoEditor().catch((error) => setStatus(error.message));
+});
 els.saveBuilderButton.addEventListener("click", () => {
   saveBuilderFromGui().catch((error) => setStatus(error.message));
 });

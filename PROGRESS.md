@@ -1506,3 +1506,45 @@
   in this batch beyond this progress log.
 - Next: continue bounded accumulation toward retained bundle index `275`, then toward
   the configured 1000-run target and percentile-stability criteria.
+
+## 2026-06-30 — Localhost rocket-definition workbench and 259 Phase-14 rows
+
+- Reworked the localhost Design tab so the rocket definition is visible without hunting:
+  the first screen now shows a current-rocket summary band, a Rocket Builder quick-edit
+  panel, and an Exact Source editor with `Paste Here`, `From Clipboard`, `Import File`,
+  and `Copy Path` actions. The editor is the place to paste YAML, CSV, `.eng`, or `.rse`
+  source text for the selected rocket-definition file; the builder continues to save
+  validated high-level values back into the underlying config/BOM files.
+- Tightened the visual layout into a denser OpenRocket-style workbench: source editor and
+  builder sit side-by-side at the active localhost browser width, the code editor is
+  visible in the first viewport, and responsive checks showed no horizontal overflow at
+  the active `817 x 837` browser viewport.
+- Ran another real bounded Phase-14 native-SIL Monte Carlo accumulation:
+  `ROCKETSIM_MC_RUNS=259 ROCKETSIM_MC_MAX_NEW_RUNS=8 make montecarlo`.
+- The runner resumed the existing two-hundred-fifty-one rows, added eight metrics-only
+  native-SIL scenarios, and rewrote the Phase-14 samples, parquet, summary, stability
+  table, manifest, and histogram artifacts with per-row checkpointing still active.
+- Updated evidence from `outputs/phase14_montecarlo/montecarlo_summary.json`:
+  `runs_completed: 259`, `requested_runs: 259`, `resumed_rows: 251`,
+  `new_rows_completed: 8`, `retained_bundles: 11`, `gate_complete: false`,
+  `stability.status: insufficient_batches`, `next_retained_bundle_index: 275`,
+  `rows_until_next_retained_bundle: 17`, and Phase-14 signature
+  `e3fc29523e9cd2f9249853807598ed2dd7492c55f7b2284b3a38efd34ae81afa`.
+- Sample rows now cover run indices `0..258`, with retained full bundles at indices `0`,
+  `25`, `50`, `75`, `100`, `125`, `150`, `175`, `200`, `225`, and `250`, and two
+  hundred forty-eight metrics-only rows. The Phase-14 gate remains open; this is
+  accumulation progress, not statistical completion.
+- Current two-hundred-fifty-nine-row distributions, reported as data only:
+  landing-speed mean `17.517559037333765 m/s`, p50 `15.32061340041681 m/s`, p95
+  `25.47991496739637 m/s`; touchdown-tilt mean `131.35570862136834 deg`, p50
+  `146.25613253975934 deg`, p95 `172.8656085911744 deg`; lateral-error mean
+  `37.72839689822722 m`, p50 `24.209989059215108 m`, p95
+  `84.71780558790716 m`; CO2-remaining mean `0.08373707940357027 kg`, p5
+  `0.0799835337453864 kg`, p50 `0.084626810449193 kg`.
+- Verification passed: focused Phase-14/GUI tests (`18 passed`), lint (`make lint`), and
+  the full coverage suite (`make test`, `152 passed`, total coverage `87%`). Browser
+  verification confirmed the updated localhost Design tab loaded with the paste editor
+  present and no horizontal overflow.
+- Next: keep improving the localhost workbench toward a full OpenRocket-grade GUI while
+  continuing bounded Phase-14 accumulation toward retained bundle index `275`, then the
+  configured 1000-run target and percentile-stability criteria.
