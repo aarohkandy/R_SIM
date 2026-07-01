@@ -1201,3 +1201,32 @@
   in this batch beyond this progress log.
 - Next: continue bounded accumulation through retained bundle index `175`, then toward
   the configured 1000-run target and percentile-stability criteria.
+
+## 2026-06-30 — Phase 14 retained bundle at index 175
+
+- Ran a real bounded Phase-14 native-SIL Monte Carlo accumulation through the next retained
+  full bundle:
+  `ROCKETSIM_MC_RUNS=176 ROCKETSIM_MC_MAX_NEW_RUNS=9 make montecarlo`.
+- The runner resumed the existing one-hundred-sixty-seven rows, added nine new scenarios,
+  and retained a new full Phase-9/10/11 bundle at run index `175`:
+  `phase14_mc0175_seed4161132713`.
+- Updated evidence from `outputs/phase14_montecarlo/montecarlo_summary.json`:
+  `runs_completed: 176`, `requested_runs: 176`, `resumed_rows: 167`,
+  `new_rows_completed: 9`, `retained_bundles: 8`, `gate_complete: false`,
+  `stability.status: insufficient_batches`, `next_retained_bundle_index: 200`, and
+  `rows_until_next_retained_bundle: 25`.
+- Sample rows now cover run indices `0..175`, with retained full bundles at indices `0`,
+  `25`, `50`, `75`, `100`, `125`, `150`, and `175`, and one hundred sixty-eight
+  metrics-only rows. The Phase-14 gate remains open; this is accumulation progress, not
+  statistical completion.
+- Current one-hundred-seventy-six-row distributions, reported as data only: landing-speed
+  mean `17.262282970518054 m/s`, p50 `14.968708474333123 m/s`, p95
+  `25.472038232794016 m/s`; touchdown-tilt mean `131.82517470907092 deg`, p50
+  `144.57056414222603 deg`, p95 `173.43039381710284 deg`; lateral-error mean
+  `36.725939034883595 m`, p50 `23.560125771311807 m`, p95
+  `84.47978142188134 m`; CO2-remaining mean `0.08382805401698167 kg`, p5
+  `0.0803559970283306 kg`, p50 `0.0846522228328912 kg`.
+- Verification passed: focused Phase-14/GUI tests (`17 passed`). No source code changed
+  in this batch beyond this progress log.
+- Next: continue bounded accumulation toward retained bundle index `200`, then toward the
+  configured 1000-run target and percentile-stability criteria.
