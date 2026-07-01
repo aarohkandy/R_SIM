@@ -16,8 +16,10 @@ from rocketsim.gui.workbench import (
     list_workbench_files,
     read_workbench_file,
     rocket_builder_state,
+    rocket_parts_state,
     rocket_summary,
     save_rocket_builder,
+    save_rocket_parts,
     save_workbench_text,
     validate_workbench_text,
 )
@@ -143,7 +145,9 @@ def test_gui_http_api_serves_index_and_runs(tmp_path: Path) -> None:
     assert "Rocket Builder" in index
     assert "Quick Edit" in index
     assert "Exact Source" in index
+    assert "Parts Table" in index
     assert "Save Rocket" in index
+    assert "Save Parts" in index
     assert "Paste Here" in index
     assert "From Clipboard" in index
     assert runs["runs"][0]["run_id"] == "unit_run"
@@ -236,6 +240,34 @@ def test_rocket_builder_state_and_save_updates_validated_sources(tmp_path: Path)
     assert "inputs/bom_placeholder.yaml" in saved["updated_files"]
 
 
+def test_rocket_parts_state_and_save_updates_validated_bom(tmp_path: Path) -> None:
+    repo = write_workbench_repo(tmp_path)
+
+    before = rocket_parts_state(repo)
+    rows = [dict(row) for row in before["rows"]]
+    rows[0]["mass_kg"] = 0.083
+    rows[1]["position_z_m"] = 0.052
+    saved = save_rocket_parts(repo, {"parts": rows})
+    bom = read_workbench_file(repo, "bom")
+
+    assert before["part_count"] == 8
+    assert saved["updated_file"] == "inputs/bom_placeholder.yaml"
+    assert saved["rows"][0]["mass_kg"] == pytest.approx(0.083)
+    assert saved["rows"][1]["position_z_m"] == pytest.approx(0.052)
+    assert saved["state_counts"]["deployable-leg"] == 3
+    assert bom["document"]["parts"][0]["mass_kg"] == pytest.approx(0.083)
+    assert bom["document"]["parts"][1]["position_m"][2] == pytest.approx(0.052)
+
+
+def test_rocket_parts_save_rejects_invalid_rows(tmp_path: Path) -> None:
+    repo = write_workbench_repo(tmp_path)
+    rows = [dict(row) for row in rocket_parts_state(repo)["rows"]]
+    rows[0]["mass_kg"] = -1.0
+
+    with pytest.raises(ValueError, match="mass_kg"):
+        save_rocket_parts(repo, {"parts": rows})
+
+
 def test_gui_http_config_api_validates_and_saves(tmp_path: Path) -> None:
     repo = write_workbench_repo(tmp_path)
     server = create_server(repo, port=0)
@@ -247,6 +279,7 @@ def test_gui_http_config_api_validates_and_saves(tmp_path: Path) -> None:
         builder = json.loads(
             urllib.request.urlopen(f"{base}/api/rocket-builder", timeout=5).read()
         )
+        parts = json.loads(urllib.request.urlopen(f"{base}/api/rocket-parts", timeout=5).read())
         hil = json.loads(urllib.request.urlopen(f"{base}/api/hil-status", timeout=5).read())
         bom = json.loads(urllib.request.urlopen(f"{base}/api/configs/bom", timeout=5).read())
         builder_values = dict(builder["builder"]["values"])
@@ -259,6 +292,15 @@ def test_gui_http_config_api_validates_and_saves(tmp_path: Path) -> None:
             method="POST",
         )
         builder_saved = json.loads(urllib.request.urlopen(builder_request, timeout=5).read())
+        parts_rows = list(parts["parts"]["rows"])
+        parts_rows[0]["mass_kg"] = 0.084
+        parts_request = urllib.request.Request(
+            f"{base}/api/rocket-parts",
+            data=json.dumps({"parts": parts_rows}).encode("utf-8"),
+            headers={"Content-Type": "application/json"},
+            method="POST",
+        )
+        parts_saved = json.loads(urllib.request.urlopen(parts_request, timeout=5).read())
         bad_request = urllib.request.Request(
             f"{base}/api/configs/bom/validate",
             data=json.dumps({"text": "schema_version: 1\nparts: []\n"}).encode("utf-8"),
@@ -283,6 +325,8 @@ def test_gui_http_config_api_validates_and_saves(tmp_path: Path) -> None:
     assert builder["builder"]["values"]["body_length_mm"] == 200.0
     assert builder_saved["builder"]["values"]["body_length_mm"] == 240.0
     assert builder_saved["builder"]["values"]["co2_mass_g"] == 91.0
+    assert parts["parts"]["part_count"] == 8
+    assert parts_saved["parts"]["rows"][0]["mass_kg"] == pytest.approx(0.084)
     assert hil["hil"]["status"] == "blocked"
     assert hil["hil"]["blockers"]
     assert bom["valid"] is True

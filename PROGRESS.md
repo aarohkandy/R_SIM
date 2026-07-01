@@ -1548,3 +1548,23 @@
 - Next: keep improving the localhost workbench toward a full OpenRocket-grade GUI while
   continuing bounded Phase-14 accumulation toward retained bundle index `275`, then the
   configured 1000-run target and percentile-stability criteria.
+
+## 2026-06-30 — Localhost editable BOM parts table
+
+- Added an OpenRocket-style editable Parts Table to the localhost Design tab. It loads
+  the current BOM rows from `inputs/bom_placeholder.yaml`, shows part ID, material,
+  state tag, mass, position, and advanced-model badges, and saves edits back through the
+  validated `VehicleDefinition` schema while preserving depletion profiles, inertia,
+  position profiles, and deployable-leg kinematics.
+- Added `/api/rocket-parts` GET/POST routes plus workbench save helpers so the GUI can
+  update part masses and CG positions without requiring hand-editing YAML. Invalid rows
+  still fail validation instead of silently corrupting the rocket definition.
+- Browser verification on `http://127.0.0.1:8765/` confirmed the Design tab loads 8 BOM
+  rows, the Exact Source editor remains valid, the page has no horizontal overflow at
+  the active `817 x 837` viewport, and the updated GUI server responds on the new parts
+  API.
+- Verification passed: GUI tests (`10 passed`), focused Phase-14/GUI tests
+  (`20 passed`), lint (`make lint`), and typecheck (`make typecheck`).
+- Next: continue the active bounded Phase-14 accumulation toward 267 rows, then retained
+  bundle index `275`, while continuing to improve the GUI into a richer full rocket
+  workbench.

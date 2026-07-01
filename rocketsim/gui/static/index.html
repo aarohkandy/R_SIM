@@ -91,20 +91,38 @@
           </section>
 
           <div class="definition-workbench">
-            <section class="builder-panel" aria-label="Rocket builder">
-              <div class="builder-head">
-                <div>
-                  <div class="pane-title">Rocket Builder</div>
-                  <div class="mode-line">Quick Edit</div>
-                  <div id="builderSourceLine" class="path-label"></div>
+            <div class="definition-left-stack">
+              <section class="builder-panel" aria-label="Rocket builder">
+                <div class="builder-head">
+                  <div>
+                    <div class="pane-title">Rocket Builder</div>
+                    <div class="mode-line">Quick Edit</div>
+                    <div id="builderSourceLine" class="path-label"></div>
+                  </div>
+                  <div class="builder-actions">
+                    <button id="resetBuilderButton" class="text-button" title="Reload builder values">Reset</button>
+                    <button id="saveBuilderButton" class="text-button primary" title="Save rocket builder values">Save Rocket</button>
+                  </div>
                 </div>
-                <div class="builder-actions">
-                  <button id="resetBuilderButton" class="text-button" title="Reload builder values">Reset</button>
-                  <button id="saveBuilderButton" class="text-button primary" title="Save rocket builder values">Save Rocket</button>
+                <div id="builderForm" class="builder-form"></div>
+              </section>
+
+              <section class="parts-panel" aria-label="Parts table">
+                <div class="parts-head">
+                  <div>
+                    <div class="pane-title">Parts Table</div>
+                    <div id="partsSummaryLine" class="path-label"></div>
+                  </div>
+                  <div class="builder-actions">
+                    <button id="resetPartsButton" class="text-button" title="Reload parts table">Reset Parts</button>
+                    <button id="savePartsButton" class="text-button primary" title="Save part masses and positions">Save Parts</button>
+                  </div>
                 </div>
-              </div>
-              <div id="builderForm" class="builder-form"></div>
-            </section>
+                <div class="parts-table-wrap">
+                  <table id="partsTable" class="parts-table"></table>
+                </div>
+              </section>
+            </div>
 
             <section class="editor-pane source-editor" aria-label="Exact source editor">
               <div class="editor-head">

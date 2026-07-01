@@ -436,6 +436,12 @@ button:disabled {
   box-shadow: var(--shadow);
 }
 
+.definition-left-stack {
+  min-width: 0;
+  display: grid;
+  gap: 10px;
+}
+
 .definition-workbench {
   display: grid;
   grid-template-columns: minmax(460px, 0.95fr) minmax(520px, 1.05fr);
@@ -452,6 +458,25 @@ button:disabled {
   padding: 10px;
   border-bottom: 1px solid var(--line);
   background: #eef3f7;
+}
+
+.parts-panel {
+  order: -1;
+  min-width: 0;
+  border: 1px solid var(--line-strong);
+  background: #fbfcfd;
+  box-shadow: var(--shadow);
+}
+
+.parts-head {
+  min-height: 48px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px;
+  border-bottom: 1px solid var(--line);
+  background: #f4f7f9;
 }
 
 .builder-actions {
@@ -547,6 +572,73 @@ button:disabled {
   color: var(--muted);
   font-size: 11px;
   font-weight: 800;
+}
+
+.parts-table-wrap {
+  max-height: 366px;
+  overflow: auto;
+  border-top: 1px solid #e3e8ee;
+}
+
+.parts-table {
+  min-width: 900px;
+}
+
+.parts-table th {
+  background: #edf3f9;
+}
+
+.parts-table th,
+.parts-table td {
+  padding: 5px;
+}
+
+.parts-table td:first-child {
+  width: 176px;
+}
+
+.parts-table td:nth-child(2) {
+  width: 132px;
+}
+
+.parts-table td:nth-child(3) {
+  width: 128px;
+}
+
+.parts-table td:nth-child(4),
+.parts-table td:nth-child(5),
+.parts-table td:nth-child(6),
+.parts-table td:nth-child(7) {
+  width: 92px;
+}
+
+.parts-table input,
+.parts-table select {
+  width: 100%;
+  height: 28px;
+  min-width: 0;
+  border: 1px solid var(--line);
+  background: #ffffff;
+  color: var(--text);
+  padding: 0 7px;
+  font: inherit;
+}
+
+.model-chip {
+  display: inline-block;
+  margin: 2px 3px 2px 0;
+  border: 1px solid #b5c6d5;
+  background: #eef6ff;
+  color: var(--blue-dark);
+  padding: 2px 5px;
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.muted-chip {
+  border-color: #d1d7de;
+  background: #f5f7f9;
+  color: var(--muted);
 }
 
 .definition-switcher {
@@ -1273,6 +1365,11 @@ th {
   }
 
   .builder-head {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .parts-head {
     align-items: stretch;
     flex-direction: column;
   }

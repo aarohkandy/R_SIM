@@ -19,8 +19,10 @@ from rocketsim.gui.workbench import (
     list_workbench_files,
     read_workbench_file,
     rocket_builder_state,
+    rocket_parts_state,
     rocket_summary,
     save_rocket_builder,
+    save_rocket_parts,
     save_workbench_text,
     validate_workbench_text,
 )
@@ -215,6 +217,12 @@ def _handle_get(handler: BaseHTTPRequestHandler, repo_root: Path) -> None:
         except (FileNotFoundError, ValueError, TypeError) as exc:
             _send_error(handler, HTTPStatus.BAD_REQUEST, str(exc))
         return
+    if path == "/api/rocket-parts":
+        try:
+            _send_json(handler, {"parts": rocket_parts_state(repo_root)})
+        except (FileNotFoundError, ValueError, TypeError) as exc:
+            _send_error(handler, HTTPStatus.BAD_REQUEST, str(exc))
+        return
     if path == "/api/hil-status":
         try:
             _send_json(handler, {"hil": read_latest_hil_status(repo_root)})
@@ -284,6 +292,13 @@ def _handle_post(handler: BaseHTTPRequestHandler, repo_root: Path) -> None:
         try:
             body = _read_json_body(handler)
             _send_json(handler, {"builder": save_rocket_builder(repo_root, body)})
+        except (FileNotFoundError, ValueError, TypeError) as exc:
+            _send_error(handler, HTTPStatus.BAD_REQUEST, str(exc))
+        return
+    if path == "/api/rocket-parts":
+        try:
+            body = _read_json_body(handler)
+            _send_json(handler, {"parts": save_rocket_parts(repo_root, body)})
         except (FileNotFoundError, ValueError, TypeError) as exc:
             _send_error(handler, HTTPStatus.BAD_REQUEST, str(exc))
         return

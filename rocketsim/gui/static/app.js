@@ -6,6 +6,7 @@ const state = {
   detail: null,
   configDetail: null,
   builder: null,
+  parts: null,
   rocketSummary: null,
   hilStatus: null,
   monteCarlo: null,
@@ -114,6 +115,10 @@ const els = {
   builderSourceLine: document.getElementById("builderSourceLine"),
   saveBuilderButton: document.getElementById("saveBuilderButton"),
   resetBuilderButton: document.getElementById("resetBuilderButton"),
+  partsSummaryLine: document.getElementById("partsSummaryLine"),
+  partsTable: document.getElementById("partsTable"),
+  savePartsButton: document.getElementById("savePartsButton"),
+  resetPartsButton: document.getElementById("resetPartsButton"),
   emulatorGrid: document.getElementById("emulatorGrid"),
   monteCarloGrid: document.getElementById("monteCarloGrid"),
   monteCarloSummary: document.getElementById("monteCarloSummary"),
@@ -125,11 +130,20 @@ const els = {
 
 async function loadWorkbench() {
   setStatus("Loading workbench...");
-  const [runsPayload, configsPayload, summaryPayload, builderPayload, hilPayload, monteCarloPayload] = await Promise.all([
+  const [
+    runsPayload,
+    configsPayload,
+    summaryPayload,
+    builderPayload,
+    partsPayload,
+    hilPayload,
+    monteCarloPayload,
+  ] = await Promise.all([
     fetchJson("/api/runs"),
     fetchJson("/api/configs"),
     fetchJson("/api/rocket-summary"),
     fetchJson("/api/rocket-builder"),
+    fetchJson("/api/rocket-parts"),
     fetchJson("/api/hil-status"),
     fetchJson("/api/montecarlo-status"),
   ]);
@@ -137,12 +151,14 @@ async function loadWorkbench() {
   state.configs = configsPayload.configs || [];
   state.rocketSummary = summaryPayload.summary || null;
   state.builder = builderPayload.builder || null;
+  state.parts = partsPayload.parts || null;
   state.hilStatus = hilPayload.hil || null;
   state.monteCarlo = monteCarloPayload.montecarlo || null;
   renderRunList();
   renderConfigList();
   renderRocketSummary();
   renderBuilder();
+  renderPartsTable();
   renderMonteCarlo();
   switchView(state.activeView);
   if (state.runs.length > 0) {
@@ -261,21 +277,31 @@ async function refreshRuns() {
 }
 
 async function refreshConfigsAndSummary() {
-  const [configsPayload, summaryPayload, builderPayload, hilPayload, monteCarloPayload] = await Promise.all([
+  const [
+    configsPayload,
+    summaryPayload,
+    builderPayload,
+    partsPayload,
+    hilPayload,
+    monteCarloPayload,
+  ] = await Promise.all([
     fetchJson("/api/configs"),
     fetchJson("/api/rocket-summary"),
     fetchJson("/api/rocket-builder"),
+    fetchJson("/api/rocket-parts"),
     fetchJson("/api/hil-status"),
     fetchJson("/api/montecarlo-status"),
   ]);
   state.configs = configsPayload.configs || [];
   state.rocketSummary = summaryPayload.summary || null;
   state.builder = builderPayload.builder || null;
+  state.parts = partsPayload.parts || null;
   state.hilStatus = hilPayload.hil || null;
   state.monteCarlo = monteCarloPayload.montecarlo || null;
   renderConfigList();
   renderRocketSummary();
   renderBuilder();
+  renderPartsTable();
   renderMonteCarlo();
 }
 
@@ -455,6 +481,68 @@ function renderBuilder() {
   }
 }
 
+function renderPartsTable() {
+  const parts = state.parts || {};
+  const rows = parts.rows || [];
+  els.partsSummaryLine.textContent = rows.length
+    ? `${rows.length} parts, ${formatKg(parts.total_mass_kg)} total in ${parts.path || "BOM"}`
+    : "No editable BOM rows loaded";
+  if (!rows.length) {
+    els.partsTable.innerHTML = `
+      <tbody><tr><td><div class="empty-state small">No parts loaded.</div></td></tr></tbody>
+    `;
+    return;
+  }
+  els.partsTable.innerHTML = `
+    <thead>
+      <tr>
+        <th>Part ID</th>
+        <th>Material</th>
+        <th>Tag</th>
+        <th>Mass kg</th>
+        <th>X m</th>
+        <th>Y m</th>
+        <th>Z m</th>
+        <th>Model</th>
+      </tr>
+    </thead>
+    <tbody>
+      ${rows.map(partRow).join("")}
+    </tbody>
+  `;
+}
+
+function partRow(row) {
+  return `
+    <tr data-part-original-id="${escapeHtml(row.original_id)}">
+      <td><input data-part-field="id" value="${escapeHtml(row.id)}"></td>
+      <td><input data-part-field="material" value="${escapeHtml(row.material)}"></td>
+      <td>
+        <select data-part-field="state_tag">
+          ${["fixed", "propellant", "CO2", "deployable-leg"].map((tag) => `
+            <option value="${tag}" ${tag === row.state_tag ? "selected" : ""}>${tag}</option>
+          `).join("")}
+        </select>
+      </td>
+      <td><input data-part-field="mass_kg" type="number" min="0.000001" step="0.001" value="${escapeHtml(formatPartNumber(row.mass_kg))}"></td>
+      <td><input data-part-field="position_x_m" type="number" step="0.001" value="${escapeHtml(formatPartNumber(row.position_x_m))}"></td>
+      <td><input data-part-field="position_y_m" type="number" step="0.001" value="${escapeHtml(formatPartNumber(row.position_y_m))}"></td>
+      <td><input data-part-field="position_z_m" type="number" step="0.001" value="${escapeHtml(formatPartNumber(row.position_z_m))}"></td>
+      <td>${advancedChips(row.advanced || [])}</td>
+    </tr>
+  `;
+}
+
+function advancedChips(items) {
+  if (!items.length) return `<span class="model-chip muted-chip">basic</span>`;
+  return items.map((item) => `<span class="model-chip">${escapeHtml(labelize(item))}</span>`).join("");
+}
+
+function formatPartNumber(value) {
+  const number = Number(value);
+  return Number.isFinite(number) ? trimNumberText(number.toFixed(6)) : "";
+}
+
 function builderField(field, value) {
   const inputType = field.kind === "text" ? "text" : "number";
   return `
@@ -524,6 +612,38 @@ async function resetBuilderFromDisk() {
   state.builder = payload.builder || null;
   renderBuilder();
   setStatus("Rocket values reloaded");
+}
+
+async function savePartsFromGui() {
+  if (state.dirty && !window.confirm("Discard unsaved editor changes and save parts table?")) return;
+  const parts = [];
+  for (const row of els.partsTable.querySelectorAll("[data-part-original-id]")) {
+    const payload = { original_id: row.dataset.partOriginalId };
+    for (const input of row.querySelectorAll("[data-part-field]")) {
+      payload[input.dataset.partField] = input.value;
+    }
+    parts.push(payload);
+  }
+  setBusy(true);
+  setStatus("Saving parts table...");
+  try {
+    const response = await postJson("/api/rocket-parts", { parts });
+    state.parts = response.parts;
+    state.dirty = false;
+    await refreshConfigsAndSummary();
+    await selectConfig(state.selectedConfig);
+    renderPartsTable();
+    setStatus("Parts saved to the validated BOM");
+  } finally {
+    setBusy(false);
+  }
+}
+
+async function resetPartsFromDisk() {
+  const payload = await fetchJson("/api/rocket-parts");
+  state.parts = payload.parts || null;
+  renderPartsTable();
+  setStatus("Parts table reloaded");
 }
 
 function renderMetrics() {
@@ -882,6 +1002,8 @@ function setBusy(isBusy) {
   els.validateButton.disabled = isBusy;
   els.saveBuilderButton.disabled = isBusy;
   els.resetBuilderButton.disabled = isBusy;
+  els.savePartsButton.disabled = isBusy;
+  els.resetPartsButton.disabled = isBusy;
 }
 
 function keyValueTable(rows) {
@@ -1049,6 +1171,12 @@ els.saveBuilderButton.addEventListener("click", () => {
 });
 els.resetBuilderButton.addEventListener("click", () => {
   resetBuilderFromDisk().catch((error) => setStatus(error.message));
+});
+els.savePartsButton.addEventListener("click", () => {
+  savePartsFromGui().catch((error) => setStatus(error.message));
+});
+els.resetPartsButton.addEventListener("click", () => {
+  resetPartsFromDisk().catch((error) => setStatus(error.message));
 });
 els.importFileButton.addEventListener("click", () => els.importDefinitionInput.click());
 els.importDefinitionInput.addEventListener("change", () => {

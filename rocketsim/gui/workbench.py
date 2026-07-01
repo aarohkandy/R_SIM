@@ -414,6 +414,80 @@ def save_rocket_builder(repo_root: Path, payload: dict[str, Any]) -> dict[str, A
     return state
 
 
+def rocket_parts_state(repo_root: Path) -> dict[str, Any]:
+    """Return editable BOM part rows for the localhost rocket builder."""
+
+    bom_path = _resolve_editable_path(repo_root, _editable_or_raise("bom"))
+    bom = _yaml_mapping(bom_path.read_text(encoding="utf-8"))
+    document = VehicleDefinition.model_validate(bom)
+    rows = [_part_row(part.model_dump(mode="json")) for part in document.parts]
+    total_mass_kg = sum(row["mass_kg"] for row in rows)
+    return {
+        "valid": True,
+        "path": _editable_or_raise("bom").relative_path,
+        "total_mass_kg": total_mass_kg,
+        "part_count": len(rows),
+        "rows": rows,
+        "state_counts": {
+            state_tag: sum(1 for row in rows if row["state_tag"] == state_tag)
+            for state_tag in ("fixed", "propellant", "CO2", "deployable-leg")
+        },
+    }
+
+
+def save_rocket_parts(repo_root: Path, payload: dict[str, Any]) -> dict[str, Any]:
+    """Save edited BOM part rows while preserving advanced per-part model data."""
+
+    rows = payload.get("parts")
+    if not isinstance(rows, list) or not rows:
+        msg = "parts payload must contain a non-empty parts list"
+        raise ValueError(msg)
+
+    bom_path = _resolve_editable_path(repo_root, _editable_or_raise("bom"))
+    bom = _yaml_mapping(bom_path.read_text(encoding="utf-8"))
+    current_parts = bom.get("parts")
+    if not isinstance(current_parts, list):
+        msg = "BOM document must contain a parts list"
+        raise ValueError(msg)
+    by_id = {
+        part.get("id"): part
+        for part in current_parts
+        if isinstance(part, dict) and isinstance(part.get("id"), str)
+    }
+
+    edited_parts: list[dict[str, Any]] = []
+    for row in rows:
+        if not isinstance(row, dict):
+            msg = "each part row must be a mapping"
+            raise TypeError(msg)
+        original_id = _payload_text(row, "original_id")
+        base = by_id.get(original_id)
+        if base is None:
+            msg = f"unknown original part id: {original_id}"
+            raise ValueError(msg)
+        part = dict(base)
+        part["id"] = _payload_text(row, "id")
+        part["material"] = _payload_text(row, "material")
+        part["state_tag"] = _payload_state_tag(row)
+        part["mass_kg"] = _positive_payload_float(row, "mass_kg")
+        part["position_m"] = [
+            _finite_payload_float(row, "position_x_m"),
+            _finite_payload_float(row, "position_y_m"),
+            _finite_payload_float(row, "position_z_m"),
+        ]
+        edited_parts.append(part)
+
+    bom["parts"] = edited_parts
+    dumped = _dump_yaml(bom)
+    validation = validate_workbench_text("bom", dumped)
+    if not validation["valid"]:
+        raise ValueError(validation["message"])
+    bom_path.write_text(dumped, encoding="utf-8")
+    state = rocket_parts_state(repo_root)
+    state["updated_file"] = _editable_or_raise("bom").relative_path
+    return state
+
+
 def _file_metadata(item: EditableFile, path: Path) -> dict[str, Any]:
     return {
         "name": item.name,
@@ -582,6 +656,26 @@ def _payload_text(payload: dict[str, Any], key: str) -> str:
     return value.strip()
 
 
+def _finite_payload_float(payload: dict[str, Any], key: str) -> float:
+    value = _required_payload_value(payload, key)
+    if isinstance(value, bool):
+        msg = f"{key} must be a number"
+        raise TypeError(msg)
+    number = float(value)
+    if not math.isfinite(number):
+        msg = f"{key} must be finite"
+        raise ValueError(msg)
+    return number
+
+
+def _payload_state_tag(payload: dict[str, Any]) -> str:
+    value = _payload_text(payload, "state_tag")
+    if value not in ("fixed", "propellant", "CO2", "deployable-leg"):
+        msg = "state_tag must be fixed, propellant, CO2, or deployable-leg"
+        raise ValueError(msg)
+    return value
+
+
 def _required_payload_value(payload: dict[str, Any], key: str) -> Any:
     if key not in payload or payload[key] in (None, ""):
         msg = f"{key} is required"
@@ -596,6 +690,26 @@ def _load_motor_curve_from_text(suffix: str, text: str) -> Any:
         if suffix.lower() == ".rse":
             return parse_rse(Path(handle.name))
         return parse_eng(Path(handle.name))
+
+
+def _part_row(part: dict[str, Any]) -> dict[str, Any]:
+    position = part.get("position_m", [0.0, 0.0, 0.0])
+    advanced = [
+        key
+        for key in ("inertia_kg_m2", "depletion", "position_profile", "deployable_leg")
+        if part.get(key) not in (None, ZERO_ADVANCED.get(key))
+    ]
+    return {
+        "original_id": part["id"],
+        "id": part["id"],
+        "material": part["material"],
+        "state_tag": part["state_tag"],
+        "mass_kg": float(part["mass_kg"]),
+        "position_x_m": float(position[0]),
+        "position_y_m": float(position[1]),
+        "position_z_m": float(position[2]),
+        "advanced": advanced,
+    }
 
 
 def _summary_for(name: str, parsed: dict[str, Any]) -> dict[str, Any]:
@@ -659,3 +773,7 @@ def _validation_message(exc: Exception) -> str:
 
 
 EDITABLE_BY_NAME = {item.name: item for item in editable_files()}
+
+ZERO_ADVANCED = {
+    "inertia_kg_m2": [[0.0, 0.0, 0.0], [0.0, 0.0, 0.0], [0.0, 0.0, 0.0]],
+}
